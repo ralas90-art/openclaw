@@ -33,9 +33,35 @@ app.post('/telegram/webhook', (req, res) => {
   res.status(200).json({ ok: true, webhook: "received" });
 });
 
-// Health check route
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Runtime Diagnostics (Safe verification of env vars)
+app.get('/diag', (req, res) => {
+  const vars = [
+    'TELEGRAM_BOT_TOKEN',
+    'TELEGRAM_CHAT_ID',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'NODE_ENV'
+  ];
+  
+  const status = {};
+  vars.forEach(v => {
+    status[v] = process.env[v] ? 'PRESENT' : 'MISSING';
+  });
+
+  res.json({
+    engine: 'Cresca OS Runtime V1',
+    port: port,
+    env: status,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Root route
@@ -43,8 +69,12 @@ app.get('/', (req, res) => {
   res.send('Cresca OS Infrastructure is live.');
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Cresca OS Server running on port ${port}`);
-  console.log(`🔗 Webhook endpoint: /telegram/webhook`);
-  console.log(`🏥 Health check: /health`);
+app.listen(port, '0.0.0.0', () => {
+  console.log('-------------------------------------------');
+  console.log(`🚀 Cresca OS Server started!`);
+  console.log(`📡 Port: ${port}`);
+  console.log(`🔗 Webhook: /telegram/webhook`);
+  console.log(`🏥 Health: /health`);
+  console.log(`🔍 Diagnostics: /diag`);
+  console.log('-------------------------------------------');
 });
