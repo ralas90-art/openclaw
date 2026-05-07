@@ -18,10 +18,13 @@ app.post('/telegram/webhook', (req, res) => {
 
   // Log receipt of update for monitoring
   if (update.message) {
-    console.log(`📬 [Telegram] Message received from ${update.message.from?.username || 'unknown'}: "${update.message.text || '[no text]'}"`);
+    console.log('📬 [Telegram Webhook] Metadata Received:');
+    console.log(JSON.stringify({
+      chat_id: update.message.chat?.id,
+      username: update.message.from?.username,
+      text: update.message.text
+    }, null, 2));
   }
-
-  // TODO: Add command routing / message handling logic here
 
   // Respond to Telegram to acknowledge receipt
   res.status(200).send('OK');
