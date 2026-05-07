@@ -47,14 +47,14 @@ app.post('/telegram/webhook', (req, res) => {
   console.log('[WEBHOOK HIT]');
   const update = req.body;
 
-  // Log FULL body for debugging Chat ID issues
-  console.log('[BODY RECEIVED]', JSON.stringify(update, null, 2));
-
-  // Legacy field logging for backward compatibility
-  if (update.message) {
-    console.log('📬 [Telegram] From:', update.message.from?.username || 'unknown');
-    console.log('💬 [Telegram] Text:', update.message.text);
-  }
+  // Log specific metadata safely
+  const metadata = {
+    update_id: update.update_id,
+    chat_id: update.message?.chat?.id,
+    text: update.message?.text
+  };
+  
+  console.log('[WEBHOOK METADATA]', metadata);
 
   res.status(200).json({ ok: true, webhook: "received" });
 });
