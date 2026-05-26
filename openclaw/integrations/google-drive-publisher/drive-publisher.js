@@ -59,6 +59,54 @@ function scanForSecrets(filePath) {
   return { safe: true };
 }
 
+function isValidRepoRoot(candidate) {
+  if (!candidate || !fs.existsSync(candidate)) return false;
+  if (fs.existsSync(path.join(candidate, 'openclaw', 'bots', 'registry.md'))) return true;
+  if (fs.existsSync(path.join(candidate, 'server.js')) && fs.existsSync(path.join(candidate, 'package.json'))) return true;
+  return false;
+}
+
+function getActiveRoots() {
+  const roots = [];
+  const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+
+  if (process.env.OPENCLAW_TEST === 'true') {
+    if (envRoot) {
+      roots.push(path.resolve(envRoot));
+    }
+    return roots;
+  }
+
+  // 1. OPENCLAW_WORKSPACE_ROOT (if valid)
+  if (envRoot && isValidRepoRoot(path.resolve(envRoot))) {
+    roots.push(path.resolve(envRoot));
+  }
+
+  // 2. __dirname-derived app root (three levels up from google-drive-publisher)
+  const appRoot = path.resolve(__dirname, '../../..');
+  if (isValidRepoRoot(appRoot)) {
+    roots.push(appRoot);
+  }
+
+  // 3. Hardcoded /app fallback (Railway)
+  const railwayRoot = '/app';
+  if (isValidRepoRoot(railwayRoot)) {
+    roots.push(path.resolve(railwayRoot));
+  }
+
+  // 4. process.cwd() fallback
+  const cwdRoot = process.cwd();
+  if (isValidRepoRoot(cwdRoot)) {
+    roots.push(path.resolve(cwdRoot));
+  }
+
+  const unique = [...new Set(roots)];
+  if (unique.length === 0) {
+    console.error('[drive-publisher getActiveRoots] WARNING: No valid OpenClaw repo root found.');
+  }
+  return unique;
+}
+
 /**
  * Verify safety of path and folder scope.
  */
@@ -78,24 +126,25 @@ function verifyPublishSafety(filePath) {
     return { safe: false, reason: 'Security block: Forbidden file type (' + baseName + ').' };
   }
   
-  // 3. Approved directories filter (case-insensitive for Windows, clean separator checks)
-  const workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT || path.resolve(__dirname, '../../..');
-  const absWorkspace = path.resolve(workspaceRoot);
+  // 3. Approved directories filter (checks both app root and env workspace root)
+  const roots = getActiveRoots();
 
-  const approvedDirs = [
-    path.resolve(absWorkspace, 'openclaw/outbox/telegram-responses'),
-    path.resolve(absWorkspace, 'openclaw/reports'),
-    path.resolve(absWorkspace, 'campaigns')
-  ];
-
-  // Block google-drive-sync directory explicitly
-  const blockedDir = path.resolve(absWorkspace, 'openclaw/outbox/google-drive-sync');
+  const approvedDirs = [];
+  roots.forEach(rootDir => {
+    approvedDirs.push(path.resolve(rootDir, 'openclaw/outbox/telegram-responses'));
+    approvedDirs.push(path.resolve(rootDir, 'openclaw/reports'));
+    approvedDirs.push(path.resolve(rootDir, 'campaigns'));
+  });
 
   const normCandidate = candidate.toLowerCase();
-  const normBlocked = blockedDir.toLowerCase();
 
-  if (normCandidate === normBlocked || normCandidate.startsWith(normBlocked + path.sep)) {
-    return { safe: false, reason: 'Security block: Path is inside a blocked directory (google-drive-sync).' };
+  // Block google-drive-sync directory explicitly for all roots
+  for (const rootDir of roots) {
+    const blockedDir = path.resolve(rootDir, 'openclaw/outbox/google-drive-sync');
+    const normBlocked = blockedDir.toLowerCase();
+    if (normCandidate === normBlocked || normCandidate.startsWith(normBlocked + path.sep)) {
+      return { safe: false, reason: 'Security block: Path is inside a blocked directory (google-drive-sync).' };
+    }
   }
 
   const isApproved = approvedDirs.some(dir => {
@@ -106,7 +155,7 @@ function verifyPublishSafety(filePath) {
   const allowInternalOverride = process.env.GOOGLE_DRIVE_ALLOW_INTERNAL_DOC_PUBLISH === 'true';
   
   if (!isApproved && !allowInternalOverride) {
-    return { safe: false, reason: 'Security block: Path is outside approved directories (openclaw/outbox/telegram-responses, openclaw/reports, campaigns).' };
+    return { safe: false, reason: 'Security block: Path is outside approved directories (telegram-responses, reports, campaigns).' };
   }
   
   // 4. Secret content scan
@@ -199,6 +248,12 @@ async function publishFileToDrive(filePath, options = {}) {
       const credsBase64 = process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64;
       const credsRaw = process.env.GOOGLE_DRIVE_CREDENTIALS;
 
+      // Diagnostic context for error reporting
+      let diagStage = 'init';
+      let diagEmail = 'unknown';
+      let diagHasKey = false;
+      let diagFolderId = folderId || 'MISSING';
+
       if (!folderId) {
         throw new Error('GOOGLE_DRIVE_OUTPUT_FOLDER_ID is not configured.');
       }
@@ -215,6 +270,7 @@ async function publishFileToDrive(filePath, options = {}) {
       const { google } = googleapis;
       
       // Parse credentials
+      diagStage = 'credential_parse';
       let credentials;
       if (credsBase64) {
         const decoded = Buffer.from(credsBase64, 'base64').toString('utf8');
@@ -226,6 +282,12 @@ async function publishFileToDrive(filePath, options = {}) {
         throw new Error('Google Drive API credentials are not configured (GOOGLE_DRIVE_CREDENTIALS_BASE64 is missing).');
       }
 
+      diagEmail = credentials.client_email || 'MISSING';
+      diagHasKey = !!(credentials.private_key);
+      const diagKeyPrefix = credentials.private_key ? credentials.private_key.substring(0, 27) : 'NONE';
+
+      // Authenticate
+      diagStage = 'auth_jwt';
       const auth = new google.auth.JWT(
         credentials.client_email,
         null,
@@ -233,9 +295,13 @@ async function publishFileToDrive(filePath, options = {}) {
         ['https://www.googleapis.com/auth/drive']
       );
       
+      diagStage = 'auth_authorize';
+      await auth.authorize();
+      
       const drive = google.drive({ version: 'v3', auth });
       
       // Resolve path subfolders dynamically in Google Drive
+      diagStage = 'folder_resolve';
       const subfolderPath = getSubfolderName(filePath, options);
       const pathParts = subfolderPath.split('/');
       let currentParentId = folderId;
@@ -245,6 +311,7 @@ async function publishFileToDrive(filePath, options = {}) {
       }
 
       // Upload file
+      diagStage = 'file_upload';
       const uploadResponse = await drive.files.create({
         requestBody: {
           name: path.basename(filePath),
@@ -269,6 +336,7 @@ async function publishFileToDrive(filePath, options = {}) {
     if (manifest.status !== 'dry_run') {
       manifest.status = 'failed';
     }
+    // Include diagnostic context in the error message for Telegram visibility
     manifest.error = err.message;
   }
 
