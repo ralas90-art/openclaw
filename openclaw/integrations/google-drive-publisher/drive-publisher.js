@@ -282,6 +282,15 @@ async function publishFileToDrive(filePath, options = {}) {
         ['https://www.googleapis.com/auth/drive']
       );
       
+      // Explicitly authorize to catch credential issues early
+      try {
+        await auth.authorize();
+      } catch (authErr) {
+        const safeEmail = credentials.client_email || 'MISSING';
+        const hasKey = credentials.private_key ? 'present (' + credentials.private_key.substring(0, 30) + '...)' : 'MISSING';
+        throw new Error('Google Drive auth failed: ' + authErr.message + ' | client_email=' + safeEmail + ' | private_key=' + hasKey);
+      }
+      
       const drive = google.drive({ version: 'v3', auth });
       
       // Resolve path subfolders dynamically in Google Drive
