@@ -59,6 +59,26 @@ function scanForSecrets(filePath) {
   return { safe: true };
 }
 
+function getActiveRoots() {
+  const roots = [];
+  const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (process.env.OPENCLAW_TEST === 'true') {
+    if (envRoot) {
+      roots.push(path.resolve(envRoot));
+    }
+  } else {
+    // App Root is three levels up from google-drive-publisher
+    const appRoot = path.resolve(__dirname, '../../..');
+    roots.push(appRoot);
+    
+    // Workspace Root (persistent volume or configured environment)
+    if (envRoot && fs.existsSync(envRoot)) {
+      roots.push(path.resolve(envRoot));
+    }
+  }
+  return [...new Set(roots)];
+}
+
 /**
  * Verify safety of path and folder scope.
  */
@@ -78,24 +98,25 @@ function verifyPublishSafety(filePath) {
     return { safe: false, reason: 'Security block: Forbidden file type (' + baseName + ').' };
   }
   
-  // 3. Approved directories filter (case-insensitive for Windows, clean separator checks)
-  const workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT || path.resolve(__dirname, '../../..');
-  const absWorkspace = path.resolve(workspaceRoot);
+  // 3. Approved directories filter (checks both app root and env workspace root)
+  const roots = getActiveRoots();
 
-  const approvedDirs = [
-    path.resolve(absWorkspace, 'openclaw/outbox/telegram-responses'),
-    path.resolve(absWorkspace, 'openclaw/reports'),
-    path.resolve(absWorkspace, 'campaigns')
-  ];
-
-  // Block google-drive-sync directory explicitly
-  const blockedDir = path.resolve(absWorkspace, 'openclaw/outbox/google-drive-sync');
+  const approvedDirs = [];
+  roots.forEach(rootDir => {
+    approvedDirs.push(path.resolve(rootDir, 'openclaw/outbox/telegram-responses'));
+    approvedDirs.push(path.resolve(rootDir, 'openclaw/reports'));
+    approvedDirs.push(path.resolve(rootDir, 'campaigns'));
+  });
 
   const normCandidate = candidate.toLowerCase();
-  const normBlocked = blockedDir.toLowerCase();
 
-  if (normCandidate === normBlocked || normCandidate.startsWith(normBlocked + path.sep)) {
-    return { safe: false, reason: 'Security block: Path is inside a blocked directory (google-drive-sync).' };
+  // Block google-drive-sync directory explicitly for all roots
+  for (const rootDir of roots) {
+    const blockedDir = path.resolve(rootDir, 'openclaw/outbox/google-drive-sync');
+    const normBlocked = blockedDir.toLowerCase();
+    if (normCandidate === normBlocked || normCandidate.startsWith(normBlocked + path.sep)) {
+      return { safe: false, reason: 'Security block: Path is inside a blocked directory (google-drive-sync).' };
+    }
   }
 
   const isApproved = approvedDirs.some(dir => {
@@ -106,7 +127,7 @@ function verifyPublishSafety(filePath) {
   const allowInternalOverride = process.env.GOOGLE_DRIVE_ALLOW_INTERNAL_DOC_PUBLISH === 'true';
   
   if (!isApproved && !allowInternalOverride) {
-    return { safe: false, reason: 'Security block: Path is outside approved directories (openclaw/outbox/telegram-responses, openclaw/reports, campaigns).' };
+    return { safe: false, reason: 'Security block: Path is outside approved directories (telegram-responses, reports, campaigns).' };
   }
   
   // 4. Secret content scan

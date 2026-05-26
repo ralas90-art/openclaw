@@ -551,18 +551,38 @@ function getFilePriority(fullPath, rootDir) {
   return 0;
 }
 
-function getLatestOutputFile() {
-  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
-  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
-    rootDir = path.join(__dirname, '../../');
+function getActiveRoots() {
+  const roots = [];
+  const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (process.env.OPENCLAW_TEST === 'true') {
+    if (envRoot) {
+      roots.push(path.resolve(envRoot));
+    }
+  } else {
+    // App Root (cloned repository files)
+    const appRoot = path.resolve(__dirname, '../../');
+    roots.push(appRoot);
+    
+    // Workspace Root (persistent volume or configured environment)
+    if (envRoot && fs.existsSync(envRoot)) {
+      roots.push(path.resolve(envRoot));
+    }
   }
-  rootDir = path.resolve(rootDir);
+  return [...new Set(roots)];
+}
 
-  const approvedPaths = [
-    path.resolve(rootDir, 'openclaw/outbox/telegram-responses'),
-    path.resolve(rootDir, 'openclaw/reports'),
-    path.resolve(rootDir, 'campaigns')
-  ];
+function getLatestOutputFile() {
+  const roots = getActiveRoots();
+  // App Root for priority checks fallback
+  const appRoot = path.resolve(__dirname, '../../');
+  const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+
+  const approvedPaths = [];
+  roots.forEach(rootDir => {
+    approvedPaths.push(path.resolve(rootDir, 'openclaw/outbox/telegram-responses'));
+    approvedPaths.push(path.resolve(rootDir, 'openclaw/reports'));
+    approvedPaths.push(path.resolve(rootDir, 'campaigns'));
+  });
 
   const candidates = [];
 
@@ -583,7 +603,13 @@ function getLatestOutputFile() {
       try {
         const itemStat = fs.statSync(fullPath);
         if (itemStat.isFile()) {
-          const priority = getFilePriority(fullPath, rootDir);
+          // Check file priority using the root that matches
+          let matchingRoot = appRoot;
+          if (envRoot && fullPath.startsWith(path.resolve(envRoot))) {
+            matchingRoot = path.resolve(envRoot);
+          }
+          
+          const priority = getFilePriority(fullPath, matchingRoot);
           if (priority > 0) {
             candidates.push({
               path: fullPath,
@@ -598,7 +624,9 @@ function getLatestOutputFile() {
     }
   }
 
-  approvedPaths.forEach(traverse);
+  // Remove duplicate search paths if any
+  const uniqueApprovedPaths = [...new Set(approvedPaths)];
+  uniqueApprovedPaths.forEach(traverse);
 
   if (candidates.length === 0) return null;
 
@@ -617,44 +645,44 @@ async function handleDrivePublishLatest() {
   let debugMsg = "";
   try {
     let envRoot = process.env.OPENCLAW_WORKSPACE_ROOT || "undefined";
-    let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
-    if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
-      rootDir = path.join(__dirname, '../../');
-    }
-    rootDir = path.resolve(rootDir);
+    const roots = getActiveRoots();
     
-    const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
-    const reportsDir = path.resolve(rootDir, 'openclaw/reports');
-    const campaignsDir = path.resolve(rootDir, 'campaigns');
-
     debugMsg += `\n\n🔍 Debug Info:\n`;
     debugMsg += `• envRoot: ${envRoot}\n`;
-    debugMsg += `• resolved rootDir: ${rootDir}\n`;
+    debugMsg += `• roots: [${roots.join(', ')}]\n`;
     debugMsg += `• __dirname: ${__dirname}\n`;
-    debugMsg += `• responsesDir exists: ${fs.existsSync(responsesDir)}\n`;
-    debugMsg += `• reportsDir exists: ${fs.existsSync(reportsDir)}\n`;
-    debugMsg += `• campaignsDir exists: ${fs.existsSync(campaignsDir)}\n`;
     
-    if (fs.existsSync(responsesDir)) {
-      const files = fs.readdirSync(responsesDir);
-      debugMsg += `• responses files: [${files.join(', ')}]\n`;
-    }
+    roots.forEach(rootDir => {
+      const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
+      const reportsDir = path.resolve(rootDir, 'openclaw/reports');
+      const campaignsDir = path.resolve(rootDir, 'campaigns');
+      debugMsg += `• root: ${rootDir}\n`;
+      debugMsg += `  - responsesDir exists: ${fs.existsSync(responsesDir)}\n`;
+      debugMsg += `  - reportsDir exists: ${fs.existsSync(reportsDir)}\n`;
+      debugMsg += `  - campaignsDir exists: ${fs.existsSync(campaignsDir)}\n`;
+      if (fs.existsSync(responsesDir)) {
+        const files = fs.readdirSync(responsesDir);
+        debugMsg += `  - responses files: [${files.join(', ')}]\n`;
+      }
+    });
   } catch (err) {
     debugMsg += `• debug error: ${err.message}\n`;
   }
 
   const latestFile = getLatestOutputFile();
   if (!latestFile) {
-    // Check if any manifest or other files exist in the responses folder
-    let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
-    if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
-      rootDir = path.join(__dirname, '../../');
-    }
-    const responsesDir = path.join(rootDir, 'openclaw', 'outbox', 'telegram-responses');
+    // Check if any manifest or other files exist in the responses folder in any active root
+    const roots = getActiveRoots();
     let hasManifests = false;
-    if (fs.existsSync(responsesDir)) {
-      const files = fs.readdirSync(responsesDir);
-      hasManifests = files.some(f => f.endsWith('_manifest.json') || f.includes('publish_manifest'));
+    for (const rootDir of roots) {
+      const responsesDir = path.join(rootDir, 'openclaw', 'outbox', 'telegram-responses');
+      if (fs.existsSync(responsesDir)) {
+        const files = fs.readdirSync(responsesDir);
+        if (files.some(f => f.endsWith('_manifest.json') || f.includes('publish_manifest'))) {
+          hasManifests = true;
+          break;
+        }
+      }
     }
 
     if (hasManifests) {
