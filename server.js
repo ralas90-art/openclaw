@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+// Sanitize environment variables to strip accidental quotes and whitespace
+['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_ALLOWED_USER_IDS', 'TELEGRAM_ALLOWED_CHAT_IDS'].forEach(key => {
+  if (process.env[key]) {
+    process.env[key] = process.env[key].replace(/^["']|["']$/g, '').trim();
+  }
+});
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
