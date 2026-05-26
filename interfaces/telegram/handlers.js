@@ -459,32 +459,34 @@ module.exports = { handleCommand };
 // ------------------------------------------
 
 function getLatestManifest() {
-  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
-  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
-    rootDir = path.join(__dirname, '../../');
-  }
-  const syncDir = path.join(rootDir, 'openclaw', 'outbox', 'google-drive-sync');
-  if (!fs.existsSync(syncDir)) return null;
-
-  const files = fs.readdirSync(syncDir).filter(f => f.startsWith('publish_manifest_') && f.endsWith('.json'));
-  if (files.length === 0) return null;
-
-  const fileInfos = files.map(filename => {
-    const fullPath = path.join(syncDir, filename);
-    let mtime = 0;
-    try {
-      mtime = fs.statSync(fullPath).mtimeMs;
-    } catch (e) {}
-    return { filename, fullPath, mtime };
+  const roots = getActiveRoots();
+  const candidates = [];
+  
+  roots.forEach(rootDir => {
+    const syncDir = path.join(rootDir, 'openclaw', 'outbox', 'google-drive-sync');
+    if (!fs.existsSync(syncDir)) return;
+    
+    const files = fs.readdirSync(syncDir).filter(f => f.startsWith('publish_manifest_') && f.endsWith('.json'));
+    files.forEach(filename => {
+      const fullPath = path.join(syncDir, filename);
+      let mtime = 0;
+      try {
+        mtime = fs.statSync(fullPath).mtimeMs;
+        candidates.push({ filename, fullPath, mtime });
+      } catch (e) {}
+    });
   });
 
-  fileInfos.sort((a, b) => b.mtime - a.mtime);
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => b.mtime - a.mtime);
   try {
-    return JSON.parse(fs.readFileSync(fileInfos[0].fullPath, 'utf8'));
+    return JSON.parse(fs.readFileSync(candidates[0].fullPath, 'utf8'));
   } catch (e) {
     return null;
   }
 }
+
 
 async function handleDriveLatest() {
   const manifest = getLatestManifest();
