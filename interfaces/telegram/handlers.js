@@ -676,38 +676,6 @@ function getLatestOutputFile() {
 }
 
 async function handleDrivePublishLatest() {
-  let debugMsg = "";
-  try {
-    const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT || "undefined";
-    const envRootValid = envRoot !== "undefined" ? isValidRepoRoot(path.resolve(envRoot)) : false;
-    const roots = getActiveRoots();
-    
-    debugMsg += `\n\n🔍 Debug Info:\n`;
-    debugMsg += `• envRoot: ${envRoot}\n`;
-    debugMsg += `• envRoot valid repo: ${envRootValid}\n`;
-    debugMsg += `• resolved roots: [${roots.join(', ')}]\n`;
-    debugMsg += `• __dirname: ${__dirname}\n`;
-    
-    roots.forEach(rootDir => {
-      const registryPath = path.join(rootDir, 'openclaw', 'bots', 'registry.md');
-      const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
-      const reportsDir = path.resolve(rootDir, 'openclaw/reports');
-      const campaignsDir = path.resolve(rootDir, 'campaigns');
-      debugMsg += `• root: ${rootDir}\n`;
-      debugMsg += `  - registry exists: ${fs.existsSync(registryPath)}\n`;
-      debugMsg += `  - responsesDir: ${responsesDir}\n`;
-      debugMsg += `  - responsesDir exists: ${fs.existsSync(responsesDir)}\n`;
-      debugMsg += `  - reportsDir exists: ${fs.existsSync(reportsDir)}\n`;
-      debugMsg += `  - campaignsDir exists: ${fs.existsSync(campaignsDir)}\n`;
-      if (fs.existsSync(responsesDir)) {
-        const files = fs.readdirSync(responsesDir);
-        debugMsg += `  - responses files: [${files.join(', ')}]\n`;
-      }
-    });
-  } catch (err) {
-    debugMsg += `• debug error: ${err.message}\n`;
-  }
-
   const latestFile = getLatestOutputFile();
   if (!latestFile) {
     // Check if any manifest or other files exist in the responses folder in any active root
@@ -725,15 +693,15 @@ async function handleDrivePublishLatest() {
     }
 
     if (hasManifests) {
-      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/" + debugMsg;
+      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/";
     }
     
-    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest." + debugMsg;
+    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest.";
   }
 
   const options = {};
-  if (latestFile.replace(/\\/g, '/').toLowerCase().includes('campaigns/')) {
-    const parts = latestFile.replace(/\\/g, '/').split('/');
+  if (latestFile.replace(/\\\\/g, '/').toLowerCase().includes('campaigns/')) {
+    const parts = latestFile.replace(/\\\\/g, '/').split('/');
     const idx = parts.findIndex(p => p.toLowerCase() === 'campaigns');
     if (idx !== -1 && idx + 2 < parts.length) {
       options.project = parts[idx + 1];
@@ -758,14 +726,9 @@ async function handleDrivePublishLatest() {
     msg += "⚠️ *Dry Run (No Upload):* " + manifest.error;
   } else {
     msg += "❌ *Publish Failed:* " + manifest.error;
-    msg += "\n\n🔧 *Diag:*";
-    msg += "\n• mode: `" + manifest.publish_mode + "`";
-    msg += "\n• CREDENTIALS_BASE64 set: `" + (!!process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64) + "`";
-    msg += "\n• CREDENTIALS set: `" + (!!process.env.GOOGLE_DRIVE_CREDENTIALS) + "`";
-    msg += "\n• FOLDER_ID set: `" + (!!process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID) + "`";
   }
 
-  return msg + debugMsg;
+  return msg;
 }
 
 async function handleDrivePublishFile(filename) {

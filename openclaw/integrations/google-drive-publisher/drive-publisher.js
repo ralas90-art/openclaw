@@ -212,16 +212,6 @@ async function publishFileToDrive(filePath, options = {}) {
     error: ''
   };
 
-  // Diagnostic context for error reporting (outer scope so catch can access)
-  let diagStage = 'init';
-  let diagEmail = 'unknown';
-  let diagHasKey = false;
-  let diagFolderId = process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID || 'MISSING';
-  let diagCredsKeys = [];
-  let diagKeyLength = 0;
-  let diagBase64Length = process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64 ? process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64.length : 0;
-  let diagRawLength = process.env.GOOGLE_DRIVE_CREDENTIALS ? process.env.GOOGLE_DRIVE_CREDENTIALS.length : 0;
-
   try {
     // Check file existence
     if (!fs.existsSync(filePath)) {
@@ -345,8 +335,8 @@ async function publishFileToDrive(filePath, options = {}) {
     if (manifest.status !== 'dry_run') {
       manifest.status = 'failed';
     }
-    // Include diagnostic context in the error message for Telegram visibility
-    manifest.error = `${err.message} (stage: ${diagStage}, email: ${diagEmail}, hasKey: ${diagHasKey}, keyLen: ${diagKeyLength}, keys: [${diagCredsKeys.join(', ')}], b64Len: ${diagBase64Length}, rawLen: ${diagRawLength}, folderId: ${diagFolderId})`;
+    // Include stage info for debugging
+    manifest.error = err.message;
   }
 
   // Save the manifest JSON log
