@@ -406,7 +406,7 @@ app.get('/', (req, res) => {
   res.json({ message: "Cresca OS Runtime API" });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN`);
   console.log(`📊 Admin UI available at /admin`);
