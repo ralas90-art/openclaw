@@ -10,7 +10,12 @@ const path = require('path');
 // ------------------------------------------
 
 function getRegistryPath() {
-  return path.join(process.env.OPENCLAW_WORKSPACE_ROOT || path.join(__dirname, '../../'), 'openclaw', 'bots', 'registry.md');
+  const envPath = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (envPath) {
+    const candidate = path.join(envPath, 'openclaw', 'bots', 'registry.md');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return path.join(__dirname, '../../', 'openclaw', 'bots', 'registry.md');
 }
 
 function parseRegistry() {
@@ -72,7 +77,11 @@ function parseMultilineCommand(text) {
 }
 
 async function saveToInbox(bot, workflow, fields, message) {
-  const inboxDir = path.join(process.env.OPENCLAW_WORKSPACE_ROOT || path.join(__dirname, '../../'), 'openclaw', 'inbox', 'telegram-requests');
+  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+    rootDir = path.join(__dirname, '../../');
+  }
+  const inboxDir = path.join(rootDir, 'openclaw', 'inbox', 'telegram-requests');
   if (!fs.existsSync(inboxDir)) {
     fs.mkdirSync(inboxDir, { recursive: true });
   }
