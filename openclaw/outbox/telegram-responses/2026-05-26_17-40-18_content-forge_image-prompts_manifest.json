@@ -1,0 +1,20 @@
+{
+  "source": "telegram",
+  "status": "completed",
+  "bot": "content-forge",
+  "workflow": "image-prompts",
+  "fields": {
+    "Project": "SeptiVolt",
+    "Campaign": "Batch 001 Founder Demo Ad",
+    "Prompt Count": "5",
+    "Aspect Ratio": "9:16"
+  },
+  "requested_by": {
+    "telegram_user_id": "123",
+    "telegram_username": "",
+    "telegram_chat_id": "789"
+  },
+  "result_file": "openclaw/outbox/telegram-responses/2026-05-26_17-40-18_content-forge_image-prompts_result.md",
+  "timestamp": "2026-05-26T17:40:18.000Z",
+  "processed_at": "2026-05-26T21:40:34.000Z"
+}
