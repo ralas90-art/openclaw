@@ -169,7 +169,9 @@ async function resolveFolderId(drive, parentId, folderName) {
   const query = "name = '" + folderName + "' and mimeType = 'application/vnd.google-apps.folder' and '" + parentId + "' in parents and trashed = false";
   const response = await drive.files.list({
     q: query,
-    fields: 'files(id)'
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true
   });
   if (response.data.files && response.data.files.length > 0) {
     return response.data.files[0].id;
@@ -182,7 +184,8 @@ async function resolveFolderId(drive, parentId, folderName) {
       mimeType: 'application/vnd.google-apps.folder',
       parents: [parentId]
     },
-    fields: 'id'
+    fields: 'id',
+    supportsAllDrives: true
   });
   return createResponse.data.id;
 }
@@ -325,7 +328,8 @@ async function publishFileToDrive(filePath, options = {}) {
         media: {
           body: fs.createReadStream(filePath)
         },
-        fields: 'id, name, webViewLink'
+        fields: 'id, name, webViewLink',
+        supportsAllDrives: true
       });
 
       manifest.status = 'published';
