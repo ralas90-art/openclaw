@@ -409,6 +409,11 @@ app.get('/admin/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin-ui', 'dist', 'index.html'));
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Root check
 app.get('/', (req, res) => {
   res.json({ message: "Cresca OS Runtime API" });
