@@ -758,9 +758,14 @@ async function handleDrivePublishLatest() {
     msg += "⚠️ *Dry Run (No Upload):* " + manifest.error;
   } else {
     msg += "❌ *Publish Failed:* " + manifest.error;
+    msg += "\n\n🔧 *Diag:*";
+    msg += "\n• mode: `" + manifest.publish_mode + "`";
+    msg += "\n• CREDENTIALS_BASE64 set: `" + (!!process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64) + "`";
+    msg += "\n• CREDENTIALS set: `" + (!!process.env.GOOGLE_DRIVE_CREDENTIALS) + "`";
+    msg += "\n• FOLDER_ID set: `" + (!!process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID) + "`";
   }
 
-  return msg;
+  return msg + debugMsg;
 }
 
 async function handleDrivePublishFile(filename) {

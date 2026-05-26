@@ -248,6 +248,12 @@ async function publishFileToDrive(filePath, options = {}) {
       const credsBase64 = process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64;
       const credsRaw = process.env.GOOGLE_DRIVE_CREDENTIALS;
 
+      // Diagnostic context for error reporting
+      let diagStage = 'init';
+      let diagEmail = 'unknown';
+      let diagHasKey = false;
+      let diagFolderId = folderId || 'MISSING';
+
       if (!folderId) {
         throw new Error('GOOGLE_DRIVE_OUTPUT_FOLDER_ID is not configured.');
       }
@@ -264,6 +270,7 @@ async function publishFileToDrive(filePath, options = {}) {
       const { google } = googleapis;
       
       // Parse credentials
+      diagStage = 'credential_parse';
       let credentials;
       if (credsBase64) {
         const decoded = Buffer.from(credsBase64, 'base64').toString('utf8');
@@ -275,6 +282,12 @@ async function publishFileToDrive(filePath, options = {}) {
         throw new Error('Google Drive API credentials are not configured (GOOGLE_DRIVE_CREDENTIALS_BASE64 is missing).');
       }
 
+      diagEmail = credentials.client_email || 'MISSING';
+      diagHasKey = !!(credentials.private_key);
+      const diagKeyPrefix = credentials.private_key ? credentials.private_key.substring(0, 27) : 'NONE';
+
+      // Authenticate
+      diagStage = 'auth_jwt';
       const auth = new google.auth.JWT(
         credentials.client_email,
         null,
@@ -282,18 +295,13 @@ async function publishFileToDrive(filePath, options = {}) {
         ['https://www.googleapis.com/auth/drive']
       );
       
-      // Explicitly authorize to catch credential issues early
-      try {
-        await auth.authorize();
-      } catch (authErr) {
-        const safeEmail = credentials.client_email || 'MISSING';
-        const hasKey = credentials.private_key ? 'present (' + credentials.private_key.substring(0, 30) + '...)' : 'MISSING';
-        throw new Error('Google Drive auth failed: ' + authErr.message + ' | client_email=' + safeEmail + ' | private_key=' + hasKey);
-      }
+      diagStage = 'auth_authorize';
+      await auth.authorize();
       
       const drive = google.drive({ version: 'v3', auth });
       
       // Resolve path subfolders dynamically in Google Drive
+      diagStage = 'folder_resolve';
       const subfolderPath = getSubfolderName(filePath, options);
       const pathParts = subfolderPath.split('/');
       let currentParentId = folderId;
@@ -303,6 +311,7 @@ async function publishFileToDrive(filePath, options = {}) {
       }
 
       // Upload file
+      diagStage = 'file_upload';
       const uploadResponse = await drive.files.create({
         requestBody: {
           name: path.basename(filePath),
@@ -327,6 +336,7 @@ async function publishFileToDrive(filePath, options = {}) {
     if (manifest.status !== 'dry_run') {
       manifest.status = 'failed';
     }
+    // Include diagnostic context in the error message for Telegram visibility
     manifest.error = err.message;
   }
 
