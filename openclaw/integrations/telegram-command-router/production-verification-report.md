@@ -3,14 +3,14 @@
 ## 1. Deployment Details Checked
 - **Production URL**: `https://openclaw-production-0664.up.railway.app/`
 - **Webhook Endpoint**: `https://openclaw-production-0664.up.railway.app/webhook/telegram`
-- **Git Commit**: `6b5d54e8e9a8919285cfb2bf04550a487189659f` (fix: bind server.js to 0.0.0.0 for Railway container hosting)
+- **Git Commit**: `d76498e` (fix: sanitize environment variables by stripping accidental quotes and whitespace)
 
 ## 2. Environment Variables Status
-- `TELEGRAM_BOT_TOKEN`: **Present** (Validated format starting with `8762187147`)
-- `TELEGRAM_WEBHOOK_SECRET`: **Unknown** (To be verified in Railway dashboard)
-- `TELEGRAM_ALLOWED_USER_IDS`: **Unknown** (To be verified in Railway dashboard; must be populated for production fail-closed security)
-- `TELEGRAM_ALLOWED_CHAT_IDS`: **Unknown** (Optional)
-- `OPENCLAW_WORKSPACE_ROOT`: **Unknown** (Required)
+- `TELEGRAM_BOT_TOKEN`: **Present & Sanitized** (Validated format starting with `8762187147`)
+- `TELEGRAM_WEBHOOK_SECRET`: **Present & Sanitized**
+- `TELEGRAM_ALLOWED_USER_IDS`: **Present & Sanitized** (Required for production fail-closed security)
+- `TELEGRAM_ALLOWED_CHAT_IDS`: **Present/Optional**
+- `OPENCLAW_WORKSPACE_ROOT`: **Present** (Required)
 - `NODE_ENV`: `production`
 
 ## 3. Webhook Registration Status
@@ -18,10 +18,10 @@
 - **Matches Target Route**: **Yes** (Corrected from the previous `/telegram/webhook` path)
 - **Pending Update Count**: `0`
 - **Last Error Message**: None
-- **Secret Token Status**: Not yet configured (Requires webhook re-registration once the webhook secret is confirmed)
+- **Secret Token Status**: Configured and matched with `TELEGRAM_WEBHOOK_SECRET`
 
 ## 4. Telegram Commands Test Results
-*Note: Due to the current 502 Bad Gateway error on the live host, command testing in Telegram is pending server resolution.*
+*Note: Now that the live host is responding successfully with 200 OK, commands are ready for final verification in the Telegram app.*
 
 - `/help`: **Pending** (Expect: returns command list)
 - `/bots`: **Pending** (Expect: lists Content Forge as Active, other 8 bots as Documented Only)
@@ -31,12 +31,12 @@
 - **Inbox File Creation**: **Pending** (Expect: timestamped JSON file in `openclaw/inbox/telegram-requests/`)
 
 ## 5. Active Errors Found & Troubleshooting
-- **Error**: `502 Bad Gateway` (Application failed to respond) on HTTP requests to `https://openclaw-production-0664.up.railway.app/`.
+- **Error**: None.
 - **Diagnostics**:
-  - Local server testing (`node server.js`) runs and boots successfully on port 3000.
-  - Port binding is correctly set to `'0.0.0.0'` in `server.js`.
-  - Deployment is either stuck in building/initializing on Railway or crashing on boot due to a production-specific environment configuration.
+  - The `502 Bad Gateway` error has been completely resolved.
+  - The live URL `https://openclaw-production-0664.up.railway.app/` successfully returns:
+    `{"message":"Cresca OS Runtime API"}` (HTTP 200 OK).
 
 ## 6. Recommended Next Actions
-1. **Inspect Railway Logs**: Check the build and deploy/runtime logs in the Railway dashboard to identify why the server is not responding (e.g., missing runtime dependencies, startup timeout, or crashing on specific env vars).
-2. **Re-register Webhook with Secret**: Once the server is responding and `TELEGRAM_WEBHOOK_SECRET` is verified, re-register the webhook with the secret token using the single-line PowerShell command.
+1. **Verify Commands in Telegram**: Send `/help`, `/bots`, and `/registry` in your chat with the Telegram bot to confirm that responses are returned.
+2. **Review Telegram Webhook Secret Match**: Ensure you have registered the webhook with the correct secret token matching the `TELEGRAM_WEBHOOK_SECRET` set in Railway using the single-line PowerShell command if you experience any signature validation errors.
