@@ -209,6 +209,16 @@ async function publishFileToDrive(filePath, options = {}) {
     error: ''
   };
 
+  // Diagnostic context for error reporting (outer scope so catch can access)
+  let diagStage = 'init';
+  let diagEmail = 'unknown';
+  let diagHasKey = false;
+  let diagFolderId = process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID || 'MISSING';
+  let diagCredsKeys = [];
+  let diagKeyLength = 0;
+  let diagBase64Length = process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64 ? process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64.length : 0;
+  let diagRawLength = process.env.GOOGLE_DRIVE_CREDENTIALS ? process.env.GOOGLE_DRIVE_CREDENTIALS.length : 0;
+
   try {
     // Check file existence
     if (!fs.existsSync(filePath)) {
@@ -248,12 +258,6 @@ async function publishFileToDrive(filePath, options = {}) {
       const credsBase64 = process.env.GOOGLE_DRIVE_CREDENTIALS_BASE64;
       const credsRaw = process.env.GOOGLE_DRIVE_CREDENTIALS;
 
-      // Diagnostic context for error reporting
-      let diagStage = 'init';
-      let diagEmail = 'unknown';
-      let diagHasKey = false;
-      let diagFolderId = folderId || 'MISSING';
-
       if (!folderId) {
         throw new Error('GOOGLE_DRIVE_OUTPUT_FOLDER_ID is not configured.');
       }
@@ -284,6 +288,8 @@ async function publishFileToDrive(filePath, options = {}) {
 
       diagEmail = credentials.client_email || 'MISSING';
       diagHasKey = !!(credentials.private_key);
+      diagKeyLength = credentials.private_key ? credentials.private_key.length : 0;
+      diagCredsKeys = Object.keys(credentials);
       const diagKeyPrefix = credentials.private_key ? credentials.private_key.substring(0, 27) : 'NONE';
 
       // Authenticate
@@ -337,7 +343,7 @@ async function publishFileToDrive(filePath, options = {}) {
       manifest.status = 'failed';
     }
     // Include diagnostic context in the error message for Telegram visibility
-    manifest.error = err.message;
+    manifest.error = `${err.message} (stage: ${diagStage}, email: ${diagEmail}, hasKey: ${diagHasKey}, keyLen: ${diagKeyLength}, keys: [${diagCredsKeys.join(', ')}], b64Len: ${diagBase64Length}, rawLen: ${diagRawLength}, folderId: ${diagFolderId})`;
   }
 
   // Save the manifest JSON log
