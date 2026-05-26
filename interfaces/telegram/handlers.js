@@ -614,6 +614,35 @@ function getLatestOutputFile() {
 }
 
 async function handleDrivePublishLatest() {
+  let debugMsg = "";
+  try {
+    let envRoot = process.env.OPENCLAW_WORKSPACE_ROOT || "undefined";
+    let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+    if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+      rootDir = path.join(__dirname, '../../');
+    }
+    rootDir = path.resolve(rootDir);
+    
+    const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
+    const reportsDir = path.resolve(rootDir, 'openclaw/reports');
+    const campaignsDir = path.resolve(rootDir, 'campaigns');
+
+    debugMsg += `\n\n🔍 Debug Info:\n`;
+    debugMsg += `• envRoot: ${envRoot}\n`;
+    debugMsg += `• resolved rootDir: ${rootDir}\n`;
+    debugMsg += `• __dirname: ${__dirname}\n`;
+    debugMsg += `• responsesDir exists: ${fs.existsSync(responsesDir)}\n`;
+    debugMsg += `• reportsDir exists: ${fs.existsSync(reportsDir)}\n`;
+    debugMsg += `• campaignsDir exists: ${fs.existsSync(campaignsDir)}\n`;
+    
+    if (fs.existsSync(responsesDir)) {
+      const files = fs.readdirSync(responsesDir);
+      debugMsg += `• responses files: [${files.join(', ')}]\n`;
+    }
+  } catch (err) {
+    debugMsg += `• debug error: ${err.message}\n`;
+  }
+
   const latestFile = getLatestOutputFile();
   if (!latestFile) {
     // Check if any manifest or other files exist in the responses folder
@@ -629,10 +658,10 @@ async function handleDrivePublishLatest() {
     }
 
     if (hasManifests) {
-      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/";
+      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/" + debugMsg;
     }
     
-    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest.";
+    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest." + debugMsg;
   }
 
   const options = {};
