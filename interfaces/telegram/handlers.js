@@ -553,24 +553,56 @@ function getFilePriority(fullPath, rootDir) {
   return 0;
 }
 
+function isValidRepoRoot(candidate) {
+  if (!candidate || !fs.existsSync(candidate)) return false;
+  // Strong marker: openclaw/bots/registry.md
+  if (fs.existsSync(path.join(candidate, 'openclaw', 'bots', 'registry.md'))) return true;
+  // Fallback markers: server.js + package.json
+  if (fs.existsSync(path.join(candidate, 'server.js')) && fs.existsSync(path.join(candidate, 'package.json'))) return true;
+  return false;
+}
+
 function getActiveRoots() {
   const roots = [];
   const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+
   if (process.env.OPENCLAW_TEST === 'true') {
+    // Test mode: trust the env root without marker validation (sandbox)
     if (envRoot) {
       roots.push(path.resolve(envRoot));
     }
-  } else {
-    // App Root (cloned repository files)
-    const appRoot = path.resolve(__dirname, '../../');
-    roots.push(appRoot);
-    
-    // Workspace Root (persistent volume or configured environment)
-    if (envRoot && fs.existsSync(envRoot)) {
-      roots.push(path.resolve(envRoot));
-    }
+    return roots;
   }
-  return [...new Set(roots)];
+
+  // Production mode: validate each candidate with repo markers
+  // 1. OPENCLAW_WORKSPACE_ROOT (if valid)
+  if (envRoot && isValidRepoRoot(path.resolve(envRoot))) {
+    roots.push(path.resolve(envRoot));
+  }
+
+  // 2. __dirname-derived app root
+  const appRoot = path.resolve(__dirname, '../../');
+  if (isValidRepoRoot(appRoot)) {
+    roots.push(appRoot);
+  }
+
+  // 3. Hardcoded /app fallback (Railway)
+  const railwayRoot = '/app';
+  if (isValidRepoRoot(railwayRoot)) {
+    roots.push(path.resolve(railwayRoot));
+  }
+
+  // 4. process.cwd() fallback
+  const cwdRoot = process.cwd();
+  if (isValidRepoRoot(cwdRoot)) {
+    roots.push(path.resolve(cwdRoot));
+  }
+
+  const unique = [...new Set(roots)];
+  if (unique.length === 0) {
+    console.error('[getActiveRoots] WARNING: No valid OpenClaw repo root found. Candidates tried: envRoot=' + (envRoot || 'unset') + ', appRoot=' + appRoot + ', /app, cwd=' + cwdRoot);
+  }
+  return unique;
 }
 
 function getLatestOutputFile() {
@@ -646,19 +678,24 @@ function getLatestOutputFile() {
 async function handleDrivePublishLatest() {
   let debugMsg = "";
   try {
-    let envRoot = process.env.OPENCLAW_WORKSPACE_ROOT || "undefined";
+    const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT || "undefined";
+    const envRootValid = envRoot !== "undefined" ? isValidRepoRoot(path.resolve(envRoot)) : false;
     const roots = getActiveRoots();
     
     debugMsg += `\n\n🔍 Debug Info:\n`;
     debugMsg += `• envRoot: ${envRoot}\n`;
-    debugMsg += `• roots: [${roots.join(', ')}]\n`;
+    debugMsg += `• envRoot valid repo: ${envRootValid}\n`;
+    debugMsg += `• resolved roots: [${roots.join(', ')}]\n`;
     debugMsg += `• __dirname: ${__dirname}\n`;
     
     roots.forEach(rootDir => {
+      const registryPath = path.join(rootDir, 'openclaw', 'bots', 'registry.md');
       const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
       const reportsDir = path.resolve(rootDir, 'openclaw/reports');
       const campaignsDir = path.resolve(rootDir, 'campaigns');
       debugMsg += `• root: ${rootDir}\n`;
+      debugMsg += `  - registry exists: ${fs.existsSync(registryPath)}\n`;
+      debugMsg += `  - responsesDir: ${responsesDir}\n`;
       debugMsg += `  - responsesDir exists: ${fs.existsSync(responsesDir)}\n`;
       debugMsg += `  - reportsDir exists: ${fs.existsSync(reportsDir)}\n`;
       debugMsg += `  - campaignsDir exists: ${fs.existsSync(campaignsDir)}\n`;

@@ -59,24 +59,52 @@ function scanForSecrets(filePath) {
   return { safe: true };
 }
 
+function isValidRepoRoot(candidate) {
+  if (!candidate || !fs.existsSync(candidate)) return false;
+  if (fs.existsSync(path.join(candidate, 'openclaw', 'bots', 'registry.md'))) return true;
+  if (fs.existsSync(path.join(candidate, 'server.js')) && fs.existsSync(path.join(candidate, 'package.json'))) return true;
+  return false;
+}
+
 function getActiveRoots() {
   const roots = [];
   const envRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+
   if (process.env.OPENCLAW_TEST === 'true') {
     if (envRoot) {
       roots.push(path.resolve(envRoot));
     }
-  } else {
-    // App Root is three levels up from google-drive-publisher
-    const appRoot = path.resolve(__dirname, '../../..');
-    roots.push(appRoot);
-    
-    // Workspace Root (persistent volume or configured environment)
-    if (envRoot && fs.existsSync(envRoot)) {
-      roots.push(path.resolve(envRoot));
-    }
+    return roots;
   }
-  return [...new Set(roots)];
+
+  // 1. OPENCLAW_WORKSPACE_ROOT (if valid)
+  if (envRoot && isValidRepoRoot(path.resolve(envRoot))) {
+    roots.push(path.resolve(envRoot));
+  }
+
+  // 2. __dirname-derived app root (three levels up from google-drive-publisher)
+  const appRoot = path.resolve(__dirname, '../../..');
+  if (isValidRepoRoot(appRoot)) {
+    roots.push(appRoot);
+  }
+
+  // 3. Hardcoded /app fallback (Railway)
+  const railwayRoot = '/app';
+  if (isValidRepoRoot(railwayRoot)) {
+    roots.push(path.resolve(railwayRoot));
+  }
+
+  // 4. process.cwd() fallback
+  const cwdRoot = process.cwd();
+  if (isValidRepoRoot(cwdRoot)) {
+    roots.push(path.resolve(cwdRoot));
+  }
+
+  const unique = [...new Set(roots)];
+  if (unique.length === 0) {
+    console.error('[drive-publisher getActiveRoots] WARNING: No valid OpenClaw repo root found.');
+  }
+  return unique;
 }
 
 /**
