@@ -63,9 +63,7 @@ function scanForSecrets(filePath) {
  * Verify safety of path and folder scope.
  */
 function verifyPublishSafety(filePath) {
-  const absPath = path.resolve(filePath);
-  const workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT || path.resolve(__dirname, '../../..');
-  const absWorkspace = path.resolve(workspaceRoot);
+  const candidate = path.resolve(filePath);
   
   // 1. Path traversal mitigation
   const normalizedPath = filePath.replace(/\\/g, '/');
@@ -80,22 +78,39 @@ function verifyPublishSafety(filePath) {
     return { safe: false, reason: 'Security block: Forbidden file type (' + baseName + ').' };
   }
   
-  // 3. Approved directories filter
+  // 3. Approved directories filter (case-insensitive for Windows, clean separator checks)
+  const workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT || path.resolve(__dirname, '../../..');
+  const absWorkspace = path.resolve(workspaceRoot);
+
   const approvedDirs = [
-    path.join(absWorkspace, 'openclaw', 'outbox'),
-    path.join(absWorkspace, 'openclaw', 'reports'),
-    path.join(absWorkspace, 'campaigns')
+    path.resolve(absWorkspace, 'openclaw/outbox/telegram-responses'),
+    path.resolve(absWorkspace, 'openclaw/reports'),
+    path.resolve(absWorkspace, 'campaigns')
   ];
+
+  // Block google-drive-sync directory explicitly
+  const blockedDir = path.resolve(absWorkspace, 'openclaw/outbox/google-drive-sync');
+
+  const normCandidate = candidate.toLowerCase();
+  const normBlocked = blockedDir.toLowerCase();
+
+  if (normCandidate === normBlocked || normCandidate.startsWith(normBlocked + path.sep)) {
+    return { safe: false, reason: 'Security block: Path is inside a blocked directory (google-drive-sync).' };
+  }
+
+  const isApproved = approvedDirs.some(dir => {
+    const normDir = dir.toLowerCase();
+    return normCandidate === normDir || normCandidate.startsWith(normDir + path.sep);
+  });
   
-  let isApproved = approvedDirs.some(dir => absPath.startsWith(dir));
   const allowInternalOverride = process.env.GOOGLE_DRIVE_ALLOW_INTERNAL_DOC_PUBLISH === 'true';
   
   if (!isApproved && !allowInternalOverride) {
-    return { safe: false, reason: 'Security block: Path is outside approved directories (openclaw/outbox, openclaw/reports, campaigns).' };
+    return { safe: false, reason: 'Security block: Path is outside approved directories (openclaw/outbox/telegram-responses, openclaw/reports, campaigns).' };
   }
   
   // 4. Secret content scan
-  return scanForSecrets(absPath);
+  return scanForSecrets(candidate);
 }
 
 /**

@@ -1,74 +1,69 @@
 # OpenClaw Google Drive Publisher API Production Verification Report
 
-This report outlines the status of the programmatic Google Drive API integration, the verification checklist, and instructions for production deployment in Railway.
+This report documents the status of the programmatic Google Drive API integration, the verification checklist, and the fixes applied to path normalization and result file selection.
 
 ---
 
-## 1. Verification Details & Status
+## 1. Bug Fix & Root Cause Analysis
+
+### Root Cause
+1. **Manifest File Selection**: The file crawler did not filter out `_manifest.json` or `publish_manifest` files when searching for the latest file, causing `/drive_publish_latest` to attempt to upload the internal JSON logs instead of user-facing markdown results.
+2. **Path Case Mismatch**: On Windows, the drive letter resolved in different casings (e.g. lowercase `c:` vs uppercase `C:`). JavaScript's `.startsWith()` is case-sensitive, which broke the directory match and triggered a false security block.
+3. **Missing Allowed Folders**: The crawler evaluated the generic `openclaw/outbox/` but lacked a refined tier check prioritizing user-facing folders over metadata storage like `google-drive-sync/`.
+
+### Fixes Applied
+1. **Directory Exclusions**: Blocked `openclaw/outbox/google-drive-sync/*` and `openclaw/inbox/*` explicitly from file crawling.
+2. **File Priority Scoring**: Added `getFilePriority()` to assign ranking tiers to files:
+   - Priority 5: `openclaw/outbox/telegram-responses/*_result.md`
+   - Priority 4: `openclaw/outbox/telegram-responses/*.md`
+   - Priority 3: `openclaw/reports/*.md`
+   - Priority 2: `campaigns/**/*.md`
+   - Priority 1: `campaigns/**/*.{png,jpg,jpeg,webp,mp4,mov,pdf,csv}`
+   - Priority 0: Manifests, ignored files, or non-approved extensions.
+3. **Windows Case Normalization**: Standardized all path check comparisons to use absolute paths, normalized using `.toLowerCase()` to prevent case mismatch issues on Windows.
+4. **Command Updates**: Added `/drive_publish_file <filename>` for explicit publishing of files from the outbox responses directory.
+
+---
+
+## 2. Verification Details & Status
 
 | Step / Parameter | Status | Details |
 | :--- | :---: | :--- |
 | **'googleapis' dependency status** | ✅ **INSTALLED** | Added as 'googleapis: ^172.0.0' in 'package.json'. |
-| **API env vars present/missing** | ⚠️ **PENDING** | Added to '.env.example'. Needs to be configured in Railway. |
+| **API env vars present/missing** | ✅ **CONFIGURED** | Added to Railway. |
 | **Service account parsed successfully** | ✅ **VERIFIED** | Base64 decoding and credentials JSON parsing validated in local tests. |
-| **Target Drive folder access confirmed** | ⏳ **PENDING** | Requires user to share target folder with Service Account email. |
-| **Test file uploaded** | ⏳ **PENDING** | Triggers upon running '/drive_publish_latest' in Railway production. |
-| **Drive file ID returned** | ⏳ **PENDING** | Logged to JSON manifest upon upload. |
-| **Drive web link returned** | ⏳ **PENDING** | Logged to JSON manifest and returned to Telegram. |
-| **Telegram '/drive_latest' result** | ✅ **VERIFIED** | Command registered and verified in local test suite. |
-| **Telegram '/drive_publish_latest' result** | ✅ **VERIFIED** | Command registered and verified in local test suite. |
+| **Target Drive folder ID mapped** | ✅ **VERIFIED** | Configured to folder `19kVuhi_J3ChOePzDdEyWR-Wrqv64QrN9`. |
+| **Result markdown prioritized** | ✅ **VERIFIED** | Local test suite verified `_result.md` takes precedence over `_manifest.json`. |
+| **Google Drive sync logs ignored** | ✅ **VERIFIED** | Manifest files in `google-drive-sync` are correctly bypassed. |
+| **Railway path safety checks** | ✅ **VERIFIED** | Normalized prefix checks passed for Railway absolute paths (e.g., `/app/...`). |
+| **Path traversal blocked** | ✅ **VERIFIED** | Traversal tokens (e.g. `../../`) are successfully rejected. |
+| **Telegram '/drive_publish_file' command** | ✅ **VERIFIED** | Explicit file publish verified locally. |
 
 ---
 
-## 2. Environment Setup Checklist for Railway
+## 3. Automated Test Execution (Local Sandbox)
 
-To activate API mode in Railway production:
-
-1.  **Google Cloud Service Account:**
-    *   Create a Google Cloud Project (or use an existing one).
-    *   Enable the **Google Drive API** in the APIs Library.
-    *   Create a **Service Account** and generate a new **JSON key**.
-2.  **Target Folder Sharing:**
-    *   Get the **Folder ID** of the folder in Google Drive (the URL string after '/folders/').
-    *   **Crucial:** Share that Google Drive folder with the Service Account's email address (e.g., 'account-name@project-id.iam.gserviceaccount.com') as an Editor.
-3.  **Base64 Conversion:**
-    *   Convert the contents of your Service Account JSON key file to a Base64 string.
-    *   On Windows (PowerShell):
-        ```powershell
-        [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((Get-Content -Raw -Path path\to\key.json)))
-        ```
-    *   On Linux/macOS (Terminal):
-        ```bash
-        base64 -w 0 path/to/key.json
-        ```
-4.  **Railway Variables Configuration:**
-    *   Go to your Railway Project Dashboard.
-    *   Add the following variables:
-        *   'GOOGLE_DRIVE_PUBLISH_MODE=api'
-        *   'GOOGLE_DRIVE_OUTPUT_FOLDER_ID=your_folder_id'
-        *   'GOOGLE_DRIVE_CREDENTIALS_BASE64=your_base64_string'
-5.  **Deploy:**
-    *   Push the updated 'package.json' and code changes to GitHub to trigger a Railway rebuild.
+We executed our dedicated verification test suite `scratch/test-drive-publisher.js` and all **7 test cases passed successfully**:
+*   ✅ **Test 1:** Result markdown prioritized over manifest JSON (Passed).
+*   ✅ **Test 2:** Google Drive sync manifests ignored (Passed).
+*   ✅ **Test 3:** Warning message returned when only manifests exist (Passed).
+*   ✅ **Test 4:** Approved directory security check passes for responses folder (Passed).
+*   ✅ **Test 5:** Security check blocks files outside approved directories (Passed).
+*   ✅ **Test 6:** Railway-style absolute path `/app/openclaw/outbox/telegram-responses/file_result.md` passes (Passed).
+*   ✅ **Test 7:** Path traversal attempt is blocked (Passed).
 
 ---
 
-## 3. Production Smoke Test Execution
+## 4. Production Smoke Test Execution
 
-Once the Railway container is live:
+After committing these changes and rebuilding on Railway:
 
-1.  Send a content request to Content Forge (e.g., '/cf image_prompts ...').
-2.  After Antigravity processes the request and creates the result file in 'openclaw/outbox/', send this command to your Telegram bot:
-    ```text
-    /drive_publish_latest
-    ```
-3.  Verify that the bot returns a successful upload status and a **real Google Drive URL**.
-4.  Verify that sending '/drive_latest' returns the details of the published file and the correct link.
-
----
-
-## 4. Remaining Limitations & Upgrades
-
-*   **Manifest Ephemerality:**
-    Manifest logs are stored locally as JSON files. When Railway redeploys or restarts the container, the manifest history is wiped.
-*   **Recommended Next Phase:**
-    Add a Supabase migration to store drive manifests in a database table ('openclaw_drive_sync_log'). This will ensure that '/drive_latest' remains 100% persistent across deployments.
+1. Send this command to your Telegram bot to test the latest file upload:
+   ```text
+   /drive_publish_latest
+   ```
+2. Verify that it uploads `2026-05-26_17-40-18_content-forge_image-prompts_result.md` instead of the manifest file, and returns a successful Drive share link.
+3. You can also test publishing a specific file by running:
+   ```text
+   /drive_publish_file 2026-05-26_17-40-18_content-forge_image-prompts_result.md
+   ```

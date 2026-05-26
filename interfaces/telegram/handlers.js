@@ -296,6 +296,10 @@ async function handleCommand(text, message) {
   }
   if (command === '/drive_latest' || command === '/drivelatest') return await handleDriveLatest();
   if (command === '/drive_publish_latest' || command === '/drivepublishlatest') return await handleDrivePublishLatest();
+  if (command === '/drive_publish_file' || command === '/drivepublishfile') {
+    const filename = text.trim().split(/\s+/)[1];
+    return await handleDrivePublishFile(filename);
+  }
   if (command === '/drive_publish_campaign' || command === '/drivepublishcampaign') {
     const campaignName = text.trim().split(/\s+/)[1];
     return await handleDrivePublishCampaign(campaignName);
@@ -321,7 +325,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001\nPrompt Count: 5\nAspect Ratio: 9:16`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001`;
 }
 
 function handleBots() {
@@ -511,27 +515,65 @@ async function handleDriveLatest() {
   return msg;
 }
 
+function getFilePriority(fullPath, rootDir) {
+  const normPath = fullPath.replace(/\\/g, '/');
+  const baseName = path.basename(fullPath).toLowerCase();
+  
+  // Exclusions:
+  if (baseName === '.gitkeep') return 0;
+  if (baseName.endsWith('_manifest.json') || baseName.includes('publish_manifest')) return 0;
+  if (normPath.includes('/google-drive-sync/') || normPath.includes('/inbox/') || normPath.includes('/node_modules/') || normPath.includes('/.git/')) return 0;
+
+  const ext = path.extname(fullPath).toLowerCase();
+  const allowedExts = ['.md', '.txt', '.json', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mov', '.csv'];
+  if (!allowedExts.includes(ext)) return 0;
+
+  // Resolve absolute paths to classify:
+  const absPath = path.resolve(fullPath);
+  
+  const responsesDir = path.resolve(rootDir, 'openclaw/outbox/telegram-responses');
+  const reportsDir = path.resolve(rootDir, 'openclaw/reports');
+  const campaignsDir = path.resolve(rootDir, 'campaigns');
+
+  if (absPath.startsWith(responsesDir + path.sep) || absPath === responsesDir) {
+    if (baseName.endsWith('_result.md')) return 5;
+    if (ext === '.md') return 4;
+  }
+  if (absPath.startsWith(reportsDir + path.sep) || absPath === reportsDir) {
+    if (ext === '.md') return 3;
+  }
+  if (absPath.startsWith(campaignsDir + path.sep) || absPath === campaignsDir) {
+    if (ext === '.md') return 2;
+    const mediaExts = ['.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mov', '.pdf', '.csv'];
+    if (mediaExts.includes(ext)) return 1;
+  }
+
+  return 0;
+}
+
 function getLatestOutputFile() {
   let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
   if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
     rootDir = path.join(__dirname, '../../');
   }
+  rootDir = path.resolve(rootDir);
 
   const approvedPaths = [
-    path.join(rootDir, 'openclaw', 'outbox'),
-    path.join(rootDir, 'openclaw', 'reports'),
-    path.join(rootDir, 'campaigns')
+    path.resolve(rootDir, 'openclaw/outbox/telegram-responses'),
+    path.resolve(rootDir, 'openclaw/reports'),
+    path.resolve(rootDir, 'campaigns')
   ];
 
-  let latestFile = null;
-  let latestMtime = 0;
+  const candidates = [];
 
   function traverse(dir) {
     if (!fs.existsSync(dir)) return;
     const stat = fs.statSync(dir);
     if (!stat.isDirectory()) return;
 
-    if (dir.includes('google-drive-sync') || dir.includes('node_modules') || dir.includes('.git')) {
+    // Skip node_modules, git, and sync folders
+    const normDir = dir.replace(/\\/g, '/');
+    if (normDir.includes('node_modules') || normDir.includes('.git') || normDir.includes('google-drive-sync') || normDir.includes('/inbox/')) {
       return;
     }
 
@@ -541,16 +583,13 @@ function getLatestOutputFile() {
       try {
         const itemStat = fs.statSync(fullPath);
         if (itemStat.isFile()) {
-          const lowerName = item.toLowerCase();
-          if (lowerName === '.gitkeep' || lowerName.startsWith('publish_manifest') || (lowerName.endsWith('.json') && dir.includes('google-drive-sync'))) {
-            continue;
-          }
-          const allowedExts = ['.md', '.txt', '.json', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mov', '.csv'];
-          if (allowedExts.some(ext => lowerName.endsWith(ext))) {
-            if (itemStat.mtimeMs > latestMtime) {
-              latestMtime = itemStat.mtimeMs;
-              latestFile = fullPath;
-            }
+          const priority = getFilePriority(fullPath, rootDir);
+          if (priority > 0) {
+            candidates.push({
+              path: fullPath,
+              mtimeMs: itemStat.mtimeMs,
+              priority: priority
+            });
           }
         } else if (itemStat.isDirectory()) {
           traverse(fullPath);
@@ -560,12 +599,39 @@ function getLatestOutputFile() {
   }
 
   approvedPaths.forEach(traverse);
-  return latestFile;
+
+  if (candidates.length === 0) return null;
+
+  // Sort by priority tier descending, then by mtimeMs descending
+  candidates.sort((a, b) => {
+    if (b.priority !== a.priority) {
+      return b.priority - a.priority;
+    }
+    return b.mtimeMs - a.mtimeMs;
+  });
+
+  return candidates[0].path;
 }
 
 async function handleDrivePublishLatest() {
   const latestFile = getLatestOutputFile();
   if (!latestFile) {
+    // Check if any manifest or other files exist in the responses folder
+    let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+    if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+      rootDir = path.join(__dirname, '../../');
+    }
+    const responsesDir = path.join(rootDir, 'openclaw', 'outbox', 'telegram-responses');
+    let hasManifests = false;
+    if (fs.existsSync(responsesDir)) {
+      const files = fs.readdirSync(responsesDir);
+      hasManifests = files.some(f => f.endsWith('_manifest.json') || f.includes('publish_manifest'));
+    }
+
+    if (hasManifests) {
+      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/";
+    }
+    
     return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest.";
   }
 
@@ -583,6 +649,59 @@ async function handleDrivePublishLatest() {
 
   let msg = "📤 *Google Drive Publish Result*\n\n";
   msg += "📄 *File:* `" + path.basename(latestFile) + "`\n";
+  msg += "🚦 *Status:* `" + manifest.status.toUpperCase() + "`\n";
+
+  if (manifest.status === 'published') {
+    if (manifest.publish_mode === 'api' && manifest.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + manifest.drive_web_url + "\n";
+    } else if (manifest.publish_mode === 'local' && manifest.drive_local_path) {
+      msg += "💻 *Local Path:* `" + manifest.drive_local_path + "`\n";
+      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+    }
+  } else if (manifest.status === 'dry_run') {
+    msg += "⚠️ *Dry Run (No Upload):* " + manifest.error;
+  } else {
+    msg += "❌ *Publish Failed:* " + manifest.error;
+  }
+
+  return msg;
+}
+
+async function handleDrivePublishFile(filename) {
+  if (!filename) {
+    return "Usage: /drive_publish_file <filename>\nExample: /drive_publish_file 2026-05-26_17-40-18_content-forge_image-prompts_result.md";
+  }
+
+  const base = path.basename(filename);
+  if (filename !== base) {
+    return "❌ Access denied: Path traversal or invalid characters detected.";
+  }
+
+  const ext = path.extname(base).toLowerCase();
+  const allowedExts = ['.md', '.txt', '.json', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mov', '.csv'];
+  if (!allowedExts.includes(ext)) {
+    return "❌ Access denied: Unsupported file extension.";
+  }
+
+  if (base.endsWith('_manifest.json') || base.includes('publish_manifest')) {
+    return "❌ Access denied: Cannot publish internal manifest files.";
+  }
+
+  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+    rootDir = path.join(__dirname, '../../');
+  }
+  
+  const targetPath = path.join(rootDir, 'openclaw', 'outbox', 'telegram-responses', base);
+  if (!fs.existsSync(targetPath)) {
+    return `❌ File not found in responses directory: ${base}`;
+  }
+
+  const options = {};
+  const manifest = await drivePublisher.publishFileToDrive(targetPath, options);
+
+  let msg = "📤 *Google Drive Publish Result*\n\n";
+  msg += "📄 *File:* `" + base + "`\n";
   msg += "🚦 *Status:* `" + manifest.status.toUpperCase() + "`\n";
 
   if (manifest.status === 'published') {
