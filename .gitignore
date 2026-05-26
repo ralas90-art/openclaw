@@ -5,3 +5,13 @@ node_modules
 .env.development
 .env.production
 .env.staging
+scratch/
+openclaw-key.json
+
+# OpenClaw Temporary Inbox/Outbox Files
+openclaw/inbox/telegram-requests/*
+!openclaw/inbox/telegram-requests/.gitkeep
+openclaw/outbox/google-drive-sync/*
+!openclaw/outbox/google-drive-sync/.gitkeep
+openclaw/outbox/telegram-responses/*
+!openclaw/outbox/telegram-responses/.gitkeep

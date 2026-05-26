@@ -4,6 +4,7 @@ const circuitBreakerRegistry = require('../../core/failover/circuitBreakerRegist
 const { replayEvent } = require('../../core/replay/replayManager');
 const fs = require('fs');
 const path = require('path');
+const drivePublisher = require('../../openclaw/integrations/google-drive-publisher/drive-publisher');
 
 // ------------------------------------------
 // Registry & Bot Routing
@@ -288,14 +289,21 @@ async function handleCommand(text, message) {
   if (command === '/bots') return handleBots();
   if (command === '/registry') return handleRegistry();
   if (command === '/inbox') return await handleInbox();
-  if (command === '/inbox_latest') return await handleInboxLatest();
-  if (command === '/inbox_read') {
+  if (command === '/inbox_latest' || command === '/inboxlatest') return await handleInboxLatest();
+  if (command === '/inbox_read' || command === '/inboxread') {
     const filename = text.trim().split(/\s+/)[1];
     return await handleInboxRead(filename);
   }
+  if (command === '/drive_latest' || command === '/drivelatest') return await handleDriveLatest();
+  if (command === '/drive_publish_latest' || command === '/drivepublishlatest') return await handleDrivePublishLatest();
+  if (command === '/drive_publish_campaign' || command === '/drivepublishcampaign') {
+    const campaignName = text.trim().split(/\s+/)[1];
+    return await handleDrivePublishCampaign(campaignName);
+  }
+
 
   // 2. OpenClaw Bot Routing
-  if (command === '/content_forge' || command === '/cf') {
+  if (command === '/content_forge' || command === '/contentforge' || command === '/cf') {
     return await handleOpenClawBot('content-forge', parsed.workflow, parsed.fields, message);
   }
   if (command === '/revenue') {
@@ -313,7 +321,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001\nPrompt Count: 5\nAspect Ratio: 9:16`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001\nPrompt Count: 5\nAspect Ratio: 9:16`;
 }
 
 function handleBots() {
@@ -440,3 +448,222 @@ async function handleReplay(args) {
 }
 
 module.exports = { handleCommand };
+
+
+// ------------------------------------------
+// Google Drive Publisher Command Handlers
+// ------------------------------------------
+
+function getLatestManifest() {
+  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+    rootDir = path.join(__dirname, '../../');
+  }
+  const syncDir = path.join(rootDir, 'openclaw', 'outbox', 'google-drive-sync');
+  if (!fs.existsSync(syncDir)) return null;
+
+  const files = fs.readdirSync(syncDir).filter(f => f.startsWith('publish_manifest_') && f.endsWith('.json'));
+  if (files.length === 0) return null;
+
+  const fileInfos = files.map(filename => {
+    const fullPath = path.join(syncDir, filename);
+    let mtime = 0;
+    try {
+      mtime = fs.statSync(fullPath).mtimeMs;
+    } catch (e) {}
+    return { filename, fullPath, mtime };
+  });
+
+  fileInfos.sort((a, b) => b.mtime - a.mtime);
+  try {
+    return JSON.parse(fs.readFileSync(fileInfos[0].fullPath, 'utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+async function handleDriveLatest() {
+  const manifest = getLatestManifest();
+  if (!manifest) {
+    return "No Google Drive publishing history found yet.\nRun /drive_publish_latest to publish your first asset!";
+  }
+  
+  let msg = "📂 *Latest Google Drive Publication*\n\n";
+  msg += "📄 *File:* `" + path.basename(manifest.local_file) + "`\n";
+  msg += "📁 *Project:* " + manifest.project + "\n";
+  msg += "📣 *Campaign:* " + manifest.campaign + "\n";
+  msg += "⚙️ *Mode:* `" + manifest.publish_mode + "`\n";
+  msg += "🚦 *Status:* `" + manifest.status.toUpperCase() + "`\n";
+  
+  if (manifest.status === 'published') {
+    if (manifest.publish_mode === 'api' && manifest.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + manifest.drive_web_url + "\n";
+    } else if (manifest.publish_mode === 'local' && manifest.drive_local_path) {
+      msg += "💻 *Local Path:* `" + manifest.drive_local_path + "`\n";
+      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+    }
+  } else if (manifest.status === 'dry_run') {
+    msg += "⚠️ *Dry Run:* " + (manifest.error || 'API library or credentials missing.');
+  } else {
+    msg += "❌ *Error:* " + (manifest.error || 'Unknown error occurred.');
+  }
+  
+  return msg;
+}
+
+function getLatestOutputFile() {
+  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+    rootDir = path.join(__dirname, '../../');
+  }
+
+  const approvedPaths = [
+    path.join(rootDir, 'openclaw', 'outbox'),
+    path.join(rootDir, 'openclaw', 'reports'),
+    path.join(rootDir, 'campaigns')
+  ];
+
+  let latestFile = null;
+  let latestMtime = 0;
+
+  function traverse(dir) {
+    if (!fs.existsSync(dir)) return;
+    const stat = fs.statSync(dir);
+    if (!stat.isDirectory()) return;
+
+    if (dir.includes('google-drive-sync') || dir.includes('node_modules') || dir.includes('.git')) {
+      return;
+    }
+
+    const items = fs.readdirSync(dir);
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      try {
+        const itemStat = fs.statSync(fullPath);
+        if (itemStat.isFile()) {
+          const lowerName = item.toLowerCase();
+          if (lowerName === '.gitkeep' || lowerName.startsWith('publish_manifest') || (lowerName.endsWith('.json') && dir.includes('google-drive-sync'))) {
+            continue;
+          }
+          const allowedExts = ['.md', '.txt', '.json', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mov', '.csv'];
+          if (allowedExts.some(ext => lowerName.endsWith(ext))) {
+            if (itemStat.mtimeMs > latestMtime) {
+              latestMtime = itemStat.mtimeMs;
+              latestFile = fullPath;
+            }
+          }
+        } else if (itemStat.isDirectory()) {
+          traverse(fullPath);
+        }
+      } catch (e) {}
+    }
+  }
+
+  approvedPaths.forEach(traverse);
+  return latestFile;
+}
+
+async function handleDrivePublishLatest() {
+  const latestFile = getLatestOutputFile();
+  if (!latestFile) {
+    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest.";
+  }
+
+  const options = {};
+  if (latestFile.replace(/\\/g, '/').toLowerCase().includes('campaigns/')) {
+    const parts = latestFile.replace(/\\/g, '/').split('/');
+    const idx = parts.findIndex(p => p.toLowerCase() === 'campaigns');
+    if (idx !== -1 && idx + 2 < parts.length) {
+      options.project = parts[idx + 1];
+      options.campaign = parts[idx + 2];
+    }
+  }
+
+  const manifest = await drivePublisher.publishFileToDrive(latestFile, options);
+
+  let msg = "📤 *Google Drive Publish Result*\n\n";
+  msg += "📄 *File:* `" + path.basename(latestFile) + "`\n";
+  msg += "🚦 *Status:* `" + manifest.status.toUpperCase() + "`\n";
+
+  if (manifest.status === 'published') {
+    if (manifest.publish_mode === 'api' && manifest.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + manifest.drive_web_url + "\n";
+    } else if (manifest.publish_mode === 'local' && manifest.drive_local_path) {
+      msg += "💻 *Local Path:* `" + manifest.drive_local_path + "`\n";
+      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+    }
+  } else if (manifest.status === 'dry_run') {
+    msg += "⚠️ *Dry Run (No Upload):* " + manifest.error;
+  } else {
+    msg += "❌ *Publish Failed:* " + manifest.error;
+  }
+
+  return msg;
+}
+
+async function handleDrivePublishCampaign(campaignName) {
+  if (!campaignName) {
+    return "Usage: /drive_publish_campaign <campaign_name>\nExample: /drive_publish_campaign batch-001-founder-demo-ad";
+  }
+
+  const base = path.basename(campaignName);
+  if (campaignName !== base) {
+    return "❌ Access denied: Invalid campaign folder name or path traversal detected.";
+  }
+
+  let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
+    rootDir = path.join(__dirname, '../../');
+  }
+
+  const campaignsDir = path.join(rootDir, 'campaigns');
+  if (!fs.existsSync(campaignsDir)) {
+    return "❌ campaigns/ directory not found in workspace.";
+  }
+
+  const projects = fs.readdirSync(campaignsDir);
+  let campaignPath = null;
+  let projectName = 'SeptiVolt';
+
+  for (const proj of projects) {
+    const projPath = path.join(campaignsDir, proj);
+    if (fs.statSync(projPath).isDirectory()) {
+      const candidatePath = path.join(projPath, base);
+      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()) {
+        campaignPath = candidatePath;
+        projectName = proj;
+        break;
+      }
+    }
+  }
+
+  if (!campaignPath) {
+    return "❌ Campaign folder \"" + base + "\" not found under campaigns/.";
+  }
+
+  const results = await drivePublisher.publishCampaignToDrive(campaignPath, {
+    project: projectName,
+    campaign: base
+  });
+
+  const succeeded = results.filter(r => r.status === 'published').length;
+  const failed = results.filter(r => r.status === 'failed').length;
+  const dryRun = results.filter(r => r.status === 'dry_run').length;
+
+  let msg = "📤 *Google Drive Campaign Publish Summary*\n\n";
+  msg += "📁 *Campaign:* `" + base + "`\n";
+  msg += "✅ *Published:* " + succeeded + " file(s)\n";
+  if (failed > 0) msg += "❌ *Failed:* " + failed + " file(s)\n";
+  if (dryRun > 0) msg += "⚠️ *Dry Run:* " + dryRun + " file(s)\n";
+
+  const latestPublished = results.find(r => r.status === 'published');
+  if (latestPublished) {
+    if (latestPublished.publish_mode === 'api' && latestPublished.drive_web_url) {
+      msg += "\n🔗 *Drive Link:* " + latestPublished.drive_web_url;
+    } else if (latestPublished.publish_mode === 'local' && latestPublished.drive_local_path) {
+      msg += "\n💻 *Local Path:* `" + path.dirname(latestPublished.drive_local_path) + "`";
+    }
+  }
+
+  return msg;
+}
