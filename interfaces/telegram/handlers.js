@@ -76,12 +76,42 @@ function parseMultilineCommand(text) {
   return { command, workflow, fields };
 }
 
-async function saveToInbox(bot, workflow, fields, message) {
+function getInboxDir() {
   let rootDir = process.env.OPENCLAW_WORKSPACE_ROOT;
   if (!rootDir || !fs.existsSync(path.join(rootDir, 'openclaw'))) {
     rootDir = path.join(__dirname, '../../');
   }
-  const inboxDir = path.join(rootDir, 'openclaw', 'inbox', 'telegram-requests');
+  return path.join(rootDir, 'openclaw', 'inbox', 'telegram-requests');
+}
+
+function getInboxFiles() {
+  const inboxDir = getInboxDir();
+  if (!fs.existsSync(inboxDir)) return [];
+  
+  const filePattern = /^telegram_[A-Za-z0-9._-]+\.json$/;
+  const files = fs.readdirSync(inboxDir).filter(f => filePattern.test(f));
+  
+  const fileInfos = files.map(filename => {
+    const fullPath = path.join(inboxDir, filename);
+    let mtime = 0;
+    try {
+      mtime = fs.statSync(fullPath).mtimeMs;
+    } catch (e) {}
+    return { filename, fullPath, mtime };
+  });
+  
+  fileInfos.sort((a, b) => {
+    if (b.mtime !== a.mtime) {
+      return b.mtime - a.mtime;
+    }
+    return b.filename.localeCompare(a.filename);
+  });
+  
+  return fileInfos;
+}
+
+async function saveToInbox(bot, workflow, fields, message) {
+  const inboxDir = getInboxDir();
   if (!fs.existsSync(inboxDir)) {
     fs.mkdirSync(inboxDir, { recursive: true });
   }
@@ -116,6 +146,134 @@ async function saveToInbox(bot, workflow, fields, message) {
   return payload;
 }
 
+async function handleInbox() {
+  const files = getInboxFiles();
+  if (files.length === 0) {
+    return `OpenClaw Inbox is empty.\n\nSend a Content Forge command such as:\n\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001 Founder Demo Ad\nPrompt Count: 5\nAspect Ratio: 9:16\nGoal: Create Google Flow image prompts`;
+  }
+  
+  let response = `OpenClaw Inbox — Latest Requests\n\n`;
+  const recentFiles = files.slice(0, 5);
+  
+  recentFiles.forEach((fileInfo, index) => {
+    let details = ``;
+    try {
+      const data = JSON.parse(fs.readFileSync(fileInfo.fullPath, 'utf8'));
+      const bot = data.bot || 'unknown';
+      const workflow = data.workflow || 'unknown';
+      const project = data.fields?.Project || data.fields?.project || 'none';
+      const campaign = data.fields?.Campaign || data.fields?.campaign || 'none';
+      const status = data.status || 'queued';
+      
+      details = `${index + 1}. ${fileInfo.filename}\nBot: ${bot}\nWorkflow: ${workflow}\nProject: ${project}\nCampaign: ${campaign}\nStatus: ${status}`;
+    } catch (err) {
+      details = `${index + 1}. ${fileInfo.filename}\n[Error: Could not parse request file]`;
+    }
+    response += details + `\n\n`;
+  });
+  
+  return response.trim();
+}
+
+async function handleInboxLatest() {
+  const files = getInboxFiles();
+  if (files.length === 0) {
+    return `OpenClaw Inbox is empty.\n\nSend a Content Forge command such as:\n\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001 Founder Demo Ad\nPrompt Count: 5\nAspect Ratio: 9:16\nGoal: Create Google Flow image prompts`;
+  }
+  
+  const latestFile = files[0];
+  let response = `Latest OpenClaw Request\n\n`;
+  
+  try {
+    const data = JSON.parse(fs.readFileSync(latestFile.fullPath, 'utf8'));
+    const bot = data.bot || 'unknown';
+    const workflow = data.workflow || 'unknown';
+    const fields = data.fields || {};
+    const nextStep = data.next_manual_step || 'Review this request in Antigravity and run Content Forge.';
+    
+    response += `File: ${latestFile.filename}\n`;
+    response += `Bot: ${bot}\n`;
+    response += `Workflow: ${workflow}\n`;
+    
+    for (const [key, value] of Object.entries(fields)) {
+      response += `${key}: ${value}\n`;
+    }
+    
+    response += `\nNext step:\n${nextStep}`;
+  } catch (err) {
+    response += `File: ${latestFile.filename}\n[Error: Could not parse request file]`;
+  }
+  
+  return response.trim();
+}
+
+async function handleInboxRead(filename) {
+  if (!filename) {
+    return `Usage: /inbox_read <filename>`;
+  }
+  
+  const base = path.basename(filename);
+  if (filename !== base) {
+    return `❌ Access denied: Path traversal or invalid characters detected.`;
+  }
+  
+  const filePattern = /^telegram_[A-Za-z0-9._-]+\.json$/;
+  if (!filePattern.test(base)) {
+    return `❌ Access denied: Invalid filename format or non-JSON extension. Only .json files matching the request pattern are allowed.`;
+  }
+  
+  const inboxDir = getInboxDir();
+  const fullPath = path.join(inboxDir, base);
+  
+  if (!fs.existsSync(fullPath)) {
+    return `❌ File not found.`;
+  }
+  
+  try {
+    const rawContent = fs.readFileSync(fullPath, 'utf8');
+    const data = JSON.parse(rawContent);
+    
+    const safePayload = {
+      filename: base,
+      status: data.status || 'queued',
+      bot: data.bot || 'unknown',
+      workflow: data.workflow || 'unknown',
+      fields: data.fields || {},
+      requested_by: data.requested_by || {},
+      timestamp: data.timestamp || 'unknown',
+      next_manual_step: data.next_manual_step || 'None'
+    };
+    
+    let output = `OpenClaw Request Details — ${base}\n\n`;
+    output += `Status: ${safePayload.status}\n`;
+    output += `Bot: ${safePayload.bot}\n`;
+    output += `Workflow: ${safePayload.workflow}\n`;
+    output += `Timestamp: ${safePayload.timestamp}\n\n`;
+    
+    output += `--- Fields ---\n`;
+    for (const [key, value] of Object.entries(safePayload.fields)) {
+      output += `${key}: ${value}\n`;
+    }
+    output += `\n`;
+    
+    output += `--- Requested By ---\n`;
+    output += `User ID: ${safePayload.requested_by.telegram_user_id || 'unknown'}\n`;
+    output += `Username: @${safePayload.requested_by.telegram_username || 'unknown'}\n`;
+    output += `Chat ID: ${safePayload.requested_by.telegram_chat_id || 'unknown'}\n\n`;
+    
+    output += `--- Next Manual Step ---\n`;
+    output += `${safePayload.next_manual_step}\n`;
+    
+    if (output.length > 4000) {
+      output = output.substring(0, 3950) + `\n\n... [Output truncated to avoid Telegram message size limit]`;
+    }
+    
+    return output;
+  } catch (err) {
+    return `❌ Could not parse request file.`;
+  }
+}
+
 // ------------------------------------------
 // Core Handlers
 // ------------------------------------------
@@ -129,6 +287,12 @@ async function handleCommand(text, message) {
   if (command === '/help') return handleHelp();
   if (command === '/bots') return handleBots();
   if (command === '/registry') return handleRegistry();
+  if (command === '/inbox') return await handleInbox();
+  if (command === '/inbox_latest') return await handleInboxLatest();
+  if (command === '/inbox_read') {
+    const filename = text.trim().split(/\s+/)[1];
+    return await handleInboxRead(filename);
+  }
 
   // 2. OpenClaw Bot Routing
   if (command === '/content_forge' || command === '/cf') {
@@ -149,7 +313,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001\nPrompt Count: 5\nAspect Ratio: 9:16`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001\nPrompt Count: 5\nAspect Ratio: 9:16`;
 }
 
 function handleBots() {
