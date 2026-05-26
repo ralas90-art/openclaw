@@ -1,0 +1,21 @@
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "content-forge",
+  "workflow": "image-prompts",
+  "fields": {
+    "Project": "SeptiVolt",
+    "Campaign": "Batch 001 Founder Demo Ad",
+    "Prompt Count": "5",
+    "Aspect Ratio": "9:16",
+    "Goal": "Create Google Flow image prompts for the next video ad"
+  },
+  "requested_by": {
+    "telegram_user_id": "123",
+    "telegram_username": "testuser",
+    "telegram_chat_id": "456"
+  },
+  "raw_message": "",
+  "timestamp": "2026-05-24T13:23:11.055Z",
+  "next_manual_step": "Generate the selected prompt in Google Flow, save the output to: 03-generated-images/\nThen send:\n/content_forge video_prompt\nCampaign: [campaign name]\nSelected Image: [filename]\nDuration: 8 seconds\nPlatform: Instagram Reels\nCTA: Book a Demo"
+}

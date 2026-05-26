@@ -1,6 +1,7 @@
-node_modules/
+.vercel
+node_modules
 .env
-dist/
-build/
-.railway/
-*.log
+.env.local
+.env.development
+.env.production
+.env.staging
