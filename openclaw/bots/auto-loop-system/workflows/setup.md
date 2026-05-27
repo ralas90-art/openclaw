@@ -1,17 +1,53 @@
 # Workflow: /autoloop setup
 
-## Description
+## 1. Purpose
 Initializes an optimization loop configuration mapping target metrics, review frequencies, and available skills.
 
-## Inputs required from User
+## 2. Inputs
 - Project Name
 - Optimization Targets
 - Metric Sources
 - Checkpoint Frequencies
 
-## Execution Steps
-1. **Loop Configuration**: Map metric checkpoints to database tables or file paths.
-2. **Alert Thresholds**: Define numeric rules that trigger automatic bot alerts.
-3. **Invoke Skill**: `auto-loop-system` -> Initialize the optimization loop configuration.
-4. **Output**: Generate `compounding-progress-log.md` under `/openclaw/reports/auto-loops/`.
-5. **Checkpoint**: Pause for threshold validation review.
+## 3. Output Format
+Metric mapping definitions, trigger threshold parameters, and progress logs template.
+
+## 4. Connected Skills
+- `auto-loop-system`
+
+## 5. Inbox JSON Structure
+```json
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "auto-loop-system",
+  "workflow": "setup",
+  "fields": {
+    "Project Name": "Cresca OS Leads",
+    "Optimization Targets": "speed-to-lead response time",
+    "Metric Sources": "GHL pipeline logs",
+    "Checkpoint Frequencies": "weekly"
+  }
+}
+```
+
+## 6. Outbox Result Location
+`/openclaw/reports/auto-loops/compounding-progress-log.md`
+
+## 7. Google Drive Publishing Recommendation
+Upload `compounding-progress-log.md` to `Shared Drive/auto-loops/` folder.
+
+## 8. Human-in-the-Loop Checkpoint
+Confirm targets and threshold bounds with project director before monitoring activation.
+
+## 9. Safety / Claim Rules
+Avoid tracking personal contact data. Only aggregate global statistics to preserve privacy compliance.
+
+## 10. Example Telegram Command
+```text
+/autoloop setup
+Project Name: Cresca OS Leads
+Optimization Targets: speed-to-lead response time
+Metric Sources: GHL pipeline logs
+Checkpoint Frequencies: weekly
+```

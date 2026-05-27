@@ -54,19 +54,20 @@ async function runTests() {
   // Test 2: Check Bots Command List (Registry status parsing)
   console.log('\n--- Running Test 2: Registry Status Parsing ---');
   const botsResponse = await handleCommand('/bots', { chat: { id: 123 } });
-  assert(botsResponse.includes('Content Forge'), 'Registry should contain Content Forge');
-  assert(botsResponse.includes('Revenue Master Orchestrator'), 'Registry should contain Revenue Master Orchestrator');
-  assert(botsResponse.includes('System Master Orchestrator'), 'Registry should contain System Master Orchestrator');
-  assert(botsResponse.includes('Cresca Content & AEO Engine'), 'Registry should contain Cresca Content & AEO Engine');
-  assert(botsResponse.includes('Lead Acquisition Engine'), 'Registry should contain Lead Acquisition Engine');
-  assert(botsResponse.includes('Revenue Optimization Engine'), 'Registry should contain Revenue Optimization Engine');
-  assert(botsResponse.includes('Weekly Command Center'), 'Registry should contain Weekly Command Center');
-  assert(botsResponse.includes('Client Value Maximizer'), 'Registry should contain Client Value Maximizer');
-  assert(botsResponse.includes('Auto-Loop System'), 'Registry should contain Auto-Loop System');
+  assert(botsResponse.includes('Active Runtime:\n- None'), 'Active Runtime should be None');
+  assert(botsResponse.includes('Active Queue-Only:\n- Content Forge'), 'Active Queue-Only should contain Content Forge');
+  assert(botsResponse.includes('- Revenue Master Orchestrator'), 'Active Queue-Only should contain Revenue Master');
+  assert(botsResponse.includes('- System Master Orchestrator'), 'Active Queue-Only should contain System Master');
+  assert(botsResponse.includes('- Cresca Content & AEO Engine'), 'Active Queue-Only should contain Cresca Content');
+  assert(botsResponse.includes('- Lead Acquisition Engine'), 'Active Queue-Only should contain Lead Acquisition');
+  assert(botsResponse.includes('- Revenue Optimization Engine'), 'Active Queue-Only should contain Revenue Optimization');
+  assert(botsResponse.includes('- Weekly Command Center'), 'Active Queue-Only should contain Weekly Command');
+  assert(botsResponse.includes('- Client Value Maximizer'), 'Active Queue-Only should contain Client Value');
+  assert(botsResponse.includes('- Auto-Loop System'), 'Active Queue-Only should contain Auto-Loop');
   assert(botsResponse.includes('Documented Only:\n- None'), 'Documented Section should be empty');
 
   // Helper to test bot command execution
-  async function testBotCommand(cmdText, expectedBotSlug, expectedWorkflow, keyKeywords) {
+  async function testBotCommand(cmdText, expectedBotSlug, expectedWorkflow, keyKeywords, expectedFollowUp) {
     console.log(`\nTesting command: ${cmdText.split('\n')[0]}`);
     
     // Clear inbox files before command
@@ -80,7 +81,12 @@ async function runTests() {
       chat: { id: 123 }
     });
 
-    assert(response.includes('request received') || response.includes('Saved to OpenClaw inbox'), 'Response should report request received');
+    assert(response.includes('Request queued for'), 'Response should report "Request queued for"');
+    assert(response.includes(`Bot: ${expectedBotSlug}`), `Response should state Bot: ${expectedBotSlug}`);
+    assert(response.includes(`Workflow: ${expectedWorkflow}`), `Response should state Workflow: ${expectedWorkflow}`);
+    assert(response.includes('Status: queued'), 'Response should state Status: queued');
+    assert(response.includes('This bot is in Active Queue-Only mode') || response.includes('Process this latest inbox request with Antigravity, then publish the result to Google Drive.'), 'Response should direct manual execution and Drive publish');
+    assert(response.includes(`Suggested follow-up command after processing: ${expectedFollowUp}`), `Response should suggest follow-up command: ${expectedFollowUp}`);
     
     const files = fs.readdirSync(inboxRequestsDir).filter(f => f.startsWith('telegram_') && f.endsWith('.json'));
     assert(files.length === 1, 'One JSON file should be saved in the inbox');
@@ -98,62 +104,70 @@ async function runTests() {
   }
 
   // Test 3-10: Execute commands for each bot
-  console.log('\n--- Running Command Routing and Inbox Parsing Tests ---');
+  console.log('\n--- Running Command Routing and Queue-Only Response Formatter Tests ---');
   
   await testBotCommand(
     '/revenue system_design\nProject: SeptiVolt\nCampaign: Launch\nBusiness Type: SaaS',
     'revenue-master-orchestrator',
     'system-design',
-    ['revenue-blueprint.md', 'offer-engine-builder']
+    ['revenue-blueprint.md', 'offer-engine-builder'],
+    '/revenue offer_design'
   );
 
   await testBotCommand(
     '/sys build_app\nApp Name: training-dashboard\nFramework: React',
     'system-master-orchestrator',
     'build-app',
-    ['build-blueprint.md', 'brand-ux-consistency-auditor']
+    ['build-blueprint.md', 'brand-ux-consistency-auditor'],
+    '/sys deploy'
   );
 
   await testBotCommand(
     '/aeo optimize_page\nPage URL: https://crescaos.com/seo',
     'cresca-content-aeo-engine',
     'optimize-page',
-    ['optimized-page-copy.md', 'Claude copywriting']
+    ['optimized-page-copy.md', 'Claude copywriting'],
+    '/aeo faq_schema'
   );
 
   await testBotCommand(
     '/leads prospect\nTarget Location: Long Island\nPlatform Focus: Google Ads',
     'lead-acquisition-engine',
     'prospect',
-    ['qualified-lead-list.csv', 'lead-acquisition-engine']
+    ['qualified-lead-list.csv', 'lead-acquisition-engine'],
+    '/leads scripts'
   );
 
   await testBotCommand(
     '/rev_opt audit\nFunnel Link: https://ggcleaningli.com/book',
     'revenue-optimization-engine',
     'audit',
-    ['funnel-leak-audit-report.md', 'ghl-config-auditor']
+    ['funnel-leak-audit-report.md', 'ghl-config-auditor'],
+    '/rev_opt speed_lead'
   );
 
   await testBotCommand(
     '/weekly review\nWeek Range: May 18 - May 24',
     'weekly-command-center',
     'review',
-    ['weekly-performance-snapshot.md', 'weekly-command-center']
+    ['weekly-performance-snapshot.md', 'weekly-command-center'],
+    '/weekly plan'
   );
 
   await testBotCommand(
     '/client_value upsell\nBrand Name: SeptiVolt\nCore Service: reps training',
     'client-value-maximizer',
     'upsell',
-    ['customer-lifecycle-monetization-map.md', 'client-value-maximizer']
+    ['customer-lifecycle-monetization-map.md', 'client-value-maximizer'],
+    '/client_value reactivate'
   );
 
   await testBotCommand(
     '/autoloop review\nSystem Being Audited: ad funnel',
     'auto-loop-system',
     'review',
-    ['system-optimization-trend-report.md', 'auto-loop-system']
+    ['system-optimization-trend-report.md', 'auto-loop-system'],
+    '/drive_publish_latest'
   );
 
   // Cleanup
@@ -161,9 +175,9 @@ async function runTests() {
   fs.rmSync(mockWorkspace, { recursive: true, force: true });
   
   if (passed) {
-    console.log('\n✅ ALL BOT ROUTING TESTS PASSED SUCCESSFULLY!');
+    console.log('\n✅ ALL BOT ROUTING & STATUS TESTS PASSED SUCCESSFULLY!');
   } else {
-    console.error('\n❌ SOME BOT ROUTING TESTS FAILED.');
+    console.error('\n❌ SOME BOT ROUTING & STATUS TESTS FAILED.');
     process.exit(1);
   }
 }

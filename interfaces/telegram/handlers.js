@@ -21,7 +21,7 @@ function getRegistryPath() {
 
 function parseRegistry() {
   const registryPath = getRegistryPath();
-  const bots = { active: [], documented: [] };
+  const bots = { active_runtime: [], active_queue_only: [], documented: [] };
   
   if (!fs.existsSync(registryPath)) return bots;
 
@@ -30,8 +30,9 @@ function parseRegistry() {
 
   const lines = content.split('\n');
   for (const line of lines) {
-    if (line.includes('## Active Bots')) currentSection = 'active';
-    else if (line.includes('## Planned / Documented Bots')) currentSection = 'documented';
+    if (line.includes('## Active Runtime Bots')) currentSection = 'active_runtime';
+    else if (line.includes('## Active Queue-Only Bots')) currentSection = 'active_queue_only';
+    else if (line.includes('## Documented Only Bots')) currentSection = 'documented';
     else if (line.startsWith('## ')) currentSection = null;
 
     if (currentSection && line.trim().startsWith('|') && !line.includes('Bot Name')) {
@@ -51,7 +52,8 @@ function parseRegistry() {
 
 function checkBotStatus(slug) {
   const registry = parseRegistry();
-  if (registry.active.find(b => b.slug === slug)) return 'active';
+  if (registry.active_runtime.find(b => b.slug === slug)) return 'active_runtime';
+  if (registry.active_queue_only.find(b => b.slug === slug)) return 'active_queue_only';
   if (registry.documented.find(b => b.slug === slug)) return 'documented';
   return 'unknown';
 }
@@ -433,16 +435,77 @@ function handleHelp() {
   return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
 
+function getSuggestedFollowUp(botSlug, workflow) {
+  const b = botSlug.toLowerCase();
+  const w = workflow.toLowerCase().replace(/_/g, '-');
+
+  if (b === 'content-forge') {
+    if (w === 'image-prompts') return '/cf video_prompt';
+    if (w === 'video-prompt') return '/cf qa_video';
+    if (w === 'qa-video') return '/cf copy_pack';
+    if (w === 'copy-pack') return '/cf repurpose';
+    if (w === 'repurpose') return '/cf finalize_campaign';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'revenue-master-orchestrator') {
+    if (w === 'system-design') return '/revenue offer_design';
+    if (w === 'offer-design') return '/revenue ghl_setup';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'system-master-orchestrator') {
+    if (w === 'build-app') return '/sys deploy';
+    if (w === 'deploy') return '/sys fix_bug';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'cresca-content-aeo-engine') {
+    if (w === 'optimize-page') return '/aeo faq_schema';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'lead-acquisition-engine') {
+    if (w === 'icp-define') return '/leads prospect';
+    if (w === 'prospect') return '/leads scripts';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'revenue-optimization-engine') {
+    if (w === 'audit') return '/rev_opt speed_lead';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'weekly-command-center') {
+    if (w === 'review') return '/weekly plan';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'client-value-maximizer') {
+    if (w === 'upsell') return '/client_value reactivate';
+    if (w === 'reactivate') return '/client_value referral';
+    return '/drive_publish_latest';
+  }
+
+  if (b === 'auto-loop-system') {
+    if (w === 'setup') return '/autoloop review';
+    return '/drive_publish_latest';
+  }
+
+  return '/drive_publish_latest';
+}
+
 function handleBots() {
   const registry = parseRegistry();
-  const active = registry.active.map(b => `- ${b.name}`).join('\n') || '- None';
+  const activeRuntime = registry.active_runtime.map(b => `- ${b.name}`).join('\n') || '- None';
+  const activeQueueOnly = registry.active_queue_only.map(b => `- ${b.name}`).join('\n') || '- None';
   const documented = registry.documented.map(b => `- ${b.name}`).join('\n') || '- None';
-  return `🤖 OpenClaw Bot Registry\n\nActive:\n${active}\n\nDocumented Only:\n${documented}`;
+  return `🤖 OpenClaw Bot Registry\n\nActive Runtime:\n${activeRuntime}\n\nActive Queue-Only:\n${activeQueueOnly}\n\nDocumented Only:\n${documented}`;
 }
 
 function handleRegistry() {
   const registry = parseRegistry();
-  return `OpenClaw Bot Registry Summary\nTotal Active: ${registry.active.length}\nTotal Documented: ${registry.documented.length}\nType /bots for full list.`;
+  return `OpenClaw Bot Registry Summary\nTotal Active Runtime: ${registry.active_runtime.length}\nTotal Active Queue-Only: ${registry.active_queue_only.length}\nTotal Documented: ${registry.documented.length}\nType /bots for full list.`;
 }
 
 async function handleOpenClawBot(botSlug, workflow, fields, message) {
@@ -457,17 +520,30 @@ async function handleOpenClawBot(botSlug, workflow, fields, message) {
     return `Bot '${botSlug}' is not found in the OpenClaw registry.\nType /bots to see available bots.`;
   }
 
-  // Active Bot
+  // Active Runtime or Active Queue-Only
   const payload = await saveToInbox(botSlug, workflow, fields, message);
   
-  let reply = `${botSlug.replace('-', ' ').toUpperCase()} request received.\n\nBot: ${botSlug}\nWorkflow: ${workflow}\nStatus: Saved to OpenClaw inbox`;
+  const botName = botSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   
+  if (status === 'active_queue_only') {
+    const nextManualStep = payload.next_manual_step ? (payload.next_manual_step.trim() + " ") : "";
+    const followUp = getSuggestedFollowUp(botSlug, workflow);
+    return `Request queued for ${botName}.\n\n` +
+           `Bot: ${botSlug}\n` +
+           `Workflow: ${workflow}\n` +
+           `Status: queued\n\n` +
+           `Next step:\n` +
+           `${nextManualStep}Process this latest inbox request with Antigravity, then publish the result to Google Drive.\n\n` +
+           `Suggested follow-up command after processing: ${followUp}`;
+  }
+
+  // Active Runtime fallback
+  let reply = `${botSlug.replace('-', ' ').toUpperCase()} request received.\n\nBot: ${botSlug}\nWorkflow: ${workflow}\nStatus: Saved to OpenClaw inbox`;
   if (payload.next_manual_step) {
     reply += `\n\nNext step:\nReview the queued request in openclaw/inbox/telegram-requests/.\n\n${payload.next_manual_step}`;
   } else {
     reply += `\n\nRequest saved to OpenClaw inbox. Runtime execution is not connected yet.`;
   }
-
   return reply;
 }
 

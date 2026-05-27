@@ -1,17 +1,55 @@
 # Workflow: /revenue system-design
 
-## Description
+## 1. Purpose
 Initializes a strategic business model/acquisition pipeline blueprint. Evaluates target parameters to map out a structured growth stack.
 
-## Inputs required from User
+## 2. Inputs
 - Business Name
 - Business Type (e.g. Agency, SaaS, Home Services)
 - Active Channels (e.g. outbound, ads, organic)
 - Monthly Revenue Goal
 
-## Execution Steps
-1. **Diagnosis**: Define the ideal growth stack layout: ICP -> Sourcing -> Lead Capture -> CRM -> Nurture -> Sales.
-2. **Phase Priority**: Outline Phase 1 (Offer) to Phase 6 (Execution plan).
-3. **Route**: Assign modular implementation tasks to specialized sub-skills (`offer-engine-builder`, `lead-acquisition-engine`, `ghl-revenue-automation-builder`).
-4. **Output**: Generate `revenue-blueprint.md` under `/campaigns/{brand}/revenue-strategy/`.
-5. **Checkpoint**: Pause for user approval on the proposed system flow.
+## 3. Output Format
+Clean, structured markdown containing the growth stack stages (ICP, sourcing, CRM, and task sequencing).
+
+## 4. Connected Skills
+- `offer-engine-builder`
+- `sales-process-optimizer`
+- `ghl-revenue-automation-builder`
+
+## 5. Inbox JSON Structure
+```json
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "revenue-master-orchestrator",
+  "workflow": "system-design",
+  "fields": {
+    "Business Name": "SeptiVolt",
+    "Business Type": "SaaS",
+    "Active Channels": "outbound",
+    "Monthly Revenue Goal": "$50k"
+  }
+}
+```
+
+## 6. Outbox Result Location
+`/campaigns/{brand}/revenue-strategy/revenue-blueprint.md`
+
+## 7. Google Drive Publishing Recommendation
+Upload `revenue-blueprint.md` to `Shared Drive/revenue-strategy/` folder.
+
+## 8. Human-in-the-Loop Checkpoint
+Pause for user approval on the proposed system flow and growth priority stack before moving to offer design.
+
+## 9. Safety / Claim Rules
+Avoid promising specific revenue amounts or guaranteed timelines. Keep terms output-oriented rather than metric-guaranteed.
+
+## 10. Example Telegram Command
+```text
+/revenue system_design
+Business Name: SeptiVolt
+Business Type: SaaS
+Active Channels: outbound
+Monthly Revenue Goal: $50k
+```

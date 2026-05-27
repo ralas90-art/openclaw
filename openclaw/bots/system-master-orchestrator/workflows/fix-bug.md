@@ -1,17 +1,50 @@
 # Workflow: /sys fix-bug
 
-## Description
+## 1. Purpose
 Diagnoses, traces, and remediates build failures, runtime errors, lint warnings, or CORS issues.
 
-## Inputs required from User
+## 2. Inputs
 - Error Message / Stack Trace
 - Problem File (if known)
 - Expected Behavior
 
-## Execution Steps
-1. **Self-Annealing Loop**: Analyze the logs, trace file references, and identify root cause.
-2. **Implement Fix**: Apply localized file changes to resolve the failure.
-3. **TypeScript/Build Validation**: Re-run the compiler to verify compilation success.
-4. **Invoke Skill**: `repo-fix-pr-deploy` -> Document the solution and diff structure.
-5. **Output**: Generate `bug-fix-walkthrough.md` under `/openclaw/reports/system-builds/`.
-6. **Checkpoint**: Pause for fix verification confirmation.
+## 3. Output Format
+Diff block of changes, compiler logs, and verification checklist results.
+
+## 4. Connected Skills
+- `repo-fix-pr-deploy`
+
+## 5. Inbox JSON Structure
+```json
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "system-master-orchestrator",
+  "workflow": "fix-bug",
+  "fields": {
+    "Error Message": "CORS error on fetch",
+    "Problem File": "server.js",
+    "Expected Behavior": "Allow requests from client"
+  }
+}
+```
+
+## 6. Outbox Result Location
+`/openclaw/reports/system-builds/bug-fix-walkthrough.md`
+
+## 7. Google Drive Publishing Recommendation
+Upload `bug-fix-walkthrough.md` to `Shared Drive/system-builds/` folder.
+
+## 8. Human-in-the-Loop Checkpoint
+Run the compiler check locally and check test suite passes before merging any code repairs.
+
+## 9. Safety / Claim Rules
+Avoid altering core database schemas without performing a backup snapshot first.
+
+## 10. Example Telegram Command
+```text
+/sys fix_bug
+Error Message: CORS error on fetch
+Problem File: server.js
+Expected Behavior: Allow requests from client
+```

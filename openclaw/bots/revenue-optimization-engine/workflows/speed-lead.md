@@ -1,17 +1,53 @@
 # Workflow: /rev_opt speed-lead
 
-## Description
+## 1. Purpose
 Audits time-to-contact statistics and maps out instant automated follow-up sequences.
 
-## Inputs required from User
+## 2. Inputs
 - Brand Name
 - Lead Response Time (average)
 - Contact Channels
 - CRM Software
 
-## Execution Steps
-1. **Response Audit**: Evaluate the current response duration and detect drop-off risks.
-2. **Workflow Mapping**: Blueprint immediate SMS/Email notification alerts and automated welcome templates.
-3. **Invoke Skill**: `ghl-revenue-automation-builder` -> Design the speed-to-lead workflow specifications.
-4. **Output**: Generate `speed-to-lead-blueprint.md` under `/campaigns/{brand}/revenue-optimization/`.
-5. **Checkpoint**: Pause for automation workflow triggers verification.
+## 3. Output Format
+Automated SMS/Email notification alerts structure, speed-to-lead flow rules, and instant call-forwarding logic mapping.
+
+## 4. Connected Skills
+- `ghl-revenue-automation-builder`
+
+## 5. Inbox JSON Structure
+```json
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "revenue-optimization-engine",
+  "workflow": "speed-lead",
+  "fields": {
+    "Brand Name": "G&G Cleaning",
+    "Response Time": "45 minutes",
+    "Contact Channels": "SMS, Email",
+    "CRM Software": "GoHighLevel"
+  }
+}
+```
+
+## 6. Outbox Result Location
+`/campaigns/{brand}/revenue-optimization/speed-to-lead-blueprint.md`
+
+## 7. Google Drive Publishing Recommendation
+Upload `speed-to-lead-blueprint.md` to `Shared Drive/revenue-optimization/` folder.
+
+## 8. Human-in-the-Loop Checkpoint
+Verify contact time delays and notification SMS triggers match regulatory requirements before deploying sequences.
+
+## 9. Safety / Claim Rules
+Avoid automated calling dials without prior checkbox opt-in records confirmation. Follow local telecom guidelines.
+
+## 10. Example Telegram Command
+```text
+/rev_opt speed_lead
+Brand Name: G&G Cleaning
+Response Time: 45 minutes
+Contact Channels: SMS, Email
+CRM Software: GoHighLevel
+```

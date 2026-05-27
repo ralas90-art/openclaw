@@ -1,17 +1,53 @@
 # Workflow: /leads icp-define
 
-## Description
+## 1. Purpose
 Builds a detailed Ideal Customer Profile (ICP) defining target industries, sizes, marketing behaviors, and pain points.
 
-## Inputs required from User
+## 2. Inputs
 - Brand Name
 - Target Industry
 - Core Value Proposition
 - Target Location
 
-## Execution Steps
-1. **ICP Synthesis**: Combine firmographic variables, spending signals, and pain points.
-2. **Channel Selection**: Identify matching sourcing channels (e.g. Google Maps, ad registries, directories).
-3. **Invoke Skill**: `lead-acquisition-engine` -> Generate the standardized ICP definition.
-4. **Output**: Generate `prospect-icp-profile.md` under `/campaigns/{brand}/lead-acquisition/`.
-5. **Checkpoint**: Pause for target channel and profiling sign-off.
+## 3. Output Format
+Detailed ICP template specifying firmographic details, spend signs, online presence gaps, and pain point summaries.
+
+## 4. Connected Skills
+- `lead-acquisition-engine`
+
+## 5. Inbox JSON Structure
+```json
+{
+  "source": "telegram",
+  "status": "queued",
+  "bot": "lead-acquisition-engine",
+  "workflow": "icp-define",
+  "fields": {
+    "Brand Name": "SeptiVolt",
+    "Target Industry": "Solar EPC",
+    "Value Prop": "reduce rep onboarding time",
+    "Target Location": "California"
+  }
+}
+```
+
+## 6. Outbox Result Location
+`/campaigns/{brand}/lead-acquisition/prospect-icp-profile.md`
+
+## 7. Google Drive Publishing Recommendation
+Upload `prospect-icp-profile.md` to `Shared Drive/lead-acquisition/` folder.
+
+## 8. Human-in-the-Loop Checkpoint
+Validate target indicators list with outreach director before harvesting prospects database.
+
+## 9. Safety / Claim Rules
+Target criteria must avoid profiles containing compliance risks or children-related industries.
+
+## 10. Example Telegram Command
+```text
+/leads icp_define
+Brand Name: SeptiVolt
+Target Industry: Solar EPC
+Value Prop: reduce rep onboarding time
+Target Location: California
+```
