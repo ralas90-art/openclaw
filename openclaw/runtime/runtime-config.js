@@ -28,10 +28,12 @@ if (!defaultModel) {
 }
 
 // Allowed Admin Chat IDs parsing
-const allowedChatIdsStr = process.env.TELEGRAM_ALLOWED_RUNTIME_CHAT_IDS || '';
+const allowedChatIdsStr = (process.env.TELEGRAM_ALLOWED_RUNTIME_CHAT_IDS || '')
+  .replace(/^["']|["']$/g, '')
+  .trim();
 const allowedChatIds = allowedChatIdsStr
   .split(',')
-  .map(id => id.trim())
+  .map(id => id.trim().replace(/^["']|["']$/g, ''))
   .filter(id => id.length > 0);
 
 module.exports = {
