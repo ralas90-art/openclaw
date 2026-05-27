@@ -109,63 +109,68 @@ app.post('/webhook/telegram', async (req, res) => {
           return res.status(403).send('Chat not authorized');
         }
 
-        // Pass the full raw payload to the handler
-        let reply;
-        let handlerResultStatus = 'success';
-        try {
-          reply = await handleCommand(message.text, message);
-        } catch (handlerErr) {
-          console.error(`[Telegram Webhook Error] Command handler failed: ${handlerErr.message}`);
-          handlerResultStatus = 'error';
-          reply = `❌ Internal error processing command.`;
-        }
-
-        console.log(`[Telegram Webhook] handler_result_status=${handlerResultStatus}`);
-
-        // ✅ Return 200 to Telegram immediately (Telegram requires ack within 5s or retries)
+        // ✅ ACK Telegram immediately — Telegram requires 200 within 5s or retries
+        // Command handling and sendMessage both run asynchronously after the ack
         res.sendStatus(200);
 
-        // Send reply asynchronously (fire-and-forget) so the HTTP response is not blocked
-        if (reply && chatId) {
-          const botToken = process.env.TELEGRAM_BOT_TOKEN;
-          if (botToken) {
-            let replySent = false;
-            const SEND_TIMEOUT_MS = 10000;
-            // Attempt with Markdown parsing mode
-            try {
-              await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                chat_id: chatId,
-                text: reply,
-                parse_mode: 'Markdown'
-              }, { timeout: SEND_TIMEOUT_MS });
-              replySent = true;
-            } catch (errMarkdown) {
-              console.warn(`[Telegram Webhook] Failed to send message with Markdown parsing: ${errMarkdown.message}. Retrying as plain text...`);
+        // --- Async processing (fire-and-forget, never blocks the HTTP response) ---
+        setImmediate(async () => {
+          const SEND_TIMEOUT_MS = 10000;
+          let reply;
+          let handlerResultStatus = 'success';
+          try {
+            reply = await handleCommand(message.text, message);
+          } catch (handlerErr) {
+            console.error(`[Telegram Webhook Error] Command handler failed: ${handlerErr.message}`);
+            handlerResultStatus = 'error';
+            reply = `❌ Internal error processing command.`;
+          }
+
+          console.log(`[Telegram Webhook] handler_result_status=${handlerResultStatus}`);
+
+          if (reply && chatId) {
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            if (botToken) {
+              let replySent = false;
               try {
                 await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                   chat_id: chatId,
-                  text: reply
+                  text: reply,
+                  parse_mode: 'Markdown'
                 }, { timeout: SEND_TIMEOUT_MS });
                 replySent = true;
-              } catch (errPlain) {
-                console.error(`[Telegram Webhook Error] Failed to send plain text message: ${errPlain.message}`);
-                console.log(`[Telegram Webhook] telegram_send_error=${errPlain.message.replace(/[\r\n]+/g, ' ')}`);
+              } catch (errMarkdown) {
+                console.warn(`[Telegram Webhook] Failed to send message with Markdown parsing: ${errMarkdown.message}. Retrying as plain text...`);
+                try {
+                  await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    chat_id: chatId,
+                    text: reply
+                  }, { timeout: SEND_TIMEOUT_MS });
+                  replySent = true;
+                } catch (errPlain) {
+                  console.error(`[Telegram Webhook Error] Failed to send plain text message: ${errPlain.message}`);
+                  console.log(`[Telegram Webhook] telegram_send_error=${errPlain.message.replace(/[\r\n]+/g, ' ')}`);
+                }
               }
+              console.log(`[Telegram Webhook] reply_sent=${replySent}`);
+            } else {
+              console.warn('[Telegram Webhook Warning] TELEGRAM_BOT_TOKEN is not configured. Reply sent: false');
+              console.log('[Telegram Webhook] reply_sent=false');
             }
-            console.log(`[Telegram Webhook] reply_sent=${replySent}`);
           } else {
-            console.warn('[Telegram Webhook Warning] TELEGRAM_BOT_TOKEN is not configured. Reply sent: false');
             console.log('[Telegram Webhook] reply_sent=false');
           }
-        } else {
-          console.log('[Telegram Webhook] reply_sent=false');
-        }
+        }); // end setImmediate
 
       } // end if (isCommand)
     } // end if (message && message.text)
+
+    // For non-command messages or non-message updates, ack immediately
+    if (!res.headersSent) res.sendStatus(200);
+
   } catch (err) {
     console.error('[Telegram Error]', err.message);
-    res.sendStatus(500);
+    if (!res.headersSent) res.sendStatus(500);
   }
 });
 
