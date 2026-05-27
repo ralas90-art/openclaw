@@ -23,7 +23,7 @@ async function runBot(botSlug, userRequest, senderChatId) {
   if (!isAuthorized) {
     return {
       status: 'unauthorized',
-      message: '❌ Access Denied: You are not authorized to execute runtime bots.'
+      message: `❌ Access Denied: You are not authorized to execute runtime bots (Your Chat ID: ${chatIdStr || 'unknown'}).`
     };
   }
 

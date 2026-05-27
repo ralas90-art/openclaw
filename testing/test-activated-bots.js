@@ -55,9 +55,9 @@ async function runTests() {
   // Test 2: Check Bots Command List (Registry status parsing)
   console.log('\n--- Running Test 2: Registry Status Parsing ---');
   const botsResponse = await handleCommand('/bots', { chat: { id: 123 } });
-  assert(botsResponse.includes('Active Runtime:\n- None'), 'Active Runtime should be None');
+  assert(botsResponse.includes('Active Runtime:\n- Revenue Master Orchestrator'), 'Active Runtime should contain Revenue Master');
   assert(botsResponse.includes('Active Queue-Only:\n- Content Forge'), 'Active Queue-Only should contain Content Forge');
-  assert(botsResponse.includes('- Revenue Master Orchestrator'), 'Active Queue-Only should contain Revenue Master');
+  assert(!botsResponse.includes('Active Queue-Only:\n- Revenue Master Orchestrator'), 'Active Queue-Only should NOT contain Revenue Master');
   assert(botsResponse.includes('- System Master Orchestrator'), 'Active Queue-Only should contain System Master');
   assert(botsResponse.includes('- Cresca Content & AEO Engine'), 'Active Queue-Only should contain Cresca Content');
   assert(botsResponse.includes('- Lead Acquisition Engine'), 'Active Queue-Only should contain Lead Acquisition');
@@ -97,12 +97,20 @@ async function runTests() {
       chat: { id: 123 }
     });
 
-    assert(response.includes('Request queued for'), 'Response should report "Request queued for"');
-    assert(response.includes(`Bot: ${expectedBotSlug}`), `Response should state Bot: ${expectedBotSlug}`);
-    assert(response.includes(`Workflow: ${expectedWorkflow}`), `Response should state Workflow: ${expectedWorkflow}`);
-    assert(response.includes('Status: queued'), 'Response should state Status: queued');
-    assert(response.includes('This bot is in Active Queue-Only mode') || response.includes('Process this latest inbox request with Antigravity, then publish the result to Google Drive.'), 'Response should direct manual execution and Drive publish');
-    assert(response.includes(`Suggested follow-up command after processing: ${expectedFollowUp}`), `Response should suggest follow-up command: ${expectedFollowUp}`);
+    const isRuntime = expectedBotSlug === 'revenue-master-orchestrator';
+    if (isRuntime) {
+      assert(response.toLowerCase().includes('request received.'), 'Response should report "request received."');
+      assert(response.includes(`Bot: ${expectedBotSlug}`), `Response should state Bot: ${expectedBotSlug}`);
+      assert(response.includes(`Workflow: ${expectedWorkflow}`), `Response should state Workflow: ${expectedWorkflow}`);
+      assert(response.includes('Status: Saved to OpenClaw inbox'), 'Response should state Status: Saved to OpenClaw inbox');
+    } else {
+      assert(response.includes('Request queued for'), 'Response should report "Request queued for"');
+      assert(response.includes(`Bot: ${expectedBotSlug}`), `Response should state Bot: ${expectedBotSlug}`);
+      assert(response.includes(`Workflow: ${expectedWorkflow}`), `Response should state Workflow: ${expectedWorkflow}`);
+      assert(response.includes('Status: queued'), 'Response should state Status: queued');
+      assert(response.includes('This bot is in Active Queue-Only mode') || response.includes('Process this latest inbox request with Antigravity, then publish the result to Google Drive.'), 'Response should direct manual execution and Drive publish');
+      assert(response.includes(`Suggested follow-up command after processing: ${expectedFollowUp}`), `Response should suggest follow-up command: ${expectedFollowUp}`);
+    }
     
     const files = fs.readdirSync(inboxRequestsDir).filter(f => f.startsWith('telegram_') && f.endsWith('.json'));
     assert(files.length === 1, 'One JSON file should be saved in the inbox');
@@ -253,6 +261,15 @@ async function runTests() {
   const expectedRoot = path.resolve(__dirname, '..'); // since the real repo exists in parent of testing dir and has server.js/package.json
   assert(getWorkspaceRoot() === expectedRoot, 'getWorkspaceRoot should reject invalid path and fallback to app root');
   
+  // Test 16: /chatid command verification
+  console.log('\n--- Running Test 16: /chatid Command Verification ---');
+  const chatidResponse = await handleCommand('/chatid', {
+    from: { id: 98765 },
+    chat: { id: 54321 }
+  });
+  assert(chatidResponse.includes('98765'), 'chatid response should include correct User ID');
+  assert(chatidResponse.includes('54321'), 'chatid response should include correct Chat ID');
+
   // Restore test env
   process.env.OPENCLAW_TEST = 'true';
   process.env.OPENCLAW_WORKSPACE_ROOT = mockWorkspace;

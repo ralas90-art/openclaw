@@ -373,6 +373,11 @@ async function handleCommand(text, message) {
 
   // 1. Registry & Help Commands
   if (command === '/help') return handleHelp();
+  if (command === '/chatid' || command === '/id') {
+    const userId = message.from?.id || 'unknown';
+    const chatId = message.chat?.id || 'unknown';
+    return `🆔 *Telegram Identity Info*\n\n• *User ID:* \`${userId}\`\n• *Chat ID:* \`${chatId}\``;
+  }
   if (command === '/bots') return handleBots();
   if (command === '/registry') return handleRegistry();
   if (command === '/inbox') return await handleInbox();
