@@ -7,7 +7,7 @@ fs.mkdirSync(path.join(mockWorkspace, 'openclaw', 'inbox', 'telegram-requests'),
 process.env.OPENCLAW_WORKSPACE_ROOT = mockWorkspace;
 
 // Import handlers from the active workspace
-const handlers = require('../playground/primal-astro/interfaces/telegram/handlers');
+const handlers = require('../interfaces/telegram/handlers');
 const { handleCommand } = handlers;
 
 const inboxRequestsDir = path.join(mockWorkspace, 'openclaw', 'inbox', 'telegram-requests');

@@ -11,21 +11,20 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 | Bot Name | Slug | Type | Status | Path | Primary Purpose | Skills / Dependencies |
 |---|---|---|---|---|---|---|
 | Content Forge | `content-forge` | Bot / Creative Production Orchestrator | Active | `openclaw/bots/content-forge/` | Orchestrates creative campaign production | `google-flow-image-prompt-builder`, `veo-image-to-video-director`, `creative-continuity-bible-builder`, `ad-variant-content-engine`, `video-qa-iteration-auditor`, `platform-repurpose-engine`, `campaign-asset-manifest-builder` |
+| Revenue Master Orchestrator | `revenue-master-orchestrator` | Orchestrator | Active | `openclaw/bots/revenue-master-orchestrator/` | Coordinates revenue-generating systems and monetization strategy. | `offer-engine-builder`, `sales-process-optimizer`, `ghl-revenue-automation-builder`, `client-onboarding-system-builder` |
+| System Master Orchestrator | `system-master-orchestrator` | Orchestrator | Active | `openclaw/bots/system-master-orchestrator/` | Coordinates architecture, deployment flows, and cross-bot execution logic. | `repo-fix-pr-deploy`, `brand-ux-consistency-auditor`, `service-delivery-systemizer`, `publish-github-vercel` |
+| Cresca Content & AEO Engine | `cresca-content-aeo-engine` | Engine | Active | `openclaw/bots/cresca-content-aeo-engine/` | Creates content, AEO assets, schema-rich pages, and authority building content. | `content-generation-engine`, `notebooklm-research-extractor`, `brand-ux-consistency-auditor` |
+| Lead Acquisition Engine | `lead-acquisition-engine` | Engine | Active | `openclaw/bots/lead-acquisition-engine/` | Builds lead capture systems and prospecting workflows. | `lead-acquisition-engine` |
+| Revenue Optimization Engine | `revenue-optimization-engine` | Engine | Active | `openclaw/bots/revenue-optimization-engine/` | Audits funnels, offers, and CRM follow-up to stop revenue leakage. | `revenue-optimization-engine`, `ghl-config-auditor`, `ghl-revenue-automation-builder` |
+| Weekly Command Center | `weekly-command-center` | Engine | Active | `openclaw/bots/weekly-command-center/` | Creates weekly operational summaries, KPI reviews, and executive decision support. | `weekly-command-center` |
+| Client Value Maximizer | `client-value-maximizer` | Engine | Active | `openclaw/bots/client-value-maximizer/` | Improves client onboarding, retention, upsells, and lifecycle value. | `client-value-maximizer`, `client-onboarding-system-builder`, `service-delivery-systemizer` |
+| Auto-Loop System | `auto-loop-system` | Engine | Active | `openclaw/bots/auto-loop-system/` | Creates feedback loops across execution results to continuously optimize campaigns. | `auto-loop-system` |
 
 ---
 
 ## Planned / Documented Bots
 
-| Bot Name | Slug | Type | Status | Expected Path | Primary Purpose | Notes |
-|---|---|---|---|---|---|---|
-| Revenue Master Orchestrator | `revenue-master-orchestrator` | Orchestrator | Documented Only | `openclaw/bots/revenue-master-orchestrator/` | Coordinates revenue-generating systems and monetization strategy. | Stub folder exists. Core files pending. |
-| System Master Orchestrator | `system-master-orchestrator` | Orchestrator | Documented Only | `openclaw/bots/system-master-orchestrator/` | Coordinates architecture, deployment flows, and cross-bot execution logic. | Stub folder exists. Core files pending. |
-| Cresca Content & AEO Engine | `cresca-content-aeo-engine` | Engine | Documented Only | `openclaw/bots/cresca-content-aeo-engine/` | Creates content, AEO assets, schema-rich pages, and authority building content. | Stub folder exists. Core files pending. |
-| Lead Acquisition Engine | `lead-acquisition-engine` | Engine | Documented Only | `openclaw/bots/lead-acquisition-engine/` | Builds lead capture systems and prospecting workflows. | Stub folder exists. Core files pending. |
-| Revenue Optimization Engine | `revenue-optimization-engine` | Engine | Documented Only | `openclaw/bots/revenue-optimization-engine/` | Audits funnels, offers, and CRM follow-up to stop revenue leakage. | Stub folder exists. Core files pending. |
-| Weekly Command Center | `weekly-command-center` | Engine | Documented Only | `openclaw/bots/weekly-command-center/` | Creates weekly operational summaries, KPI reviews, and executive decision support. | Stub folder exists. Core files pending. |
-| Client Value Maximizer | `client-value-maximizer` | Engine | Documented Only | `openclaw/bots/client-value-maximizer/` | Improves client onboarding, retention, upsells, and lifecycle value. | Stub folder exists. Core files pending. |
-| Auto-Loop System | `auto-loop-system` | Engine | Documented Only | `openclaw/bots/auto-loop-system/` | Creates feedback loops across execution results to continuously optimize campaigns. | Stub folder exists. Core files pending. |
+*None. All registered bots are currently Active.*
 
 ---
 
@@ -69,103 +68,103 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 ### Revenue Master Orchestrator
 **Slug:** `revenue-master-orchestrator`  
 **Type:** Orchestrator  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/revenue-master-orchestrator/`  
 **Purpose:** Coordinates revenue-generating systems, offers, campaigns, funnels, sales workflows, and monetization strategy across OpenClaw projects.  
-**Primary Workflows:** Pending implementation.  
+**Primary Workflows:** `/revenue system-design`, `/revenue offer-design`, `/revenue ghl-setup`  
 **Connected Skills:** `offer-engine-builder`, `sales-process-optimizer`, `ghl-revenue-automation-builder`, `client-onboarding-system-builder`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** Pricing integrity, compliance checks  
+**Notes:** Active. Handles core business systems coordination.
 
 ### System Master Orchestrator
 **Slug:** `system-master-orchestrator`  
 **Type:** Orchestrator  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/system-master-orchestrator/`  
 **Purpose:** Coordinates architecture, infrastructure, reusable skills, deployment flows, system audits, and cross-bot execution logic.  
-**Primary Workflows:** Pending implementation.  
+**Primary Workflows:** `/sys build-app`, `/sys deploy`, `/sys fix-bug`  
 **Connected Skills:** `repo-fix-pr-deploy`, `brand-ux-consistency-auditor`, `service-delivery-systemizer`, `publish-github-vercel`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** No hardcoded secrets, build and TS checks  
+**Notes:** Active. Enforces code standards and automated deployments.
 
 ### Cresca Content & AEO Engine
 **Slug:** `cresca-content-aeo-engine`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/cresca-content-aeo-engine/`  
 **Purpose:** Creates content, AI visibility assets, answer-engine optimization assets, schema-rich pages, FAQs, and authority-building content for Cresca OS and client campaigns.  
-**Primary Workflows:** Pending implementation.  
+**Primary Workflows:** `/aeo optimize-page`, `/aeo faq-schema`  
 **Connected Skills:** `content-generation-engine`, `notebooklm-research-extractor`, `brand-ux-consistency-auditor`  
 **Known Projects:** Cresca OS, client campaigns  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** Claude Copywriting Protocol (MANDATORY Claude for copywriting, no Gemini for public copy)  
+**Notes:** Active. Generates high-intent website and visibility copy.
 
 ### Lead Acquisition Engine
 **Slug:** `lead-acquisition-engine`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/lead-acquisition-engine/`  
 **Purpose:** Builds lead capture systems, prospecting workflows, scraping/enrichment workflows, outbound assets, scoring, and routing systems.  
-**Primary Workflows:** Pending implementation.  
-**Connected Skills:** Google Places workflows, OpenAI scoring, Airtable, Telegram, Railway runtime, GHL integrations  
+**Primary Workflows:** `/leads icp-define`, `/leads prospect`, `/leads scripts`  
+**Connected Skills:** `lead-acquisition-engine`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** Outbound safety thresholds, no spamming  
+**Notes:** Active. Sourced prospects must show buying or spending intent.
 
 ### Revenue Optimization Engine
 **Slug:** `revenue-optimization-engine`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/revenue-optimization-engine/`  
 **Purpose:** Audits funnels, ads, offers, landing pages, CRM follow-up, conversion paths, and revenue leakage.  
-**Primary Workflows:** Pending implementation.  
-**Connected Skills:** `sales-process-optimizer`, `ghl-config-auditor`, `ghl-revenue-automation-builder`, analytics/audit workflows  
+**Primary Workflows:** `/rev_opt audit`, `/rev_opt speed-lead`  
+**Connected Skills:** `revenue-optimization-engine`, `ghl-config-auditor`, `ghl-revenue-automation-builder`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** GHL pipeline integrity  
+**Notes:** Active. Prioritizes optimization before scaling acquisition.
 
 ### Weekly Command Center
 **Slug:** `weekly-command-center`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/weekly-command-center/`  
 **Purpose:** Creates weekly operational summaries, KPI reviews, project priorities, bottleneck lists, next actions, and executive-level decision support.  
-**Primary Workflows:** Pending implementation.  
-**Connected Skills:** project memory, campaign manifests, CRM reports, task logs, NotebookLM summaries  
+**Primary Workflows:** `/weekly review`, `/weekly plan`  
+**Connected Skills:** `weekly-command-center`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** No  
+**Safety / Compliance Gates:** Data confidentiality  
+**Notes:** Active. Summarizes metrics and sets action items.
 
 ### Client Value Maximizer
 **Slug:** `client-value-maximizer`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/client-value-maximizer/`  
 **Purpose:** Improves client onboarding, retention, reporting, upsells, service delivery, ROI reporting, and lifecycle value.  
-**Primary Workflows:** Pending implementation.  
-**Connected Skills:** `client-onboarding-system-builder`, `service-delivery-systemizer`, reporting workflows, GHL workflows  
+**Primary Workflows:** `/client_value upsell`, `/client_value reactivate`, `/client_value referral`  
+**Connected Skills:** `client-value-maximizer`, `client-onboarding-system-builder`, `service-delivery-systemizer`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** Yes  
+**Safety / Compliance Gates:** CAN-SPAM, value-first pricing alignment  
+**Notes:** Active. Focuses on extracting more revenue from existing customers.
 
 ### Auto-Loop System
 **Slug:** `auto-loop-system`  
 **Type:** Engine  
-**Status:** Documented Only  
+**Status:** Active  
 **Path:** `openclaw/bots/auto-loop-system/`  
 **Purpose:** Creates feedback loops across campaigns, execution results, QA reports, analytics, and optimization tasks so the system continuously improves.  
-**Primary Workflows:** Pending implementation.  
-**Connected Skills:** QA workflows, campaign manifests, analytics reports, task automation, OpenClaw runtime executor  
+**Primary Workflows:** `/autoloop review`, `/autoloop setup`  
+**Connected Skills:** `auto-loop-system`  
 **Known Projects:** OpenClaw ecosystem  
-**Human-in-the-loop Required:** TBD  
-**Safety / Compliance Gates:** TBD  
-**Notes:** Exists as global skill concept. No local bot implementation yet.
+**Human-in-the-loop Required:** No  
+**Safety / Compliance Gates:** System loop fail-safes  
+**Notes:** Active. Continuously optimizes system performance based on metrics.

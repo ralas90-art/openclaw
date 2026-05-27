@@ -111,6 +111,93 @@ function getInboxFiles() {
   return fileInfos;
 }
 
+function getManualStepGuideline(bot, workflow) {
+  const b = bot.toLowerCase();
+  const w = workflow.toLowerCase().replace(/_/g, '-');
+
+  if (b === 'content-forge') {
+    if (w === 'image-prompts') {
+      return "Generate the selected prompt in Google Flow, save the output to: 03-generated-images/\nThen send:\n/cf video_prompt\nCampaign: [campaign name]\nSelected Image: [filename]\nDuration: 8 seconds\nPlatform: Instagram Reels\nCTA: Book a Demo";
+    } else if (w === 'video-prompt') {
+      return "Generate the video in Veo/Gemini and save to 05-generated-videos/. Then run /cf qa_video.";
+    }
+  }
+
+  if (b === 'revenue-master-orchestrator') {
+    if (w === 'system-design') {
+      return "Review system design inputs. Run Antigravity using offer-engine-builder / sales-process-optimizer / ghl-revenue-automation-builder to generate revenue-blueprint.md under /campaigns/{brand}/revenue-strategy/.";
+    } else if (w === 'offer-design') {
+      return "Develop premium offer structure. Run offer-engine-builder skill to generate offer-design.md under /campaigns/{brand}/revenue-strategy/.";
+    } else if (w === 'ghl-setup') {
+      return "Review CRM mapping inputs. Run ghl-revenue-automation-builder to write crm-mapping-manifest.md under /campaigns/{brand}/revenue-strategy/.";
+    }
+  }
+
+  if (b === 'system-master-orchestrator') {
+    if (w === 'build-app') {
+      return "Analyze UI layout requirements. Run brand-ux-consistency-auditor or custom code templates to write build-blueprint.md under /openclaw/reports/system-builds/.";
+    } else if (w === 'deploy') {
+      return "Run branch build check and TS validations. Use publish-github-vercel to deploy to staging. Smoke test routes and generate deployment-smoke-test-report.md under /openclaw/reports/system-builds/.";
+    } else if (w === 'fix-bug') {
+      return "Trace stack trace details. Run repo-fix-pr-deploy to repair issues and generate bug-fix-walkthrough.md under /openclaw/reports/system-builds/.";
+    }
+  }
+
+  if (b === 'cresca-content-aeo-engine') {
+    if (w === 'optimize-page') {
+      return "Rewrite landing page content. Run content-generation-engine (MANDATORY: Claude copywriting) to write optimized-page-copy.md under /campaigns/{brand}/content-aeo/.";
+    } else if (w === 'faq-schema') {
+      return "Develop FAQ direct-answers and validate JSON-LD code. Run notebooklm-research-extractor to populate schema details. Generate aeo-faq-schema.json under /campaigns/{brand}/content-aeo/.";
+    }
+  }
+
+  if (b === 'lead-acquisition-engine') {
+    if (w === 'icp-define') {
+      return "Review ICP criteria. Run lead-acquisition-engine to generate prospect-icp-profile.md under /campaigns/{brand}/lead-acquisition/.";
+    } else if (w === 'prospect') {
+      return "Source and qualify prospects using intent signals. Run lead-acquisition-engine to build qualified-lead-list.csv under /campaigns/{brand}/lead-acquisition/.";
+    } else if (w === 'scripts') {
+      return "Write personalized outreach messages. Run lead-acquisition-engine to generate outreach-script-pack.md under /campaigns/{brand}/lead-acquisition/.";
+    }
+  }
+
+  if (b === 'revenue-optimization-engine') {
+    if (w === 'audit') {
+      return "Perform funnel leakage analysis. Run revenue-optimization-engine and ghl-config-auditor to generate funnel-leak-audit-report.md under /campaigns/{brand}/revenue-optimization/.";
+    } else if (w === 'speed-lead') {
+      return "Review time-to-contact statistics. Run ghl-revenue-automation-builder to design the GHL speed-to-lead sequence and generate speed-to-lead-blueprint.md under /campaigns/{brand}/revenue-optimization/.";
+    }
+  }
+
+  if (b === 'weekly-command-center') {
+    if (w === 'review') {
+      return "Compile weekly scorecards. Run weekly-command-center to output weekly-performance-snapshot.md and bottlenecks-and-opportunities-report.md under /openclaw/reports/weekly-summaries/.";
+    } else if (w === 'plan') {
+      return "Define team milestones. Run weekly-command-center to generate weekly-execution-plan.md under /openclaw/reports/weekly-summaries/.";
+    }
+  }
+
+  if (b === 'client-value-maximizer') {
+    if (w === 'upsell') {
+      return "Design backend monetization upgrades. Run client-value-maximizer to write customer-lifecycle-monetization-map.md under /campaigns/{brand}/client-value/.";
+    } else if (w === 'reactivate') {
+      return "Review database lists. Run client-value-maximizer and ghl-revenue-automation-builder to draft SMS/Email sequences and write reactivation-campaign-copy.md under /campaigns/{brand}/client-value/.";
+    } else if (w === 'referral') {
+      return "Map referral triggers. Run client-value-maximizer to update client-onboarding-manifest.md under /campaigns/{brand}/client-value/.";
+    }
+  }
+
+  if (b === 'auto-loop-system') {
+    if (w === 'review') {
+      return "Inspect optimization logs. Run auto-loop-system to generate system-optimization-trend-report.md and corrective-action-routing-manifest.md under /openclaw/reports/auto-loops/.";
+    } else if (w === 'setup') {
+      return "Initialize optimization loop. Run auto-loop-system to write compounding-progress-log.md under /openclaw/reports/auto-loops/.";
+    }
+  }
+
+  return null;
+}
+
 async function saveToInbox(bot, workflow, fields, message) {
   const inboxDir = getInboxDir();
   if (!fs.existsSync(inboxDir)) {
@@ -135,12 +222,9 @@ async function saveToInbox(bot, workflow, fields, message) {
     timestamp: new Date().toISOString()
   };
 
-  if (bot === 'content-forge') {
-    if (workflow === 'image-prompts') {
-      payload.next_manual_step = "Generate the selected prompt in Google Flow, save the output to: 03-generated-images/\nThen send:\n/content_forge video_prompt\nCampaign: [campaign name]\nSelected Image: [filename]\nDuration: 8 seconds\nPlatform: Instagram Reels\nCTA: Book a Demo";
-    } else if (workflow === 'video-prompt') {
-      payload.next_manual_step = "Generate the video in Veo/Gemini and save to 05-generated-videos/. Then run /content_forge qa_video.";
-    }
+  const manualStep = getManualStepGuideline(bot, workflow);
+  if (manualStep) {
+    payload.next_manual_step = manualStep;
   }
 
   fs.writeFileSync(path.join(inboxDir, filename), JSON.stringify(payload, null, 2));
@@ -310,8 +394,29 @@ async function handleCommand(text, message) {
   if (command === '/content_forge' || command === '/contentforge' || command === '/cf') {
     return await handleOpenClawBot('content-forge', parsed.workflow, parsed.fields, message);
   }
-  if (command === '/revenue') {
+  if (command === '/revenue' || command === '/revenue_master' || command === '/rmo') {
     return await handleOpenClawBot('revenue-master-orchestrator', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/sys' || command === '/system_master' || command === '/smo') {
+    return await handleOpenClawBot('system-master-orchestrator', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/aeo' || command === '/cresca_content' || command === '/cresca') {
+    return await handleOpenClawBot('cresca-content-aeo-engine', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/leads' || command === '/lead_acquisition' || command === '/lae') {
+    return await handleOpenClawBot('lead-acquisition-engine', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/rev_opt' || command === '/revenue_optimization' || command === '/roe') {
+    return await handleOpenClawBot('revenue-optimization-engine', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/weekly' || command === '/command_center' || command === '/wcc') {
+    return await handleOpenClawBot('weekly-command-center', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/client_value' || command === '/value_maximizer' || command === '/cvm') {
+    return await handleOpenClawBot('client-value-maximizer', parsed.workflow, parsed.fields, message);
+  }
+  if (command === '/autoloop' || command === '/auto_loop' || command === '/als') {
+    return await handleOpenClawBot('auto-loop-system', parsed.workflow, parsed.fields, message);
   }
 
   // 3. Legacy Admin Commands
@@ -325,7 +430,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nContent Forge Examples:\n/cf image_prompts\nProject: SeptiVolt\nCampaign: Batch 001`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
 
 function handleBots() {
