@@ -14,6 +14,7 @@ fs.copyFileSync(realRegistryPath, mockRegistryPath);
 // Set environment variables for isolated tests
 process.env.OPENCLAW_WORKSPACE_ROOT = mockWorkspace;
 process.env.OPENCLAW_TEST = 'true';
+process.env.TELEGRAM_ALLOWED_RUNTIME_CHAT_IDS = '123';
 
 // Import handlers
 const handlers = require('../interfaces/telegram/handlers');
@@ -73,7 +74,22 @@ async function runTests() {
     // Clear inbox files before command
     const existingFiles = fs.readdirSync(inboxRequestsDir);
     for (const f of existingFiles) {
-      fs.unlinkSync(path.join(inboxRequestsDir, f));
+      try {
+        fs.unlinkSync(path.join(inboxRequestsDir, f));
+      } catch (err) {
+        if (err.code === 'EBUSY') {
+          // spin-wait 100ms
+          const stop = Date.now() + 100;
+          while (Date.now() < stop) {}
+          try {
+            fs.unlinkSync(path.join(inboxRequestsDir, f));
+          } catch (err2) {
+            console.warn(`[Warning] Could not delete busy file: ${f}`);
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     const response = await handleCommand(cmdText, {
@@ -170,9 +186,94 @@ async function runTests() {
     '/drive_publish_latest'
   );
 
+  // --- New Runtime Executor Regression Tests ---
+  console.log('\n--- Running Test 11: /help contains /run_bot and Drive commands ---');
+  assert(helpResponse.includes('/run_bot'), 'Help should list /run_bot');
+  assert(helpResponse.includes('/run,'), 'Help should list /run');
+  assert(helpResponse.includes('/runtime_run'), 'Help should list /runtime_run');
+  assert(helpResponse.includes('/drive_publish_pending'), 'Help should list /drive_publish_pending');
+  assert(helpResponse.includes('/drive_publish_latest'), 'Help should list /drive_publish_latest');
+  assert(helpResponse.includes('/drive_republish_latest'), 'Help should list /drive_republish_latest');
+  // Copy revenue-master-orchestrator bot directory to mock workspace
+  const srcBotDir = path.join(__dirname, '../openclaw/bots/revenue-master-orchestrator');
+  const destBotDir = path.join(mockWorkspace, 'openclaw', 'bots', 'revenue-master-orchestrator');
+  fs.mkdirSync(destBotDir, { recursive: true });
+  fs.copyFileSync(path.join(srcBotDir, 'BOT.md'), path.join(destBotDir, 'BOT.md'));
+  
+  const srcWorkflowsDir = path.join(srcBotDir, 'workflows');
+  const destWorkflowsDir = path.join(destBotDir, 'workflows');
+  fs.mkdirSync(destWorkflowsDir, { recursive: true });
+  const workflowFiles = fs.readdirSync(srcWorkflowsDir);
+  for (const wf of workflowFiles) {
+    fs.copyFileSync(path.join(srcWorkflowsDir, wf), path.join(destWorkflowsDir, wf));
+  }
+
+  console.log('\n--- Running Test 12: loadBotInstructions with specific workflow keyword ---');
+  const { loadBotInstructions } = require('../openclaw/runtime/bot-loader');
+  const contextGhl = await loadBotInstructions('revenue-master-orchestrator', 'ghl-setup plan for home services');
+  assert(contextGhl.workflows.includes('Active Workflow Instructions (ghl-setup.md)'), 'Workflows should load ONLY ghl-setup.md');
+  assert(!contextGhl.workflows.includes('offer-design.md'), 'Should NOT load offer-design.md');
+  assert(!contextGhl.workflows.includes('system-design.md'), 'Should NOT load system-design.md');
+
+  console.log('\n--- Running Test 13: "No Auto-Publish" verification ---');
+  // Run executor command
+  const runBotResponse = await handleCommand('/run_bot revenue-master-orchestrator ghl-setup plan', {
+    chat: { id: 123 }
+  });
+  assert(runBotResponse.includes('successful'), 'Run bot command should succeed');
+  // Check that no drive publish manifest is written
+  const syncDir = path.join(mockWorkspace, 'openclaw', 'outbox', 'google-drive-sync');
+  const syncDirExists = fs.existsSync(syncDir);
+  if (syncDirExists) {
+    const syncFiles = fs.readdirSync(syncDir);
+    const manifests = syncFiles.filter(f => f.startsWith('publish_manifest_'));
+    assert(manifests.length === 0, 'No Google Drive publish manifest should be generated automatically');
+  } else {
+    assert(true, 'Google Drive sync folder does not exist, confirming no auto-publish');
+  }
+
+  console.log('\n--- Running Test 14: loadBotInstructions without workflow keyword (shows capped workflow list) ---');
+  const contextCapped = await loadBotInstructions('revenue-master-orchestrator', 'general help request');
+  assert(contextCapped.workflows.includes('Available Workflows'), 'Should list Available Workflows');
+  assert(contextCapped.workflows.includes('- ghl-setup'), 'Should list ghl-setup');
+  assert(contextCapped.workflows.includes('- offer-design'), 'Should list offer-design');
+  assert(contextCapped.workflows.includes('- system-design'), 'Should list system-design');
+  assert(!contextCapped.workflows.includes('Active Workflow Instructions'), 'Should NOT load specific workflow instructions');
+
+  console.log('\n--- Running Test 15: Root Path Fallback verification ---');
+  const { getWorkspaceRoot } = require('../openclaw/runtime/bot-loader');
+  // Test OPENCLAW_TEST behavior
+  process.env.OPENCLAW_TEST = 'true';
+  process.env.OPENCLAW_WORKSPACE_ROOT = '/custom/test/path';
+  assert(getWorkspaceRoot() === path.resolve('/custom/test/path'), 'getWorkspaceRoot should trust env under test environment');
+  
+  // Test production/normal validation behavior
+  process.env.OPENCLAW_TEST = 'false';
+  process.env.OPENCLAW_WORKSPACE_ROOT = '/custom/nonexistent/path';
+  const expectedRoot = path.resolve(__dirname, '..'); // since the real repo exists in parent of testing dir and has server.js/package.json
+  assert(getWorkspaceRoot() === expectedRoot, 'getWorkspaceRoot should reject invalid path and fallback to app root');
+  
+  // Restore test env
+  process.env.OPENCLAW_TEST = 'true';
+  process.env.OPENCLAW_WORKSPACE_ROOT = mockWorkspace;
+
   // Cleanup
   console.log('\nCleaning up mock workspace...');
-  fs.rmSync(mockWorkspace, { recursive: true, force: true });
+  try {
+    fs.rmSync(mockWorkspace, { recursive: true, force: true });
+  } catch (err) {
+    if (err.code === 'EPERM' || err.code === 'EBUSY') {
+      const stop = Date.now() + 200;
+      while (Date.now() < stop) {}
+      try {
+        fs.rmSync(mockWorkspace, { recursive: true, force: true });
+      } catch (err2) {
+        console.warn(`[Warning] Could not clean up mock workspace: ${mockWorkspace}`, err2.message);
+      }
+    } else {
+      throw err;
+    }
+  }
   
   if (passed) {
     console.log('\n✅ ALL BOT ROUTING & STATUS TESTS PASSED SUCCESSFULLY!');

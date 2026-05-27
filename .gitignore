@@ -15,3 +15,7 @@ openclaw/outbox/google-drive-sync/*
 !openclaw/outbox/google-drive-sync/.gitkeep
 openclaw/outbox/telegram-responses/*
 !openclaw/outbox/telegram-responses/.gitkeep
+
+# Test mock workspaces (auto-generated)
+testing/mock-workspace*/
+

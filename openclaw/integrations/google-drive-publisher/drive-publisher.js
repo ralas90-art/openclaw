@@ -367,6 +367,221 @@ function createDrivePublishManifest(manifest) {
 }
 
 /**
+ * Check if a local file has already been successfully published to Drive.
+ * Scans the google-drive-sync manifest log directory for a matching local_file entry.
+ * Returns { alreadyPublished: true, existingManifest: {...} } or { alreadyPublished: false }.
+ */
+function checkAlreadyPublished(filePath) {
+  try {
+    const workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT || path.resolve(__dirname, '../../..');
+    const logDir = path.join(workspaceRoot, 'openclaw', 'outbox', 'google-drive-sync');
+    if (!fs.existsSync(logDir)) return { alreadyPublished: false };
+
+    const manifestFiles = fs.readdirSync(logDir).filter(f => f.startsWith('publish_manifest_') && f.endsWith('.json'));
+    const normalizeP = p => p.replace(/\\/g, '/').toLowerCase();
+    const targetNorm = normalizeP(path.resolve(filePath));
+
+    for (const mf of manifestFiles) {
+      try {
+        const mfPath = path.join(logDir, mf);
+        const data = JSON.parse(fs.readFileSync(mfPath, 'utf8'));
+        if (data.status === 'published' && data.local_file) {
+          const existingNorm = normalizeP(path.resolve(data.local_file));
+          if (existingNorm === targetNorm) {
+            return { alreadyPublished: true, existingManifest: data, manifestFile: mf };
+          }
+        }
+      } catch (_) { /* skip corrupt manifest */ }
+    }
+  } catch (err) {
+    console.error('[Google Drive Publisher] checkAlreadyPublished error:', err.message);
+  }
+  return { alreadyPublished: false };
+}
+
+/**
+ * Score files to determine publish priority.
+ * Priority 5 = highest (result.md in telegram-responses).
+ */
+function getFilePriority(filePath) {
+  const norm = filePath.replace(/\\/g, '/').toLowerCase();
+  const base = path.basename(filePath).toLowerCase();
+
+  // Ignore manifest/sync files
+  if (norm.includes('google-drive-sync')) return 0;
+  if (base.startsWith('publish_manifest_')) return 0;
+  if (base.endsWith('_manifest.json')) return 0;
+
+  if (norm.includes('outbox/telegram-responses') && base.endsWith('_result.md')) return 5;
+  if (norm.includes('outbox/telegram-responses') && base.endsWith('.md')) return 4;
+  if (norm.includes('reports') && base.endsWith('.md')) return 3;
+  if (norm.includes('campaigns') && base.endsWith('.md')) return 2;
+  if (norm.includes('campaigns')) return 1;
+  return 0;
+}
+
+/**
+ * Find the latest generated output file in telegram-responses (sorted by filename desc).
+ * Returns the absolute path of the highest-priority, most recent file, or null.
+ */
+function getLatestResultFile(workspaceRoot) {
+  const responsesDir = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses');
+  if (!fs.existsSync(responsesDir)) return null;
+
+  const files = fs.readdirSync(responsesDir)
+    .filter(f => {
+      const norm = f.toLowerCase();
+      return !norm.startsWith('publish_manifest_') && !norm.endsWith('_manifest.json') && !norm.startsWith('.');
+    })
+    .map(f => ({ name: f, fullPath: path.join(responsesDir, f), priority: getFilePriority(path.join(responsesDir, f)) }))
+    .filter(f => f.priority > 0)
+    .sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return b.name.localeCompare(a.name); // newest filename first (ISO date prefix)
+    });
+
+  return files.length > 0 ? files[0].fullPath : null;
+}
+
+/**
+ * /drive_publish_latest — publishes the latest generated output file.
+ * If it has already been published, returns the existing Drive link instead of re-uploading.
+ * Use republishLatestToDrive() to force a re-upload.
+ */
+async function publishLatestToDrive(options = {}) {
+  const roots = getActiveRoots();
+  if (roots.length === 0) {
+    return { status: 'error', message: 'No valid OpenClaw workspace root found.' };
+  }
+  const workspaceRoot = roots[0];
+  const latestFile = getLatestResultFile(workspaceRoot);
+
+  if (!latestFile) {
+    return {
+      status: 'no_file',
+      message: 'No generated output files found in telegram-responses.\nProcess a queued inbox request first with Antigravity.'
+    };
+  }
+
+  // Duplicate detection
+  const dupCheck = checkAlreadyPublished(latestFile);
+  if (dupCheck.alreadyPublished) {
+    const m = dupCheck.existingManifest;
+    const link = m.drive_web_url || m.drive_local_path || '(local copy — no API link)';
+    return {
+      status: 'already_published',
+      message: [
+        'This file was already published.',
+        '',
+        'File: ' + path.basename(latestFile),
+        'Existing Drive Link: ' + link,
+        '',
+        'If you want to republish it, use:',
+        '/drive_republish_latest'
+      ].join('\n'),
+      file: latestFile,
+      drive_link: link,
+      existing_manifest: m
+    };
+  }
+
+  const result = await publishFileToDrive(latestFile, options);
+  return {
+    status: result.status,
+    message: result.status === 'published'
+      ? 'Published successfully.\n\nFile: ' + path.basename(latestFile) + '\nDrive Link: ' + (result.drive_web_url || result.drive_local_path)
+      : 'Publish failed: ' + result.error,
+    file: latestFile,
+    manifest: result
+  };
+}
+
+/**
+ * /drive_publish_pending — finds the latest generated output file that has NOT been published.
+ * If none exist, returns a helpful message to process the inbox first.
+ */
+async function publishPendingToDrive(options = {}) {
+  const roots = getActiveRoots();
+  if (roots.length === 0) {
+    return { status: 'error', message: 'No valid OpenClaw workspace root found.' };
+  }
+  const workspaceRoot = roots[0];
+  const responsesDir = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses');
+  if (!fs.existsSync(responsesDir)) {
+    return { status: 'no_file', message: 'No unpublished generated output files found.\n\nLatest queued request may still need to be processed first.\nRun:\n/inbox_latest\n\nThen process the request with Antigravity before publishing.' };
+  }
+
+  const files = fs.readdirSync(responsesDir)
+    .filter(f => {
+      const norm = f.toLowerCase();
+      return !norm.startsWith('publish_manifest_') && !norm.endsWith('_manifest.json') && !norm.startsWith('.');
+    })
+    .map(f => ({ name: f, fullPath: path.join(responsesDir, f), priority: getFilePriority(path.join(responsesDir, f)) }))
+    .filter(f => f.priority > 0)
+    .sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return b.name.localeCompare(a.name);
+    });
+
+  // Find first unpublished file
+  for (const file of files) {
+    const dupCheck = checkAlreadyPublished(file.fullPath);
+    if (!dupCheck.alreadyPublished) {
+      const result = await publishFileToDrive(file.fullPath, options);
+      return {
+        status: result.status,
+        message: result.status === 'published'
+          ? 'Pending file published successfully.\n\nFile: ' + file.name + '\nDrive Link: ' + (result.drive_web_url || result.drive_local_path)
+          : 'Publish failed: ' + result.error,
+        file: file.fullPath,
+        manifest: result
+      };
+    }
+  }
+
+  return {
+    status: 'no_pending',
+    message: [
+      'No unpublished generated output files found.',
+      '',
+      'Latest queued request may still need to be processed first.',
+      'Run:',
+      '/inbox_latest',
+      '',
+      'Then process the request with Antigravity before publishing.'
+    ].join('\n')
+  };
+}
+
+/**
+ * /drive_republish_latest — forces a re-upload of the latest generated output file.
+ * Use only when you intentionally want a new Drive copy.
+ */
+async function republishLatestToDrive(options = {}) {
+  const roots = getActiveRoots();
+  if (roots.length === 0) {
+    return { status: 'error', message: 'No valid OpenClaw workspace root found.' };
+  }
+  const workspaceRoot = roots[0];
+  const latestFile = getLatestResultFile(workspaceRoot);
+
+  if (!latestFile) {
+    return { status: 'no_file', message: 'No generated output files found to republish.' };
+  }
+
+  console.log('[Google Drive Publisher] Force republishing:', latestFile);
+  const result = await publishFileToDrive(latestFile, options);
+  return {
+    status: result.status,
+    message: result.status === 'published'
+      ? 'Force republished successfully.\n\nFile: ' + path.basename(latestFile) + '\nDrive Link: ' + (result.drive_web_url || result.drive_local_path)
+      : 'Republish failed: ' + result.error,
+    file: latestFile,
+    manifest: result
+  };
+}
+
+/**
  * Publish all files in a folder recursively.
  */
 async function publishFolderToDrive(folderPath, options = {}) {
@@ -415,5 +630,12 @@ module.exports = {
   publishFileToDrive,
   publishFolderToDrive,
   publishCampaignToDrive,
-  verifyPublishSafety
+  verifyPublishSafety,
+  // Command-level helpers
+  publishLatestToDrive,
+  publishPendingToDrive,
+  republishLatestToDrive,
+  checkAlreadyPublished,
+  getLatestResultFile,
+  getFilePriority
 };

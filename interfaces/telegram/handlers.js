@@ -5,6 +5,7 @@ const { replayEvent } = require('../../core/replay/replayManager');
 const fs = require('fs');
 const path = require('path');
 const drivePublisher = require('../../openclaw/integrations/google-drive-publisher/drive-publisher');
+const runtimeExecutor = require('../../openclaw/runtime/runtime-executor');
 
 // ------------------------------------------
 // Registry & Bot Routing
@@ -382,6 +383,8 @@ async function handleCommand(text, message) {
   }
   if (command === '/drive_latest' || command === '/drivelatest') return await handleDriveLatest();
   if (command === '/drive_publish_latest' || command === '/drivepublishlatest') return await handleDrivePublishLatest();
+  if (command === '/drive_publish_pending' || command === '/drivepublishpending') return await handleDrivePublishPending();
+  if (command === '/drive_republish_latest' || command === '/driverepublishlatest') return await handleDriveRepublishLatest();
   if (command === '/drive_publish_file' || command === '/drivepublishfile') {
     const filename = text.trim().split(/\s+/)[1];
     return await handleDrivePublishFile(filename);
@@ -389,6 +392,9 @@ async function handleCommand(text, message) {
   if (command === '/drive_publish_campaign' || command === '/drivepublishcampaign') {
     const campaignName = text.trim().split(/\s+/)[1];
     return await handleDrivePublishCampaign(campaignName);
+  }
+  if (command === '/run_bot' || command === '/run' || command === '/runtime_run') {
+    return await handleRunBot(text, message);
   }
 
 
@@ -432,7 +438,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file\n/drive_publish_latest - Publish the latest output file to Drive\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflow:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
 
 function getSuggestedFollowUp(botSlug, workflow) {
@@ -630,6 +636,29 @@ async function handleReplay(args) {
   } catch (err) {
     return `❌ Replay failed: ${err.message}`;
   }
+}
+
+async function handleRunBot(text, message) {
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  // Find bot slug (the first word of the rest of the text)
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let botSlug = '';
+  let userRequest = '';
+  if (firstSpaceIdx === -1) {
+    botSlug = commandTextWithoutCmd;
+    userRequest = '';
+  } else {
+    botSlug = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    userRequest = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  const senderChatId = message.chat?.id || '';
+
+  const result = await runtimeExecutor.runBot(botSlug, userRequest, senderChatId);
+  return result.message;
 }
 
 module.exports = { handleCommand };
@@ -857,56 +886,111 @@ function getLatestOutputFile() {
 }
 
 async function handleDrivePublishLatest() {
-  const latestFile = getLatestOutputFile();
-  if (!latestFile) {
-    // Check if any manifest or other files exist in the responses folder in any active root
-    const roots = getActiveRoots();
-    let hasManifests = false;
-    for (const rootDir of roots) {
-      const responsesDir = path.join(rootDir, 'openclaw', 'outbox', 'telegram-responses');
-      if (fs.existsSync(responsesDir)) {
-        const files = fs.readdirSync(responsesDir);
-        if (files.some(f => f.endsWith('_manifest.json') || f.includes('publish_manifest'))) {
-          hasManifests = true;
-          break;
-        }
-      }
-    }
+  // Uses publishLatestToDrive() which includes manifest-based duplicate detection.
+  // If already published, returns the existing Drive link instead of re-uploading.
+  const result = await drivePublisher.publishLatestToDrive();
 
-    if (hasManifests) {
-      return "No publishable output file found yet.\n\nI found internal manifests, but no user-facing result file such as:\n*_result.md\n\nProcess an inbox request first and generate a result file in:\nopenclaw/outbox/telegram-responses/";
-    }
-    
-    return "No generated output file found yet. Process an inbox request first, then run /drive_publish_latest.";
+  if (result.status === 'no_file') {
+    return "No generated output file found yet.\n\nProcess an inbox request first, then run /drive_publish_latest.";
   }
 
-  const options = {};
-  if (latestFile.replace(/\\\\/g, '/').toLowerCase().includes('campaigns/')) {
-    const parts = latestFile.replace(/\\\\/g, '/').split('/');
-    const idx = parts.findIndex(p => p.toLowerCase() === 'campaigns');
-    if (idx !== -1 && idx + 2 < parts.length) {
-      options.project = parts[idx + 1];
-      options.campaign = parts[idx + 2];
-    }
+  if (result.status === 'already_published') {
+    let msg = "⚠️ *Already Published — No Duplicate Upload*\n\n";
+    msg += "📄 *File:* `" + path.basename(result.file) + "`\n";
+    msg += "🔗 *Existing Link:* " + result.drive_link + "\n\n";
+    msg += "To force a new upload, use:\n/drive_republish_latest\n\n";
+    msg += "To publish only a NEW unpublished file, use:\n/drive_publish_pending";
+    return msg;
   }
 
-  const manifest = await drivePublisher.publishFileToDrive(latestFile, options);
+  if (result.status === 'error') {
+    return "❌ *Error:* " + result.message;
+  }
 
   let msg = "📤 *Google Drive Publish Result*\n\n";
-  msg += "📄 *File:* `" + path.basename(latestFile) + "`\n";
-  msg += "🚦 *Status:* `" + manifest.status.toUpperCase() + "`\n";
+  msg += "📄 *File:* `" + path.basename(result.file || '') + "`\n";
+  msg += "🚦 *Status:* `" + result.status.toUpperCase() + "`\n";
 
-  if (manifest.status === 'published') {
-    if (manifest.publish_mode === 'api' && manifest.drive_web_url) {
-      msg += "🔗 *Drive Link:* " + manifest.drive_web_url + "\n";
-    } else if (manifest.publish_mode === 'local' && manifest.drive_local_path) {
-      msg += "💻 *Local Path:* `" + manifest.drive_local_path + "`\n";
+  if (result.status === 'published') {
+    const m = result.manifest || {};
+    if (m.publish_mode === 'api' && m.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + m.drive_web_url + "\n";
+    } else if (m.publish_mode === 'local' && m.drive_local_path) {
+      msg += "💻 *Local Path:* `" + m.drive_local_path + "`\n";
       msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
     }
-  } else if (manifest.status === 'dry_run') {
-    msg += "⚠️ *Dry Run (No Upload):* " + manifest.error;
+  } else if (result.status === 'dry_run') {
+    msg += "⚠️ *Dry Run (No Upload):* " + (result.manifest && result.manifest.error ? result.manifest.error : result.message);
   } else {
-    msg += "❌ *Publish Failed:* " + manifest.error;
+    msg += "❌ *Publish Failed:* " + result.message;
+  }
+
+  return msg;
+}
+
+async function handleDrivePublishPending() {
+  // Finds and publishes only the latest unpublished output file.
+  const result = await drivePublisher.publishPendingToDrive();
+
+  if (result.status === 'no_file' || result.status === 'no_pending') {
+    let msg = "ℹ️ *No Unpublished Files Found*\n\n";
+    msg += result.message;
+    return msg;
+  }
+
+  if (result.status === 'error') {
+    return "❌ *Error:* " + result.message;
+  }
+
+  let msg = "📤 *Google Drive Publish Pending Result*\n\n";
+  msg += "📄 *File:* `" + path.basename(result.file || '') + "`\n";
+  msg += "🚦 *Status:* `" + result.status.toUpperCase() + "`\n";
+
+  if (result.status === 'published') {
+    const m = result.manifest || {};
+    if (m.publish_mode === 'api' && m.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + m.drive_web_url + "\n";
+    } else if (m.publish_mode === 'local' && m.drive_local_path) {
+      msg += "💻 *Local Path:* `" + m.drive_local_path + "`\n";
+      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+    }
+  } else if (result.status === 'dry_run') {
+    msg += "⚠️ *Dry Run (No Upload):* " + (result.manifest && result.manifest.error ? result.manifest.error : result.message);
+  } else {
+    msg += "❌ *Publish Failed:* " + result.message;
+  }
+
+  return msg;
+}
+
+async function handleDriveRepublishLatest() {
+  // Force re-uploads the latest file regardless of prior publish history.
+  const result = await drivePublisher.republishLatestToDrive();
+
+  if (result.status === 'no_file') {
+    return "No generated output file found to republish.";
+  }
+
+  if (result.status === 'error') {
+    return "❌ *Error:* " + result.message;
+  }
+
+  let msg = "🔄 *Google Drive Force Republish Result*\n\n";
+  msg += "📄 *File:* `" + path.basename(result.file || '') + "`\n";
+  msg += "🚦 *Status:* `" + result.status.toUpperCase() + "`\n";
+
+  if (result.status === 'published') {
+    const m = result.manifest || {};
+    if (m.publish_mode === 'api' && m.drive_web_url) {
+      msg += "🔗 *Drive Link:* " + m.drive_web_url + "\n";
+    } else if (m.publish_mode === 'local' && m.drive_local_path) {
+      msg += "💻 *Local Path:* `" + m.drive_local_path + "`\n";
+      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+    }
+  } else if (result.status === 'dry_run') {
+    msg += "⚠️ *Dry Run (No Upload):* " + (result.manifest && result.manifest.error ? result.manifest.error : result.message);
+  } else {
+    msg += "❌ *Republish Failed:* " + result.message;
   }
 
   return msg;
