@@ -20,6 +20,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 | Bot Name | Slug | Type | Status | Path | Primary Purpose | Skills / Dependencies |
 |---|---|---|---|---|---|---|
 | Revenue Master Orchestrator | `revenue-master-orchestrator` | Orchestrator | Active Runtime / Production Ready | `openclaw/bots/revenue-master-orchestrator/` | Coordinates revenue-generating systems and monetization strategy. | `offer-engine-builder`, `sales-process-optimizer`, `ghl-revenue-automation-builder`, `client-onboarding-system-builder` |
+| Content Forge | `content-forge` | Bot / Creative Production Orchestrator | Active Runtime / Production Ready | `openclaw/bots/content-forge/` | Orchestrates creative campaign production | `google-flow-image-prompt-builder`, `veo-image-to-video-director`, `creative-continuity-bible-builder`, `ad-variant-content-engine`, `video-qa-iteration-auditor`, `platform-repurpose-engine`, `campaign-asset-manifest-builder` |
 
 ---
 
@@ -27,7 +28,6 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 
 | Bot Name | Slug | Type | Status | Path | Primary Purpose | Skills / Dependencies |
 |---|---|---|---|---|---|---|
-| Content Forge | `content-forge` | Bot / Creative Production Orchestrator | Active Queue-Only / Production Ready | `openclaw/bots/content-forge/` | Orchestrates creative campaign production | `google-flow-image-prompt-builder`, `veo-image-to-video-director`, `creative-continuity-bible-builder`, `ad-variant-content-engine`, `video-qa-iteration-auditor`, `platform-repurpose-engine`, `campaign-asset-manifest-builder` |
 | System Master Orchestrator | `system-master-orchestrator` | Orchestrator | Active Queue-Only | `openclaw/bots/system-master-orchestrator/` | Coordinates architecture, deployment flows, and cross-bot execution logic. | `repo-fix-pr-deploy`, `brand-ux-consistency-auditor`, `service-delivery-systemizer`, `publish-github-vercel` |
 | Cresca Content & AEO Engine | `cresca-content-aeo-engine` | Engine | Active Queue-Only | `openclaw/bots/cresca-content-aeo-engine/` | Creates content, AEO assets, schema-rich pages, and authority building content. | `content-generation-engine`, `notebooklm-research-extractor`, `brand-ux-consistency-auditor` |
 | Lead Acquisition Engine | `lead-acquisition-engine` | Engine | Active Queue-Only | `openclaw/bots/lead-acquisition-engine/` | Builds lead capture systems and prospecting workflows. | `lead-acquisition-engine` |
@@ -64,7 +64,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 ### Content Forge
 **Slug:** `content-forge`  
 **Type:** Bot / Creative Production Orchestrator  
-**Status:** Active Queue-Only / Production Ready  
+**Status:** Active Runtime / Production Ready  
 **Path:** `openclaw/bots/content-forge/`  
 **Purpose:** Orchestrates creative campaign production across Google Flow, Gemini/Veo, social ad copy, QA, repurposing, and campaign manifests.  
 **Primary Workflows:** `/campaign-start`, `/image-prompts`, `/video-prompt`, `/qa-video`, `/copy-pack`, `/repurpose`, `/finalize-campaign`  
@@ -79,7 +79,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 **Known Projects:** SeptiVolt, Cresca OS, G&G Cleaning  
 **Human-in-the-loop Required:** Yes  
 **Safety / Compliance Gates:** Google AI Safety + Prompt Compliance Gate, Context Resolution Rule, claim-safe marketing language  
-**Notes:** Active Queue-Only bot. Requires manual Antigravity execution.
+**Notes:** Active Runtime bot.
 
 ### Revenue Master Orchestrator
 **Slug:** `revenue-master-orchestrator`  

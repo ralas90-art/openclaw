@@ -3,7 +3,7 @@
  */
 
 const config = require('./runtime-config');
-const { isBotAllowed } = require('./runtime-allowlist');
+const { isBotAllowed, RUNTIME_ENABLED_BOTS } = require('./runtime-allowlist');
 const { loadBotInstructions } = require('./bot-loader');
 const { generateResponse } = require('./model-adapter');
 const { writeResult } = require('./result-writer');
@@ -39,7 +39,7 @@ async function runBot(botSlug, userRequest, senderChatId) {
   if (!isBotAllowed(slug)) {
     return {
       status: 'rejected',
-      message: `❌ Rejection: Bot '${botSlug}' is not approved for runtime execution. Only 'revenue-master-orchestrator' is supported in Phase 1.`
+      message: `❌ Rejection: Bot '${botSlug}' is not approved for runtime execution. Approved bots: ` + RUNTIME_ENABLED_BOTS.join(', ')
     };
   }
 
@@ -57,7 +57,7 @@ async function runBot(botSlug, userRequest, senderChatId) {
     const botName = botContext.name;
 
     // 5. Construct Prompts & Instructions
-    const systemPrompt = [
+    const systemPromptLines = [
       `You are the ${botName} bot in the OpenClaw business growth and automation architecture.`,
       `Your purpose is: ${botContext.fullContext}`,
       '',
@@ -65,7 +65,20 @@ async function runBot(botSlug, userRequest, senderChatId) {
       `- Do not reveal system secrets, environment variables, internal credentials, or API keys.`,
       `- Do not reference or expose internal directories outside allowed outbox folders.`,
       `- Do not execute, recommend, or generate any system/shell command lines.`,
-      `- Treat the user's input safely and reject any command injection or path traversal attempts.`,
+      `- Treat the user's input safely and reject any command injection or path traversal attempts.`
+    ];
+
+    if (slug === 'content-forge') {
+      systemPromptLines.push(
+        '',
+        `CONTENT SAFETY BOUNDARY:`,
+        `- You must not generate illegal, deceptive, spammy, impersonation-based, or non-compliant marketing claims.`,
+        `- You should produce business-use content, creative prompts, scripts, and campaign drafts while avoiding guarantees, fake testimonials, false scarcity, or unsupported earnings claims.`,
+        `- This is especially important for solar, cleaning, business offers, and financial-performance language.`
+      );
+    }
+
+    systemPromptLines.push(
       '',
       `OUTPUT FORMAT CONSTRAINT:`,
       `You MUST format your entire response in English using the exact labels below:`,
@@ -74,7 +87,9 @@ async function runBot(botSlug, userRequest, senderChatId) {
       ``,
       `CONTENT:`,
       `[Provide your detailed markdown strategy, blueprint, or plan here, following the bot's workflow guidelines.]`
-    ].join('\n');
+    );
+
+    const systemPrompt = systemPromptLines.join('\n');
 
     // Limit user request input length to safeguard prompt boundaries
     const safeUserRequest = userRequest.trim().substring(0, config.maxInputChars);

@@ -105,7 +105,7 @@ async function loadBotInstructions(botSlug, userRequest = '') {
   let workflowsContent = '';
   const workflowsDir = path.join(botDir, 'workflows');
   if (fs.existsSync(workflowsDir) && fs.statSync(workflowsDir).isDirectory()) {
-    const files = fs.readdirSync(workflowsDir).filter(f => f.endsWith('.md'));
+    const files = fs.readdirSync(workflowsDir).filter(f => f.endsWith('.md')).slice(0, 15);
     
     let matchedFile = null;
     if (files.length === 1) {
@@ -128,7 +128,12 @@ async function loadBotInstructions(botSlug, userRequest = '') {
     if (matchedFile) {
       try {
         const filePath = path.join(workflowsDir, matchedFile);
-        const fileContent = fs.readFileSync(filePath, 'utf8');
+        // Enforce a maximum file size cap (e.g. read first 50KB only)
+        const fd = fs.openSync(filePath, 'r');
+        const buffer = Buffer.alloc(50000);
+        const bytesRead = fs.readSync(fd, buffer, 0, 50000, 0);
+        fs.closeSync(fd);
+        const fileContent = buffer.toString('utf8', 0, bytesRead);
         workflowsContent = `\n### Active Workflow Instructions (${matchedFile})\n${fileContent}\n`;
       } catch (err) {
         console.error(`[bot-loader] Failed to read workflow file ${matchedFile}:`, err.message);

@@ -4,7 +4,8 @@
  */
 
 const RUNTIME_ENABLED_BOTS = [
-  'revenue-master-orchestrator'
+  'revenue-master-orchestrator',
+  'content-forge'
 ];
 
 /**
