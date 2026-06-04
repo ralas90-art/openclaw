@@ -401,6 +401,15 @@ async function handleCommand(text, message) {
   if (command === '/run_bot' || command === '/run' || command === '/runtime_run') {
     return await handleRunBot(text, message);
   }
+  if (command === '/run_status' || command === '/runstatus') {
+    return await handleRunStatus(message);
+  }
+  if (command === '/run_latest' || command === '/runlatest') {
+    return await handleRunLatest(message);
+  }
+  if (command === '/run_history' || command === '/runhistory') {
+    return await handleRunHistory(message);
+  }
 
 
   // 2. OpenClaw Bot Routing
@@ -443,7 +452,10 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflow:\n  1. /run_bot revenue-master-orchestrator <user_request>\n     or /run_bot content-forge <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)
+/run_status - Inspect runtime health and config
+/run_latest - Inspect details of the latest result
+/run_history - View recent execution history\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflow:\n  1. /run_bot revenue-master-orchestrator <user_request>\n     or /run_bot content-forge <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
 
 function getSuggestedFollowUp(botSlug, workflow) {
@@ -664,6 +676,85 @@ async function handleRunBot(text, message) {
 
   const result = await runtimeExecutor.runBot(botSlug, userRequest, senderChatId);
   return result.message;
+}
+
+function isChatAuthorized(message) {
+  const senderChatId = message.chat?.id ? String(message.chat.id).trim() : '';
+  const runtimeConfig = require('../../openclaw/runtime/runtime-config');
+  return runtimeConfig.allowedChatIds.includes(senderChatId);
+}
+
+async function handleRunStatus(message) {
+  const senderChatId = message.chat?.id || 'unknown';
+  if (!isChatAuthorized(message)) {
+    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  }
+
+  const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
+  const status = runtimeInspector.getRuntimeStatus();
+  
+  let msg = "⚙️ *OpenClaw Runtime Status*\n\n";
+  msg += "• *Status:* `" + status.status.toUpperCase() + "`\n";
+  msg += "• *Active Provider:* `" + status.modelProvider + "`\n";
+  msg += "• *Approved Bots:* " + status.approvedBots.join(', ') + "\n";
+  msg += "• *Outbox Result Count:* " + status.outboxResultCount + "\n";
+  msg += "• *Latest Result File:* `" + status.latestResultFile + "`\n";
+  msg += "• *Drive Publish Mode:* `" + status.drivePublishMode + "`\n\n";
+  msg += "*Recommended next commands:*\n";
+  msg += "• `/run_latest` — View details of the latest result\n";
+  msg += "• `/run_history` — View recent execution history\n";
+  msg += "• `/drive_publish_pending` — Publish any pending files";
+  
+  return msg;
+}
+
+async function handleRunLatest(message) {
+  const senderChatId = message.chat?.id || 'unknown';
+  if (!isChatAuthorized(message)) {
+    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  }
+
+  const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
+  const latest = runtimeInspector.getLatestRuntimeResult();
+  if (!latest) {
+    return "ℹ️ *No Runtime Results Found*\n\nNo runtime results exist in `openclaw/outbox/telegram-responses/` yet. Run a bot using `/run_bot`.";
+  }
+
+  let msg = "📄 *Latest Runtime Result*\n\n";
+  msg += "• *File:* `" + latest.filename + "`\n";
+  msg += "• *Bot:* `" + latest.botSlug + "`\n";
+  msg += "• *Timestamp:* " + latest.timestamp + "\n\n";
+  msg += "*Summary:*\n" + latest.summary + "\n\n";
+  msg += "*Recommended next command:*\n";
+  msg += "• `/drive_publish_pending` — Publish this result to Google Drive";
+  
+  return msg;
+}
+
+async function handleRunHistory(message) {
+  const senderChatId = message.chat?.id || 'unknown';
+  if (!isChatAuthorized(message)) {
+    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  }
+
+  const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
+  const history = runtimeInspector.getRuntimeHistory(5);
+  if (history.length === 0) {
+    return "ℹ️ *No Runtime History Found*\n\nNo runtime execution history exists.";
+  }
+
+  let msg = "📜 *Recent Runtime History (Last 5)*\n\n";
+  history.forEach((item, index) => {
+    msg += (index + 1) + ". `" + item.filename + "`\n";
+    msg += "   • *Bot:* `" + item.botSlug + "` | *Time:* " + item.timestamp + "\n";
+    msg += "   • *Drive Status:* `" + item.publishStatus.toUpperCase() + "`\n\n";
+  });
+  
+  msg += "*Recommended next commands:*\n";
+  msg += "• `/drive_publish_pending` — Publish any pending files\n";
+  msg += "• `/run_latest` — View details of the latest execution";
+
+  return msg;
 }
 
 module.exports = { handleCommand };

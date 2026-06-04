@@ -202,6 +202,9 @@ async function runTests() {
   assert(helpResponse.includes('/drive_publish_pending'), 'Help should list /drive_publish_pending');
   assert(helpResponse.includes('/drive_publish_latest'), 'Help should list /drive_publish_latest');
   assert(helpResponse.includes('/drive_republish_latest'), 'Help should list /drive_republish_latest');
+  assert(helpResponse.includes('/run_status'), 'Help should list /run_status');
+  assert(helpResponse.includes('/run_latest'), 'Help should list /run_latest');
+  assert(helpResponse.includes('/run_history'), 'Help should list /run_history');
   // Copy revenue-master-orchestrator bot directory to mock workspace
   const srcBotDir = path.join(__dirname, '../openclaw/bots/revenue-master-orchestrator');
   const destBotDir = path.join(mockWorkspace, 'openclaw', 'bots', 'revenue-master-orchestrator');
