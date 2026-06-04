@@ -218,6 +218,7 @@ function createDryRunPreview(actionType, request, options = {}) {
       status: 'success',
       filename,
       published: false,
+      dry_run: true,
       timestamp: record.createdAt
     });
   } catch (e) {}

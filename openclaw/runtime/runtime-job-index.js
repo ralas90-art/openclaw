@@ -95,6 +95,7 @@ function updateJobIndexFromEvent(event) {
         filename: event.filename || null,
         driveLink: event.driveLink || null,
         published: event.published !== undefined ? event.published : false,
+        dry_run: event.dry_run !== undefined ? event.dry_run : false,
         created: event.timestamp || new Date().toISOString(),
         lastUpdated: event.timestamp || new Date().toISOString(),
         summaryPreview: null,
@@ -116,6 +117,9 @@ function updateJobIndexFromEvent(event) {
       }
       if (event.publishStatus === 'published' || event.publishStatus === 'already_published') {
         existing.published = true;
+      }
+      if (event.dry_run !== undefined) {
+        existing.dry_run = event.dry_run;
       }
       if (event.errorCategory) existing.errorCategory = event.errorCategory;
       existing.lastUpdated = event.timestamp || new Date().toISOString();
@@ -177,6 +181,7 @@ function rebuildJobIndex() {
                 filename: event.filename || null,
                 driveLink: event.driveLink || null,
                 published: event.published !== undefined ? event.published : false,
+                dry_run: event.dry_run !== undefined ? event.dry_run : false,
                 created: event.timestamp || stats.timestamp,
                 lastUpdated: event.timestamp || stats.timestamp,
                 summaryPreview: null,
@@ -198,6 +203,9 @@ function rebuildJobIndex() {
               }
               if (event.publishStatus === 'published' || event.publishStatus === 'already_published') {
                 existing.published = true;
+              }
+              if (event.dry_run !== undefined) {
+                existing.dry_run = event.dry_run;
               }
               if (event.errorCategory) existing.errorCategory = event.errorCategory;
               existing.lastUpdated = event.timestamp || existing.lastUpdated;
@@ -246,6 +254,7 @@ function rebuildJobIndex() {
                 filename: f,
                 driveLink: null,
                 published: false,
+                dry_run: isDryRun,
                 created: stats.timestamp,
                 lastUpdated: stats.timestamp,
                 summaryPreview: summary,
@@ -255,6 +264,9 @@ function rebuildJobIndex() {
               const existing = index[jobId];
               existing.filename = f;
               existing.summaryPreview = summary;
+              if (isDryRun) {
+                existing.dry_run = true;
+              }
               if (extBotSlug && !existing.botSlug) {
                 existing.botSlug = extBotSlug;
               }

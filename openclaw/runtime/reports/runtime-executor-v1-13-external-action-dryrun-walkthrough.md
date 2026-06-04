@@ -18,14 +18,16 @@ Admin/role-gated dry-run commands have been registered in the command router and
 ## 2. Files Changed
 - **`openclaw/runtime/dryrun-action-types.js`** [NEW]: Supported allowlist of 8 action types, validation rules, and mock templates.
 - **`openclaw/runtime/runtime-dryrun.js`** [NEW]: Core dry-run logic (ID generation, validation, record storage, formatting).
+  * *Safety Guardrail:* Confirmed 100% network-free. No external API packages or clients (GHL, Airtable, Google Places, email/SMS, scrapers, webhooks) are imported or invoked.
 - **`openclaw/runtime/logs/runtime-dryruns.json`** [NEW]: Local persistent history of dry-run simulations.
 - **`openclaw/runtime/runtime-permissions.js`**: Registers risk tiers and command-to-capability mappings.
-- **`openclaw/runtime/runtime-roles.js`**: Adds capabilities (`dryrun_create`, `dryrun_publish_request`, `dryrun_view`) to role matrices.
+  * *Tier 5 Safety:* Dry-run commands may reference future Tier 5 external action types, but are not classified as enabled Tier 5 execution commands. Real Tier 5 external execution remains disabled.
 - **`interfaces/telegram/handlers.js`**: Routes commands, formats Telegram response cards, integrates with `/approve_run` execution, and updates `/help` info.
+  * *Gate Order Verification:* `/dryrun_publish` correctly creates a pending approval record first without generating the report markdown file. The markdown file is only compiled and published when `/approve_run` executes.
 - **`openclaw/runtime/runtime-inspector.js`**: Updates configuration statuses reported by `getRuntimeStatus()`.
 - **`openclaw/runtime/runtime-metrics.js`**: Tracks counts of dry-runs generated, published, and validation failures inside `getMetrics()` and `getSafeConfig()`.
 - **`openclaw/runtime/runtime-logger.js`**: Sanitizes and standardizes logging of dry-run event types.
-- **`openclaw/runtime/runtime-job-index.js`**: Indexes generated dry-run reports under canonical `dryrun_action` jobs.
+- **`openclaw/runtime/runtime-job-index.js`**: Indexes generated dry-run reports under canonical `dryrun_action` jobs, setting the field `dry_run: true` so they appear immediately in search, history, and metrics.
 - **`scratch/test-runtime-executor.js`**: Added 32 verification tests (Tests 241 through 272).
 
 ---
@@ -87,8 +89,9 @@ Each dry-run report uses the extension `*_dryrun_result.md` and contains:
 
 ---
 
-## 7. Safety Controls
+## 7. Safety Controls & "No Network Execution" Guarantees
 - Real outbound execution is 100% blocked.
+- Checked logs and code imports: No API keys, credentials, or third-party client packages are used.
 - Output filenames are path-traversal resistant.
 - Logs and Telegram cards sanitize all inputs and avoid leaking absolute paths, API keys, or stack traces.
 
@@ -101,6 +104,7 @@ All 272 tests compile and pass:
 ```
 - Custom bot routing and queue-only validators pass 100%.
 - Google Drive publisher integration tests pass 100%.
+- Verified through test code logs that no GHL, Airtable, Google Places, scrapers, email, SMS, or webhook requests were dispatched.
 
 ---
 
