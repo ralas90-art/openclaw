@@ -81,14 +81,83 @@ function getRuntimeStatus() {
   const results = getRuntimeResultFiles();
   const latestFile = results.length > 0 ? results[0] : 'None';
 
+  let presetCount = 0;
+  try {
+    const presetsPath = path.join(workspaceRoot, 'openclaw', 'runtime', 'runtime-presets.json');
+    if (fs.existsSync(presetsPath)) {
+      const presets = JSON.parse(fs.readFileSync(presetsPath, 'utf8'));
+      presetCount = Object.keys(presets).length;
+    }
+  } catch (err) {}
+
   return {
     status: 'online',
     modelProvider: config.provider || 'unknown',
     approvedBots: RUNTIME_ENABLED_BOTS,
     outboxResultCount: results.length,
     latestResultFile: latestFile,
-    drivePublishMode: 'Manual',
-    driveFolderId: process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID || 'Not configured'
+    drivePublishMode: process.env.GOOGLE_DRIVE_PUBLISH_MODE || 'local',
+    driveFolderId: process.env.GOOGLE_DRIVE_OUTPUT_FOLDER_ID || 'Not configured',
+    controlledPublishing: {
+      enabled: true,
+      command: '/run_publish <bot_slug> <user_request>',
+      aliases: ['/rp', '/run_bot_publish'],
+      description: 'Runs bot + publishes exact generated file to Google Drive atomically'
+    },
+    manualPublishing: '/drive_publish_pending',
+    presetsEnabled: 'yes',
+    presetCount: presetCount,
+    publishingPresetsEnabled: 'yes',
+    permissionTiersEnabled: 'yes',
+    accessModel: 'role-based with admin fallback',
+    roleSystem: 'Enabled',
+    selfApprovalProtection: 'Enabled',
+    superAdminCount: (() => {
+      try {
+        const roles = require('./runtime-roles');
+        return roles.getRoleSummary().super_admin;
+      } catch (e) { return 0; }
+    })(),
+    operatorCount: (() => {
+      try {
+        const roles = require('./runtime-roles');
+        return roles.getRoleSummary().operator;
+      } catch (e) { return 0; }
+    })(),
+    publisherCount: (() => {
+      try {
+        const roles = require('./runtime-roles');
+        return roles.getRoleSummary().publisher;
+      } catch (e) { return 0; }
+    })(),
+    approverCount: (() => {
+      try {
+        const roles = require('./runtime-roles');
+        return roles.getRoleSummary().approver;
+      } catch (e) { return 0; }
+    })(),
+    viewerCount: (() => {
+      try {
+        const roles = require('./runtime-roles');
+        return roles.getRoleSummary().viewer;
+      } catch (e) { return 0; }
+    })(),
+    externalActionsEnabled: 'no',
+    approvalGates: 'Enabled',
+    approvalGatesEnabled: true,
+    approvalTtlMinutes: parseInt(process.env.OPENCLAW_APPROVAL_TTL_MINUTES, 10) || 60,
+    gatedTiers: ['publish'],
+    pendingApprovalsCount: (() => {
+      try {
+        const { listApprovals } = require('./runtime-approvals');
+        return listApprovals(9999).filter(a => a.status === 'pending').length;
+      } catch (err) {
+        return 0;
+      }
+    })(),
+    approvalAudit: 'Enabled',
+    approvalSearch: 'Enabled',
+    expiredCleanup: 'Available'
   };
 }
 

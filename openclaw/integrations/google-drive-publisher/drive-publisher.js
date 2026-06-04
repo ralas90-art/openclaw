@@ -191,15 +191,31 @@ async function resolveFolderId(drive, parentId, folderName) {
 }
 
 /**
+ * Helper to extract jobId from result file content if present.
+ */
+function extractJobIdFromFile(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const match = content.match(/## Job ID\r?\n(rt_[a-zA-Z0-9_]+)/);
+      if (match) return match[1];
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
  * Publish a single file to Google Drive.
  */
 async function publishFileToDrive(filePath, options = {}) {
+  const jobId = options.jobId || extractJobIdFromFile(filePath) || null;
   const manifest = {
     source: 'openclaw',
     published_to: 'google_drive',
     status: 'failed',
     publish_mode: process.env.GOOGLE_DRIVE_PUBLISH_MODE || 'local',
     local_file: filePath,
+    jobId: jobId,
     drive_file_id: '',
     drive_web_url: '',
     drive_local_path: '',
@@ -341,6 +357,35 @@ async function publishFileToDrive(filePath, options = {}) {
 
   // Save the manifest JSON log
   createDrivePublishManifest(manifest);
+
+  // Log drive publish event
+  try {
+    const runtimeLogger = require('../../runtime/runtime-logger');
+    if (manifest.status === 'published') {
+      runtimeLogger.logEvent({
+        jobId: jobId,
+        type: 'drive_publish',
+        status: 'success',
+        filename: path.basename(filePath),
+        driveLink: manifest.drive_web_url || manifest.drive_local_path || null,
+        publishStatus: 'published',
+        botSlug: options.bot || null
+      });
+    } else if (manifest.status === 'failed' || manifest.status === 'dry_run') {
+      runtimeLogger.logEvent({
+        jobId: jobId,
+        type: 'drive_publish',
+        status: 'failure',
+        filename: path.basename(filePath),
+        errorCategory: 'google_drive_error',
+        safeMessage: manifest.error || 'Drive publish failed.',
+        botSlug: options.bot || null
+      });
+    }
+  } catch (logErr) {
+    console.warn(`[drive-publisher] Failed to log drive event: ${logErr.message}`);
+  }
+
   return manifest;
 }
 
@@ -468,6 +513,20 @@ async function publishLatestToDrive(options = {}) {
   if (dupCheck.alreadyPublished) {
     const m = dupCheck.existingManifest;
     const link = m.drive_web_url || m.drive_local_path || '(local copy — no API link)';
+    try {
+      const runtimeLogger = require('../../runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        type: 'drive_publish',
+        status: 'already_published',
+        filename: path.basename(latestFile),
+        driveLink: link,
+        publishStatus: 'already_published',
+        duplicateDetected: true,
+        botSlug: options.bot || null
+      });
+    } catch (logErr) {
+      console.warn(`[drive-publisher] Failed to log drive event: ${logErr.message}`);
+    }
     return {
       status: 'already_published',
       message: [
@@ -626,8 +685,88 @@ async function publishCampaignToDrive(campaignPath, options = {}) {
   return publishFolderToDrive(campaignPath, campaignOptions);
 }
 
+/**
+ * publishExactRuntimeFile(exactFilePath)
+ * Safe wrapper for /run_publish — enforces all safety invariants at the library level:
+ *   1. Path must be inside openclaw/outbox/telegram-responses/
+ *   2. Filename must end in _runtime_result.md
+ *   3. Runs duplicate detection — returns existing manifest if already published
+ *   4. Creates normal Drive sync manifest records via publishFileToDrive()
+ *
+ * @param {string} exactFilePath — absolute path to the generated result file
+ * @param {object} options — optional publish options (bot, project, campaign)
+ * @returns {Promise<{ status: string, drive_web_url?: string, drive_local_path?: string, error?: string, alreadyPublished?: boolean, existingManifest?: object }>}
+ */
+async function publishExactRuntimeFile(exactFilePath, options = {}) {
+  const filename = path.basename(exactFilePath);
+
+  // 1. Filename suffix guard
+  if (!filename.endsWith('_runtime_result.md')) {
+    return {
+      status: 'rejected',
+      error: `Security block: File does not match required suffix (_runtime_result.md). Got: ${filename}`
+    };
+  }
+
+  // 2. Path scope guard — must be inside openclaw/outbox/telegram-responses/
+  const roots = getActiveRoots();
+  if (roots.length === 0) {
+    return { status: 'error', error: 'No valid OpenClaw workspace root found.' };
+  }
+  const workspaceRoot = roots[0];
+  const responsesDir = path.resolve(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses');
+  const resolvedPath = path.resolve(exactFilePath);
+
+  if (!resolvedPath.startsWith(responsesDir + path.sep) && resolvedPath !== responsesDir) {
+    return {
+      status: 'rejected',
+      error: 'Security block: Path is outside approved directory (openclaw/outbox/telegram-responses/).'
+    };
+  }
+
+  // 3. File existence check
+  if (!fs.existsSync(resolvedPath)) {
+    return { status: 'error', error: `File not found: ${filename}` };
+  }
+
+  // 4. Duplicate detection — return existing manifest if already published
+  const dupCheck = checkAlreadyPublished(resolvedPath);
+  const jobId = options.jobId || (dupCheck.alreadyPublished && dupCheck.existingManifest.jobId) || extractJobIdFromFile(resolvedPath) || null;
+  const mergedOptions = { ...options, jobId };
+
+  if (dupCheck.alreadyPublished) {
+    try {
+      const runtimeLogger = require('../../runtime/runtime-logger');
+      const existingLink = dupCheck.existingManifest.drive_web_url || dupCheck.existingManifest.drive_local_path || '';
+      runtimeLogger.logEvent({
+        jobId: jobId,
+        type: 'drive_publish',
+        status: 'already_published',
+        filename: filename,
+        driveLink: existingLink,
+        publishStatus: 'already_published',
+        duplicateDetected: true,
+        botSlug: options.bot || null
+      });
+    } catch (logErr) {
+      console.warn(`[drive-publisher] Failed to log drive event: ${logErr.message}`);
+    }
+    return {
+      status: 'already_published',
+      alreadyPublished: true,
+      existingManifest: dupCheck.existingManifest,
+      drive_web_url: dupCheck.existingManifest.drive_web_url || '',
+      drive_local_path: dupCheck.existingManifest.drive_local_path || ''
+    };
+  }
+
+  // 5. Delegate to publishFileToDrive (creates normal Drive sync manifest records)
+  return publishFileToDrive(resolvedPath, mergedOptions);
+}
+
 module.exports = {
   publishFileToDrive,
+  publishExactRuntimeFile,
   publishFolderToDrive,
   publishCampaignToDrive,
   verifyPublishSafety,

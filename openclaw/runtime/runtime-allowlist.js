@@ -5,7 +5,8 @@
 
 const RUNTIME_ENABLED_BOTS = [
   'revenue-master-orchestrator',
-  'content-forge'
+  'content-forge',
+  'lead-acquisition-engine'
 ];
 
 /**

@@ -21,6 +21,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 |---|---|---|---|---|---|---|
 | Revenue Master Orchestrator | `revenue-master-orchestrator` | Orchestrator | Active Runtime / Production Ready | `openclaw/bots/revenue-master-orchestrator/` | Coordinates revenue-generating systems and monetization strategy. | `offer-engine-builder`, `sales-process-optimizer`, `ghl-revenue-automation-builder`, `client-onboarding-system-builder` |
 | Content Forge | `content-forge` | Bot / Creative Production Orchestrator | Active Runtime / Production Ready | `openclaw/bots/content-forge/` | Orchestrates creative campaign production | `google-flow-image-prompt-builder`, `veo-image-to-video-director`, `creative-continuity-bible-builder`, `ad-variant-content-engine`, `video-qa-iteration-auditor`, `platform-repurpose-engine`, `campaign-asset-manifest-builder` |
+| Lead Acquisition Engine | `lead-acquisition-engine` | Engine | Active Runtime / Production Ready | `openclaw/bots/lead-acquisition-engine/` | Builds lead capture systems and prospecting workflows. | `lead-acquisition-engine` |
 
 ---
 
@@ -30,7 +31,6 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 |---|---|---|---|---|---|---|
 | System Master Orchestrator | `system-master-orchestrator` | Orchestrator | Active Queue-Only | `openclaw/bots/system-master-orchestrator/` | Coordinates architecture, deployment flows, and cross-bot execution logic. | `repo-fix-pr-deploy`, `brand-ux-consistency-auditor`, `service-delivery-systemizer`, `publish-github-vercel` |
 | Cresca Content & AEO Engine | `cresca-content-aeo-engine` | Engine | Active Queue-Only | `openclaw/bots/cresca-content-aeo-engine/` | Creates content, AEO assets, schema-rich pages, and authority building content. | `content-generation-engine`, `notebooklm-research-extractor`, `brand-ux-consistency-auditor` |
-| Lead Acquisition Engine | `lead-acquisition-engine` | Engine | Active Queue-Only | `openclaw/bots/lead-acquisition-engine/` | Builds lead capture systems and prospecting workflows. | `lead-acquisition-engine` |
 | Revenue Optimization Engine | `revenue-optimization-engine` | Engine | Active Queue-Only | `openclaw/bots/revenue-optimization-engine/` | Audits funnels, offers, and CRM follow-up to stop revenue leakage. | `revenue-optimization-engine`, `ghl-config-auditor`, `ghl-revenue-automation-builder` |
 | Weekly Command Center | `weekly-command-center` | Engine | Active Queue-Only | `openclaw/bots/weekly-command-center/` | Creates weekly operational summaries, KPI reviews, and executive decision support. | `weekly-command-center` |
 | Client Value Maximizer | `client-value-maximizer` | Engine | Active Queue-Only | `openclaw/bots/client-value-maximizer/` | Improves client onboarding, retention, upsells, and lifecycle value. | `client-value-maximizer`, `client-onboarding-system-builder`, `service-delivery-systemizer` |
@@ -123,7 +123,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 ### Lead Acquisition Engine
 **Slug:** `lead-acquisition-engine`  
 **Type:** Engine  
-**Status:** Active Queue-Only  
+**Status:** Active Runtime / Production Ready  
 **Path:** `openclaw/bots/lead-acquisition-engine/`  
 **Purpose:** Builds lead capture systems, prospecting workflows, scraping/enrichment workflows, outbound assets, scoring, and routing systems.  
 **Primary Workflows:** `/leads icp-define`, `/leads prospect`, `/leads scripts`  
@@ -131,7 +131,7 @@ This registry is the central index of OpenClaw bots, engines, orchestrators, and
 **Known Projects:** OpenClaw ecosystem  
 **Human-in-the-loop Required:** Yes  
 **Safety / Compliance Gates:** Outbound safety thresholds, no spamming  
-**Notes:** Active Queue-Only. Sourced prospects must show buying or spending intent.
+**Notes:** Active Runtime / Production Ready. Sourced prospects must show buying or spending intent.
 
 ### Revenue Optimization Engine
 **Slug:** `revenue-optimization-engine`  

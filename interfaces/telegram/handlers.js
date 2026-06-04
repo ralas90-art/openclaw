@@ -386,20 +386,23 @@ async function handleCommand(text, message) {
     const filename = text.trim().split(/\s+/)[1];
     return await handleInboxRead(filename);
   }
-  if (command === '/drive_latest' || command === '/drivelatest') return await handleDriveLatest();
-  if (command === '/drive_publish_latest' || command === '/drivepublishlatest') return await handleDrivePublishLatest();
-  if (command === '/drive_publish_pending' || command === '/drivepublishpending') return await handleDrivePublishPending();
-  if (command === '/drive_republish_latest' || command === '/driverepublishlatest') return await handleDriveRepublishLatest();
+  if (command === '/drive_latest' || command === '/drivelatest') return await handleDriveLatest(message);
+  if (command === '/drive_publish_latest' || command === '/drivepublishlatest') return await handleDrivePublishLatest(message);
+  if (command === '/drive_publish_pending' || command === '/drivepublishpending') return await handleDrivePublishPending(message);
+  if (command === '/drive_republish_latest' || command === '/driverepublishlatest') return await handleDriveRepublishLatest(message);
   if (command === '/drive_publish_file' || command === '/drivepublishfile') {
     const filename = text.trim().split(/\s+/)[1];
-    return await handleDrivePublishFile(filename);
+    return await handleDrivePublishFile(filename, message);
   }
   if (command === '/drive_publish_campaign' || command === '/drivepublishcampaign') {
     const campaignName = text.trim().split(/\s+/)[1];
-    return await handleDrivePublishCampaign(campaignName);
+    return await handleDrivePublishCampaign(campaignName, message);
   }
   if (command === '/run_bot' || command === '/run' || command === '/runtime_run') {
     return await handleRunBot(text, message);
+  }
+  if (command === '/run_publish' || command === '/rp' || command === '/run_bot_publish') {
+    return await handleRunPublish(text, message);
   }
   if (command === '/run_status' || command === '/runstatus') {
     return await handleRunStatus(message);
@@ -409,6 +412,81 @@ async function handleCommand(text, message) {
   }
   if (command === '/run_history' || command === '/runhistory') {
     return await handleRunHistory(message);
+  }
+  if (command === '/run_metrics' || command === '/runmetrics') {
+    return await handleRunMetrics(message);
+  }
+  if (command === '/run_errors' || command === '/runerrors') {
+    return await handleRunErrors(message);
+  }
+  if (command === '/run_config' || command === '/runconfig') {
+    return await handleRunConfig(message);
+  }
+  if (command === '/run_job' || command === '/runjob') {
+    const jobId = text.trim().split(/\s+/)[1];
+    return await handleRunJob(jobId, message);
+  }
+  if (command === '/run_search' || command === '/runsearch') {
+    const keyword = text.trim().substring(command.length).trim();
+    return await handleRunSearch(keyword, message);
+  }
+  if (command === '/run_by_bot' || command === '/runbybot') {
+    const botSlug = text.trim().split(/\s+/)[1];
+    return await handleRunByBot(botSlug, message);
+  }
+  if (command === '/run_reindex' || command === '/runreindex') {
+    return await handleRunReindex(message);
+  }
+  if (command === '/run_permissions' || command === '/runpermissions') {
+    return await handleRunPermissions(message);
+  }
+  if (command === '/run_roles' || command === '/runroles') {
+    return await handleRunRoles(message);
+  }
+  if (command === '/my_role' || command === '/myrole') {
+    return await handleMyRole(message);
+  }
+  if (command === '/preset_list' || command === '/presetlist') {
+    return await handlePresetList(message);
+  }
+  if (command === '/preset_info' || command === '/presetinfo') {
+    const presetId = text.trim().split(/\s+/)[1];
+    return await handlePresetInfo(presetId, message);
+  }
+  if (command === '/run_preset' || command === '/runpreset') {
+    return await handleRunPreset(text, message);
+  }
+  if (command === '/run_preset_publish' || command === '/runpresetpublish') {
+    return await handleRunPresetPublish(text, message);
+  }
+  if (command === '/approval_list' || command === '/approvallist') {
+    return await handleApprovalList(message);
+  }
+  if (command === '/approval_info' || command === '/approvalinfo') {
+    const approvalId = text.trim().split(/\s+/)[1];
+    return await handleApprovalInfo(approvalId, message);
+  }
+  if (command === '/approve_run' || command === '/approverun') {
+    const approvalId = text.trim().split(/\s+/)[1];
+    return await handleApproveRun(approvalId, message);
+  }
+  if (command === '/reject_run' || command === '/rejectrun') {
+    const approvalId = text.trim().split(/\s+/)[1];
+    return await handleRejectRun(approvalId, message);
+  }
+  if (command === '/approval_history' || command === '/approvalhistory') {
+    return await handleApprovalHistory(message);
+  }
+  if (command === '/approval_search' || command === '/approvalsearch') {
+    const keyword = text.trim().substring(command.length).trim();
+    return await handleApprovalSearch(keyword, message);
+  }
+  if (command === '/approval_by_status' || command === '/approvalbystatus') {
+    const status = text.trim().split(/\s+/)[1];
+    return await handleApprovalByStatus(status, message);
+  }
+  if (command === '/approval_cleanup_expired' || command === '/approvalcleanupexpired') {
+    return await handleApprovalCleanupExpired(message);
   }
 
 
@@ -453,9 +531,41 @@ async function handleCommand(text, message) {
 
 function handleHelp() {
   return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)
+/run_publish <bot_slug> <user_request> - Run bot AND publish result to Google Drive atomically (also /rp, /run_bot_publish)
 /run_status - Inspect runtime health and config
 /run_latest - Inspect details of the latest result
-/run_history - View recent execution history\n\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflow:\n  1. /run_bot revenue-master-orchestrator <user_request>\n     or /run_bot content-forge <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):\n   /leads prospect\n   Target Location: Nassau County\n   Platform Focus: Google Ads\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
+/run_history - View recent execution history
+/run_metrics - View execution and publishing metrics (also /runmetrics)
+/run_errors - View recent sanitized runtime error logs (also /runerrors)
+/run_config - View safe runtime configuration (also /runconfig)
+/run_job <job_id> - Inspect one runtime job by ID (also /runjob)
+/run_search <keyword> - Search runtime jobs by keyword (also /runsearch)
+/run_by_bot <bot_slug> - View recent jobs for a specific approved bot (also /runbybot)
+/run_reindex - Rebuild the job index from logs and results (also /runreindex)
+/run_permissions - Shows runtime command permissions (also /runpermissions)
+/run_roles - Shows safe role system summary (also /runroles)
+/my_role - Shows the current user's effective role and capabilities (also /myrole)
+/preset_list - Show all available presets (also /presetlist)
+/preset_info <preset_id> - View detailed preset configuration (also /presetinfo)
+/run_preset <preset_id> <input> - Run preset using configured bot and template (also /runpreset)
+/run_preset_publish <preset_id> <input> - Run preset and publish generated file atomically (also /runpresetpublish)
+/approval_list - Show pending approvals (also /approvallist)
+/approval_info <approval_id> - Show details of one pending approval (also /approvalinfo)
+/approve_run <approval_id> - Approve and execute pending run (also /approverun)
+/reject_run <approval_id> - Reject pending run (also /rejectrun)
+/approval_history - Shows recent approval activity (also /approvalhistory)
+/approval_search <keyword> - Searches approval records by keyword (also /approvalsearch)
+/approval_by_status <status> - Lists approvals by status (also /approvalbystatus)
+/approval_cleanup_expired - Admin-only maintenance command to clean up expired pending approvals (also /approvalcleanupexpired)
+` +
+`\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflows:\n  Manual:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\n  Controlled (single command):\n  /run_publish content-forge <user_request>\n  /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n   Controlled Run+Publish:\n   /run_publish content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n   Controlled Run+Publish:\n   /run_publish revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):
+   /leads prospect
+   Target Location: Nassau County
+   Platform Focus: Google Ads
+   Runtime Execution:
+   /run_bot lead-acquisition-engine Create a lead acquisition plan for cleaning companies in Suffolk County
+   Controlled Run+Publish:
+   /run_publish lead-acquisition-engine Create a local prospecting plan for solar installers in Florida\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
 
 function getSuggestedFollowUp(botSlug, workflow) {
@@ -656,6 +766,9 @@ async function handleReplay(args) {
 }
 
 async function handleRunBot(text, message) {
+  const { generateRuntimeJobId } = require('../../openclaw/runtime/runtime-job-id');
+  const jobId = generateRuntimeJobId();
+  
   const trimmed = text.trim();
   const commandWord = trimmed.split(/\s+/)[0];
   const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
@@ -674,8 +787,109 @@ async function handleRunBot(text, message) {
 
   const senderChatId = message.chat?.id || '';
 
-  const result = await runtimeExecutor.runBot(botSlug, userRequest, senderChatId);
+  const result = await runtimeExecutor.runBot(botSlug, userRequest, senderChatId, jobId);
   return result.message;
+}
+
+/**
+ * /run_publish <bot_slug> <user_request>
+ * Admin-only. Atomically runs an approved bot and publishes the EXACT generated
+ * file to Google Drive in a single controlled flow.
+ * Aliases: /rp, /run_bot_publish
+ */
+async function handleRunPublish(text, message, approvalId = null) {
+  // 1. Authorization check — admin only, before any execution
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_publish', message);
+  if (!permCheck.allowed) {
+    const { generateRuntimeJobId } = require('../../openclaw/runtime/runtime-job-id');
+    const jobId = generateRuntimeJobId();
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: null,
+        status: 'failure',
+        errorCategory: 'unauthorized',
+        safeMessage: 'Access Denied: You are not authorized to execute run_publish.'
+      });
+    } catch (logErr) {}
+    return formatPermissionDenied('/run_publish', permCheck.reason, message);
+  }
+
+  // 2. Parse bot slug and user request
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let botSlug = '';
+  let userRequest = '';
+  if (firstSpaceIdx === -1) {
+    botSlug = commandTextWithoutCmd;
+    userRequest = '';
+  } else {
+    botSlug = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    userRequest = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  // 3. Reject missing bot slug
+  if (!botSlug) {
+    return [
+      '❌ Missing bot slug.',
+      '',
+      'Usage: /run_publish <bot_slug> <user_request>',
+      'Example: /run_publish content-forge Create 5 TikTok hooks for Cresca OS targeting cleaning business owners'
+    ].join('\n');
+  }
+
+  // 4. Reject empty request
+  if (!userRequest || !userRequest.trim()) {
+    return [
+      `❌ Missing request details for bot: ${botSlug}`,
+      '',
+      `Usage: /run_publish ${botSlug} <user_request>`,
+      `Example: /run_publish ${botSlug} Create 5 TikTok hooks for Cresca OS targeting cleaning business owners`
+    ].join('\n');
+  }
+
+  // Check if botSlug is actually allowed before creating approval record
+  const { isBotAllowed } = require('../../openclaw/runtime/runtime-allowlist');
+  if (!isBotAllowed(botSlug)) {
+    return `❌ Rejection: Bot '${botSlug}' is not approved for runtime execution.`;
+  }
+
+  // 5. Intercept to create approval
+  if (!approvalId && process.env.OPENCLAW_NO_APPROVAL_GATE !== 'true') {
+    const { createApproval } = require('../../openclaw/runtime/runtime-approvals');
+    const record = createApproval(
+      message.chat?.id,
+      'run_publish',
+      'publish',
+      botSlug,
+      null,
+      userRequest.substring(0, 200),
+      { text, message }
+    );
+
+    return [
+      `Approval Required`,
+      `Approval ID: ${record.approvalId}`,
+      `Command: run_publish`,
+      `Bot: ${record.botSlug}`,
+      `Preview: ${record.inputPreview}`,
+      `Expires: ${new Date(record.expiresAt).toISOString()}`,
+      `To approve:`,
+      ` /approve_run ${record.approvalId}`,
+      ``,
+      `To reject:`,
+      ` /reject_run ${record.approvalId}`
+    ].join('\n');
+  }
+
+  return await executeRunPublish(text, message, approvalId);
 }
 
 function isChatAuthorized(message) {
@@ -685,9 +899,10 @@ function isChatAuthorized(message) {
 }
 
 async function handleRunStatus(message) {
-  const senderChatId = message.chat?.id || 'unknown';
-  if (!isChatAuthorized(message)) {
-    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_status', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_status', permCheck.reason, message);
   }
 
   const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
@@ -699,19 +914,60 @@ async function handleRunStatus(message) {
   msg += "• *Approved Bots:* " + status.approvedBots.join(', ') + "\n";
   msg += "• *Outbox Result Count:* " + status.outboxResultCount + "\n";
   msg += "• *Latest Result File:* `" + status.latestResultFile + "`\n";
-  msg += "• *Drive Publish Mode:* `" + status.drivePublishMode + "`\n\n";
-  msg += "*Recommended next commands:*\n";
-  msg += "• `/run_latest` — View details of the latest result\n";
-  msg += "• `/run_history` — View recent execution history\n";
-  msg += "• `/drive_publish_pending` — Publish any pending files";
+  msg += "• *Drive Publish Mode:* `" + status.drivePublishMode + "`\n";
+  msg += "• *Presets Enabled:* `" + status.presetsEnabled + "`\n";
+  msg += "• *Preset Count:* `" + status.presetCount + "`\n";
+  msg += "• *Publish Presets:* `" + status.publishingPresetsEnabled + "`\n";
+  msg += "• *Permission Tiers:* `yes`\n";
+  msg += "• *Access Model:* `" + status.accessModel + "`\n";
+  msg += "• *Role System:* `" + status.roleSystem + "`\n";
+  msg += "• *Self-Approval:* `" + status.selfApprovalProtection + "`\n";
+  msg += "• *External Actions:* `no`\n";
+  msg += "• *Approval Gates:* `" + (status.approvalGatesEnabled ? 'Enabled' : 'Disabled') + "`\n";
+  if (status.approvalGatesEnabled) {
+    msg += "• *Approval TTL:* `" + status.approvalTtlMinutes + " minutes`\n";
+    msg += "• *Gated Tiers:* `" + status.gatedTiers.join(', ') + "`\n";
+    msg += "• *Pending Approvals:* `" + status.pendingApprovalsCount + "`\n";
+    msg += "• *Approval Audit:* `" + status.approvalAudit + "`\n";
+    msg += "• *Approval Search:* `" + status.approvalSearch + "`\n";
+    msg += "• *Expired Cleanup:* `" + status.expiredCleanup + "`\n";
+  }
+  msg += "\n";
+
+  if (status.controlledPublishing && status.controlledPublishing.enabled) {
+    const cp = status.controlledPublishing;
+    msg += "🚀 *Controlled Publishing:* Enabled\n";
+    msg += "• *Command:* `" + cp.command + "`\n";
+    msg += "• *Aliases:* " + cp.aliases.map(a => "`" + a + "`").join(', ') + "\n";
+    msg += "• *Manual Publishing:* `" + status.manualPublishing + "`\n\n";
+  }
+
+  msg += "*Next commands:*\n";
+  msg += "• `/run_latest` — Latest result\n";
+  msg += "• `/run_history` — Recent history\n";
+  msg += "• `/run_publish` <bot> <req> — Run + publish\n";
+  msg += "• `/drive_publish_pending` — Publish pending";
   
   return msg;
 }
 
+function extractJobIdFromFile(filePath) {
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const match = content.match(/## Job ID\r?\n(rt_[a-zA-Z0-9_]+)/);
+      if (match) return match[1];
+    }
+  } catch (e) {}
+  return null;
+}
+
 async function handleRunLatest(message) {
-  const senderChatId = message.chat?.id || 'unknown';
-  if (!isChatAuthorized(message)) {
-    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_status', permCheck.reason, message);
   }
 
   const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
@@ -720,21 +976,36 @@ async function handleRunLatest(message) {
     return "ℹ️ *No Runtime Results Found*\n\nNo runtime results exist in `openclaw/outbox/telegram-responses/` yet. Run a bot using `/run_bot`.";
   }
 
+  const path = require('path');
+  let workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!workspaceRoot || !require('fs').existsSync(path.join(workspaceRoot, 'openclaw'))) {
+    workspaceRoot = path.join(__dirname, '../../');
+  }
+  const filePath = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses', latest.filename);
+  const jobId = extractJobIdFromFile(filePath);
+
   let msg = "📄 *Latest Runtime Result*\n\n";
   msg += "• *File:* `" + latest.filename + "`\n";
+  if (jobId) {
+    msg += "• *Job ID:* `" + jobId + "`\n";
+  }
   msg += "• *Bot:* `" + latest.botSlug + "`\n";
   msg += "• *Timestamp:* " + latest.timestamp + "\n\n";
   msg += "*Summary:*\n" + latest.summary + "\n\n";
   msg += "*Recommended next command:*\n";
   msg += "• `/drive_publish_pending` — Publish this result to Google Drive";
+  if (jobId) {
+    msg += "\n• `/run_job " + jobId + "` — Inspect this job execution trace";
+  }
   
   return msg;
 }
 
 async function handleRunHistory(message) {
-  const senderChatId = message.chat?.id || 'unknown';
-  if (!isChatAuthorized(message)) {
-    return `❌ Access Denied: You are not authorized to inspect runtime state (Your Chat ID: ${senderChatId}).`;
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_history', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_status', permCheck.reason, message);
   }
 
   const runtimeInspector = require('../../openclaw/runtime/runtime-inspector');
@@ -743,9 +1014,21 @@ async function handleRunHistory(message) {
     return "ℹ️ *No Runtime History Found*\n\nNo runtime execution history exists.";
   }
 
+  const path = require('path');
+  let workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!workspaceRoot || !require('fs').existsSync(path.join(workspaceRoot, 'openclaw'))) {
+    workspaceRoot = path.join(__dirname, '../../');
+  }
+
   let msg = "📜 *Recent Runtime History (Last 5)*\n\n";
   history.forEach((item, index) => {
+    const filePath = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses', item.filename);
+    const jobId = extractJobIdFromFile(filePath);
+
     msg += (index + 1) + ". `" + item.filename + "`\n";
+    if (jobId) {
+      msg += "   • *Job ID:* `" + jobId + "`\n";
+    }
     msg += "   • *Bot:* `" + item.botSlug + "` | *Time:* " + item.timestamp + "\n";
     msg += "   • *Drive Status:* `" + item.publishStatus.toUpperCase() + "`\n\n";
   });
@@ -757,8 +1040,450 @@ async function handleRunHistory(message) {
   return msg;
 }
 
-module.exports = { handleCommand };
+async function handleRunMetrics(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_metrics', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_metrics', permCheck.reason, message);
+  }
 
+  const { getMetrics } = require('../../openclaw/runtime/runtime-metrics');
+  const metrics = getMetrics();
+
+  const formatTime = (t) => {
+    if (!t) return 'None';
+    const datePart = t.substring(0, 10);
+    const timePart = t.substring(11, 19);
+    return `${datePart} ${timePart}`;
+  };
+
+  let msg = "📊 *OpenClaw Runtime Metrics*\n\n";
+  msg += "• *Total Executions Tracked:* `" + metrics.totalExecutions + "`\n";
+  msg += "• *Successful /run_bot Executions:* `" + metrics.successRunBot + "`\n";
+  msg += "• *Failed /run_bot Executions:* `" + metrics.failedRunBot + "`\n";
+  msg += "• *Successful /run_publish Executions:* `" + metrics.successRunPublish + "`\n";
+  msg += "• *Failed /run_publish Executions:* `" + metrics.failedRunPublish + "`\n";
+  if (metrics.successRunPreset !== undefined) {
+    msg += "• *Successful /run_preset Executions:* `" + metrics.successRunPreset + "`\n";
+    msg += "• *Failed /run_preset Executions:* `" + metrics.failedRunPreset + "`\n";
+    msg += "• *Successful /run_preset_publish Executions:* `" + metrics.successRunPresetPublish + "`\n";
+    msg += "• *Failed /run_preset_publish Executions:* `" + metrics.failedRunPresetPublish + "`\n";
+  }
+  msg += "• *Last Successful Run:* " + formatTime(metrics.lastSuccessTime) + "\n";
+  msg += "• *Last Failed Run:* " + formatTime(metrics.lastFailedTime) + "\n";
+  msg += "• *Most Used Bot:* `" + (metrics.mostUsedBot || 'None') + "`\n";
+  msg += "• *Drive Publishing:* `" + metrics.publishSuccess + "` success / `" + metrics.publishFailure + "` failure\n";
+  if (metrics.approvalHistoryCount !== undefined) {
+    msg += "• *Approval History Count:* `" + metrics.approvalHistoryCount + "`\n";
+    msg += "• *Pending Approvals:* `" + metrics.pendingApprovals + "`\n";
+    msg += "• *Approved Approvals:* `" + metrics.approvedApprovals + "`\n";
+    msg += "• *Rejected Approvals:* `" + metrics.rejectedApprovals + "`\n";
+    msg += "• *Expired Approvals:* `" + metrics.expiredApprovals + "`\n";
+    msg += "• *Executed Approvals:* `" + metrics.executedApprovals + "`\n";
+    msg += "• *Failed Approvals:* `" + metrics.failedApprovals + "`\n";
+  } else if (metrics.pendingApprovalsCount !== undefined) {
+    msg += "• *Pending Approvals:* `" + metrics.pendingApprovalsCount + "`\n";
+    msg += "• *Approved Approvals:* `" + metrics.approvedApprovalsCount + "`\n";
+    msg += "• *Rejected Approvals:* `" + metrics.rejectedApprovalsCount + "`\n";
+    msg += "• *Expired Approvals:* `" + metrics.expiredApprovalsCount + "`\n";
+    msg += "• *Approval Execution Failures:* `" + metrics.approvalExecutionFailureCount + "`\n";
+  }
+  msg += "\n";
+  
+  msg += "*Recommended next commands:*\n";
+  msg += "• `/run_status` — Inspect runtime health and config\n";
+  msg += "• `/run_errors` — View recent sanitized error logs\n";
+  msg += "• `/run_history` — View recent execution history";
+
+  return msg;
+}
+
+async function handleRunErrors(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_errors', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_errors', permCheck.reason, message);
+  }
+
+  const { getRecentErrors } = require('../../openclaw/runtime/runtime-metrics');
+  const errors = getRecentErrors(5);
+
+  if (errors.length === 0) {
+    return "ℹ️ *No Runtime Errors Found*\n\nNo recent runtime errors found.";
+  }
+
+  const formatTime = (t) => {
+    if (!t) return 'Unknown';
+    const datePart = t.substring(0, 10);
+    const timePart = t.substring(11, 19);
+    return `${datePart} ${timePart}`;
+  };
+
+  let msg = "🚨 *Recent Runtime Errors (Last 5)*\n\n";
+  errors.forEach((err, idx) => {
+    msg += (idx + 1) + ". *Time:* `" + formatTime(err.timestamp) + "` | *Cmd:* `" + err.command + "`" + (err.botSlug ? " | *Bot:* `" + err.botSlug + "`" : "") + "\n";
+    if (err.jobId) {
+      msg += "   • *Job ID:* `" + err.jobId + "`\n";
+    }
+    msg += "   • *Category:* `" + err.errorCategory + "`\n";
+    msg += "   • *Error:* " + err.safeMessage + "\n\n";
+  });
+
+  return msg.trim();
+}
+
+async function handleRunConfig(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_config', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_config', permCheck.reason, message);
+  }
+
+  const { getSafeConfig } = require('../../openclaw/runtime/runtime-metrics');
+  const cfg = getSafeConfig();
+
+  let msg = "⚙️ *OpenClaw Safe Config*\n\n";
+  msg += "• *Runtime Status:* `" + cfg.status.toUpperCase() + "`\n";
+  msg += "• *Model Provider:* `" + cfg.modelProvider + "`\n";
+  msg += "• *Default Model:* `" + cfg.defaultModel + "`\n";
+  msg += "• *Approved Bots:* " + cfg.approvedBots.join(', ') + "\n";
+  msg += "• *Controlled Publishing:* `" + (cfg.controlledPublishingEnabled ? 'Enabled' : 'Disabled') + "`\n";
+  msg += "• *Manual Publishing:* `" + (cfg.manualPublishingEnabled ? 'Enabled' : 'Disabled') + "`\n";
+  msg += "• *Outbox Result Count:* `" + cfg.outboxResultCount + "`\n";
+  msg += "• *Result Directory:* `" + cfg.runtimeResultDirectoryLabel + "`\n";
+  msg += "• *Drive Publishing Mode:* `" + cfg.drivePublishingMode + "`\n";
+  msg += "• *Permission Tiers:* `Enabled`\n";
+  msg += "• *Access Model:* `" + cfg.accessModel + "`\n";
+  msg += "• *Role System:* `" + cfg.roleSystem + "`\n";
+  msg += "• *Self-Approval:* `" + cfg.selfApprovalProtection + "`\n";
+  msg += "• *External Actions:* `Disabled`\n";
+  msg += "• *Approval Gates:* `" + cfg.approvalGates + "`\n";
+  if (cfg.approvalGates === 'Enabled') {
+    msg += "• *Approval TTL:* `" + cfg.approvalTtlMinutes + " minutes`\n";
+    msg += "• *Gated Tiers:* `" + cfg.gatedTiers.join(', ') + "`\n";
+    msg += "• *Pending Approvals:* `" + cfg.pendingApprovalsCount + "`\n";
+    msg += "• *Approval Audit:* `" + cfg.approvalAudit + "`\n";
+    msg += "• *Approval Search:* `" + cfg.approvalSearch + "`\n";
+    msg += "• *Expired Cleanup:* `" + cfg.expiredCleanup + "`\n";
+  }
+  msg += "• *Enabled Commands:* " + cfg.enabledCommands.map(c => "`" + c + "`").join(', ') + "\n";
+
+  if (msg.length > 4000) {
+    msg = msg.substring(0, 3950) + "\n\n... [Output truncated]";
+  }
+
+  return msg;
+}
+
+async function handleRunJob(jobId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_job', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_job', permCheck.reason, message);
+  }
+
+  if (!jobId) {
+    return `❌ Usage: /run_job <job_id>\nExample: /run_job rt_20260604_143022_a7f3c9`;
+  }
+
+  const { buildJobSummary } = require('../../openclaw/runtime/runtime-job-inspector');
+  return buildJobSummary(jobId.trim());
+}
+
+async function handleRunSearch(keyword, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_search', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_search', permCheck.reason, message);
+  }
+
+  if (!keyword || !keyword.trim()) {
+    return `❌ Usage: /run_search <keyword>\nExample: /run_search cleaning business`;
+  }
+
+  const { searchJobs } = require('../../openclaw/runtime/runtime-job-index');
+  const results = searchJobs(keyword.trim());
+  if (results.length === 0) {
+    return "No runtime jobs found matching that search.";
+  }
+
+  let msg = `🔍 *Search Results for "${keyword.trim()}" (Max 5)*\n\n`;
+  results.forEach(job => {
+    msg += `🆔 *Job ID:* \`${job.jobId}\`\n`;
+    msg += `• *Bot:* \`${job.botSlug || 'unknown'}\`\n`;
+    msg += `• *Status:* \`${job.status.toUpperCase()}\`\n`;
+    msg += `• *File:* ${job.filename ? '`' + job.filename + '`' : '`none`'}\n`;
+    msg += `• *Published:* \`${job.published ? 'yes' : 'no'}\`\n`;
+    if (job.summaryPreview) {
+      msg += `• *Summary:* ${job.summaryPreview}\n`;
+    }
+    msg += `• *Next Command:* /run_job ${job.jobId}\n\n`;
+  });
+  return msg.trim();
+}
+
+async function handleRunByBot(botSlug, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_by_bot', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_by_bot', permCheck.reason, message);
+  }
+
+  if (!botSlug || !botSlug.trim()) {
+    return `❌ Usage: /run_by_bot <bot_slug>\nExample: /run_by_bot content-forge`;
+  }
+
+  const cleanSlug = botSlug.trim();
+  const { isBotAllowed } = require('../../openclaw/runtime/runtime-allowlist');
+  if (!isBotAllowed(cleanSlug)) {
+    return `❌ Rejection: Bot '${cleanSlug}' is not in the approved runtime bots list.`;
+  }
+
+  const { getJobsByBot } = require('../../openclaw/runtime/runtime-job-index');
+  const results = getJobsByBot(cleanSlug);
+  if (results.length === 0) {
+    return `No runtime jobs found for bot '${cleanSlug}'.`;
+  }
+
+  let msg = `🤖 *Recent Jobs for "${cleanSlug}" (Max 5)*\n\n`;
+  results.forEach(job => {
+    msg += `🆔 *Job ID:* \`${job.jobId}\`\n`;
+    msg += `• *Command:* \`${job.command || 'unknown'}\`\n`;
+    msg += `• *Status:* \`${job.status.toUpperCase()}\`\n`;
+    msg += `• *File:* ${job.filename ? '`' + job.filename + '`' : '`none`'}\n`;
+    msg += `• *Published:* \`${job.published ? 'yes' : 'no'}\`\n`;
+    msg += `• *Created:* \`${job.created || 'unknown'}\`\n`;
+    msg += `• *Next Command:* /run_job ${job.jobId}\n\n`;
+  });
+  return msg.trim();
+}
+
+async function handleRunReindex(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_reindex', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_reindex', permCheck.reason, message);
+  }
+
+  const { rebuildJobIndex } = require('../../openclaw/runtime/runtime-job-index');
+  const stats = rebuildJobIndex();
+
+  let msg = `🔄 *Job Index Rebuilt Successfully*\n\n`;
+  msg += `• *Jobs Indexed:* \`${stats.jobsIndexed}\`\n`;
+  msg += `• *Events Scanned:* \`${stats.eventsScanned}\`\n`;
+  msg += `• *Result Files Scanned:* \`${stats.resultFilesScanned}\`\n`;
+  msg += `• *Errors Skipped:* \`${stats.errorsSkipped}\`\n`;
+  msg += `• *Timestamp:* \`${stats.timestamp}\`\n\n`;
+  msg += `Next command: /run_search <keyword>`;
+  return msg;
+}
+
+async function handleRunPermissions(message) {
+  const { requireCommandPermission, formatPermissionDenied, getPermissionSummary } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_permissions', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_permissions', permCheck.reason, message);
+  }
+  return getPermissionSummary();
+}
+
+async function handleRunRoles(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_roles', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_roles', permCheck.reason, message);
+  }
+
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const summary = roles.getRoleSummary();
+
+  let msg = `👥 *OpenClaw Role Configuration Summary*\n\n`;
+  msg += `• *Role System:* Enabled\n`;
+  msg += `• *Backward Compatibility Fallback:* ${summary.fallbackActive ? 'Active' : 'Inactive'}\n\n`;
+  msg += `*Role Counts:*\n`;
+  msg += `• *super_admin:* ${summary.super_admin}\n`;
+  msg += `• *operator:* ${summary.operator}\n`;
+  msg += `• *publisher:* ${summary.publisher}\n`;
+  msg += `• *approver:* ${summary.approver}\n`;
+  msg += `• *viewer:* ${summary.viewer}\n\n`;
+  msg += `*Capability groups:* Enabled\n`;
+  msg += `*Next command:* /run_permissions`;
+  return msg;
+}
+
+async function handleMyRole(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/my_role', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/my_role', permCheck.reason, message);
+  }
+
+  const senderChatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const userRoles = roles.getRolesForChatId(senderChatId);
+  const userCaps = Array.from(roles.getEffectiveCapabilities(senderChatId));
+
+  let msg = `👤 *Your Effective Role & Capabilities*\n\n`;
+  msg += `• *Your Roles:* ${userRoles.length > 0 ? userRoles.join(', ') : 'none'}\n`;
+  msg += `• *Effective Capabilities:* ${userCaps.length > 0 ? userCaps.join(', ') : 'none'}\n`;
+  msg += `• *Access Model:* role-based`;
+  return msg;
+}
+
+async function handlePresetList(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/preset_list', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/preset_list', permCheck.reason, message);
+  }
+
+  const { listPresets } = require('../../openclaw/runtime/runtime-presets');
+  const presets = listPresets();
+
+  if (presets.length === 0) {
+    return "No runtime presets configured.";
+  }
+
+  let msg = "📋 *OpenClaw Runtime Presets*\n\n";
+  for (const preset of presets) {
+    msg += `• *ID:* \`${preset.id}\`\n`;
+    msg += `  *Bot:* \`${preset.bot}\` | *Mode:* \`${preset.mode}\`\n`;
+    msg += `  *Desc:* ${preset.safetyNotes || 'No description'}\n`;
+    msg += `  *Usage:* \`${preset.example}\`\n\n`;
+  }
+
+  msg += "Use `/preset_info <preset_id>` to view full details.";
+  return msg;
+}
+
+async function handlePresetInfo(presetId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/preset_info', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/preset_info', permCheck.reason, message);
+  }
+
+  if (!presetId || !presetId.trim()) {
+    return "❌ Missing preset ID.\nUsage: /preset_info <preset_id>\nExample: /preset_info cleaning_lead_plan";
+  }
+
+  const { getPreset } = require('../../openclaw/runtime/runtime-presets');
+  const preset = getPreset(presetId.trim());
+
+  if (!preset) {
+    return `❌ Rejection: Unknown preset ID '${presetId.trim()}'. Use /preset_list to see available options.`;
+  }
+
+  let msg = `🎯 *Preset Info: ${preset.name}*\n\n`;
+  msg += `• *Preset ID:* \`${presetId.trim()}\`\n`;
+  msg += `• *Bot Slug:* \`${preset.bot}\`\n`;
+  msg += `• *Mode:* \`${preset.mode}\`\n`;
+  msg += `• *Variables:* [${preset.variables.map(v => `\`${v}\``).join(', ')}]\n`;
+  msg += `• *Safety Notes:* ${preset.safetyNotes || 'None'}\n`;
+  msg += `• *Example:* \`${preset.example}\`\n`;
+  msg += `• *Allowed for Publishing:* \`${preset.allowedPublish ? 'yes' : 'no'}\`\n\n`;
+  msg += `*Template:* \n\`\`\`\n${preset.template}\n\`\`\`\n\n`;
+  msg += `*Run Command:* \n\`/run_preset ${presetId.trim()} <input>\``;
+  if (preset.allowedPublish) {
+    msg += `\n\`/run_preset_publish ${presetId.trim()} <input>\``;
+  }
+  return msg;
+}
+
+async function handleRunPreset(text, message) {
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let presetId = '';
+  let input = '';
+  if (firstSpaceIdx === -1) {
+    presetId = commandTextWithoutCmd;
+    input = '';
+  } else {
+    presetId = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    input = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  const { runPreset } = require('../../openclaw/runtime/runtime-presets');
+  const senderChatId = message.chat?.id || '';
+  const result = await runPreset(presetId, input, senderChatId);
+  return result.message;
+}
+
+async function handleRunPresetPublish(text, message, approvalId = null) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/run_preset_publish', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/run_preset_publish', permCheck.reason, message);
+  }
+
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let presetId = '';
+  let input = '';
+  if (firstSpaceIdx === -1) {
+    presetId = commandTextWithoutCmd;
+    input = '';
+  } else {
+    presetId = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    input = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  // Reject missing preset ID
+  if (!presetId) {
+    return `❌ Missing preset ID.\nUsage: /run_preset_publish <preset_id> <input>\nExample: /run_preset_publish publish_content_hooks Cresca OS`;
+  }
+
+  // Reject empty input
+  if (!input || !input.trim()) {
+    return `❌ Rejection: Input parameters cannot be empty.\nUsage: /run_preset_publish ${presetId} <input>`;
+  }
+
+  // Confirm preset is allowed for publishing
+  const { getPreset } = require('../../openclaw/runtime/runtime-presets');
+  const preset = getPreset(presetId);
+  if (!preset) {
+    return `❌ Rejection: Unknown preset ID '${presetId}'. Use /preset_list to see available options.`;
+  }
+  if (!preset.allowedPublish) {
+    return `❌ Rejection: Preset '${presetId}' is not authorized for direct publishing. Only presets configured with allowedPublish=true can use /run_preset_publish.`;
+  }
+
+  if (!approvalId && process.env.OPENCLAW_NO_APPROVAL_GATE !== 'true') {
+    // Intercept to create approval
+    const { createApproval } = require('../../openclaw/runtime/runtime-approvals');
+    const record = createApproval(
+      message.chat?.id,
+      'run_preset_publish',
+      'publish',
+      null,
+      presetId,
+      input.substring(0, 200),
+      { text, message }
+    );
+
+    return [
+      `Approval Required`,
+      `Approval ID: ${record.approvalId}`,
+      `Command: run_preset_publish`,
+      `Preset: ${record.presetId}`,
+      `Preview: ${record.inputPreview}`,
+      `Expires: ${new Date(record.expiresAt).toISOString()}`,
+      `To approve:`,
+      ` /approve_run ${record.approvalId}`,
+      ``,
+      `To reject:`,
+      ` /reject_run ${record.approvalId}`
+    ].join('\n');
+  }
+
+  return await executeRunPresetPublish(text, message, approvalId);
+}
 
 // ------------------------------------------
 // Google Drive Publisher Command Handlers
@@ -794,7 +1519,13 @@ function getLatestManifest() {
 }
 
 
-async function handleDriveLatest() {
+async function handleDriveLatest(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_latest', permCheck.reason, message);
+  }
+
   const manifest = getLatestManifest();
   if (!manifest) {
     return "No Google Drive publishing history found yet.\nRun /drive_publish_latest to publish your first asset!";
@@ -895,13 +1626,13 @@ function getActiveRoots() {
   // 3. Hardcoded /app fallback (Railway)
   const railwayRoot = '/app';
   if (isValidRepoRoot(railwayRoot)) {
-    roots.push(path.resolve(railwayRoot));
+    roots.push(railwayRoot);
   }
 
   // 4. process.cwd() fallback
   const cwdRoot = process.cwd();
   if (isValidRepoRoot(cwdRoot)) {
-    roots.push(path.resolve(cwdRoot));
+    roots.push(cwdRoot);
   }
 
   const unique = [...new Set(roots)];
@@ -981,7 +1712,13 @@ function getLatestOutputFile() {
   return candidates[0].path;
 }
 
-async function handleDrivePublishLatest() {
+async function handleDrivePublishLatest(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_publish_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_publish_latest', permCheck.reason, message);
+  }
+
   // Uses publishLatestToDrive() which includes manifest-based duplicate detection.
   // If already published, returns the existing Drive link instead of re-uploading.
   const result = await drivePublisher.publishLatestToDrive();
@@ -1024,7 +1761,13 @@ async function handleDrivePublishLatest() {
   return msg;
 }
 
-async function handleDrivePublishPending() {
+async function handleDrivePublishPending(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_publish_pending', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_publish_pending', permCheck.reason, message);
+  }
+
   // Finds and publishes only the latest unpublished output file.
   const result = await drivePublisher.publishPendingToDrive();
 
@@ -1059,40 +1802,98 @@ async function handleDrivePublishPending() {
   return msg;
 }
 
-async function handleDriveRepublishLatest() {
-  // Force re-uploads the latest file regardless of prior publish history.
-  const result = await drivePublisher.republishLatestToDrive();
-
-  if (result.status === 'no_file') {
-    return "No generated output file found to republish.";
+async function handleDriveRepublishLatest(message, approvalId = null) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_republish_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_republish_latest', permCheck.reason, message);
   }
 
-  if (result.status === 'error') {
-    return "❌ *Error:* " + result.message;
+  if (!approvalId && process.env.OPENCLAW_NO_APPROVAL_GATE !== 'true') {
+    const { createApproval } = require('../../openclaw/runtime/runtime-approvals');
+    const record = createApproval(
+      message.chat?.id,
+      'drive_republish_latest',
+      'publish',
+      null,
+      null,
+      'Force republishing of the latest output file.',
+      {}
+    );
+
+    return [
+      `Approval Required`,
+      `Approval ID: ${record.approvalId}`,
+      `Command: drive_republish_latest`,
+      `Preview: ${record.inputPreview}`,
+      `Expires: ${new Date(record.expiresAt).toISOString()}`,
+      `To approve:`,
+      ` /approve_run ${record.approvalId}`,
+      ``,
+      `To reject:`,
+      ` /reject_run ${record.approvalId}`
+    ].join('\n');
   }
 
-  let msg = "🔄 *Google Drive Force Republish Result*\n\n";
-  msg += "📄 *File:* `" + path.basename(result.file || '') + "`\n";
-  msg += "🚦 *Status:* `" + result.status.toUpperCase() + "`\n";
-
-  if (result.status === 'published') {
-    const m = result.manifest || {};
-    if (m.publish_mode === 'api' && m.drive_web_url) {
-      msg += "🔗 *Drive Link:* " + m.drive_web_url + "\n";
-    } else if (m.publish_mode === 'local' && m.drive_local_path) {
-      msg += "💻 *Local Path:* `" + m.drive_local_path + "`\n";
-      msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
-    }
-  } else if (result.status === 'dry_run') {
-    msg += "⚠️ *Dry Run (No Upload):* " + (result.manifest && result.manifest.error ? result.manifest.error : result.message);
-  } else {
-    msg += "❌ *Republish Failed:* " + result.message;
-  }
-
-  return msg;
+  return await executeDriveRepublishLatest(message, approvalId);
 }
 
-async function handleDrivePublishFile(filename) {
+async function executeDriveRepublishLatest(message, approvalId) {
+  const { transitionToExecuted, transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+  try {
+    const result = await drivePublisher.republishLatestToDrive();
+
+    if (result.status === 'no_file') {
+      transitionToExecutionFailed(approvalId, 'No generated output file found to republish.');
+      return "No generated output file found to republish.";
+    }
+
+    if (result.status === 'error') {
+      transitionToExecutionFailed(approvalId, result.message);
+      return "❌ *Error:* " + result.message;
+    }
+
+    let msg = "🔄 *Google Drive Force Republish Result*\n\n";
+    msg += "📄 *File:* `" + path.basename(result.file || '') + "`\n";
+    msg += "🚦 *Status:* `" + result.status.toUpperCase() + "`\n";
+
+    let driveLink = null;
+    if (result.status === 'published') {
+      const m = result.manifest || {};
+      if (m.publish_mode === 'api' && m.drive_web_url) {
+        msg += "🔗 *Drive Link:* " + m.drive_web_url + "\n";
+        driveLink = m.drive_web_url;
+      } else if (m.publish_mode === 'local' && m.drive_local_path) {
+        msg += "💻 *Local Path:* `" + m.drive_local_path + "`\n";
+        msg += "ℹ️ *Google Drive Desktop will sync this file to your Drive.*";
+        driveLink = m.drive_local_path;
+      }
+    } else if (result.status === 'dry_run') {
+      msg += "⚠️ *Dry Run (No Upload):* " + (result.manifest && result.manifest.error ? result.manifest.error : result.message);
+    } else {
+      msg += "❌ *Republish Failed:* " + result.message;
+    }
+
+    if (result.status === 'published' || result.status === 'dry_run') {
+      transitionToExecuted(approvalId, null, path.basename(result.file || ''), driveLink, msg);
+    } else {
+      transitionToExecutionFailed(approvalId, result.message || 'Republish failed');
+    }
+
+    return msg;
+  } catch (err) {
+    transitionToExecutionFailed(approvalId, err.message);
+    return `❌ Republish failed: ${err.message}`;
+  }
+}
+
+async function handleDrivePublishFile(filename, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_publish_file', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_publish_file', permCheck.reason, message);
+  }
+
   if (!filename) {
     return "Usage: /drive_publish_file <filename>\nExample: /drive_publish_file 2026-05-26_17-40-18_content-forge_image-prompts_result.md";
   }
@@ -1145,7 +1946,13 @@ async function handleDrivePublishFile(filename) {
   return msg;
 }
 
-async function handleDrivePublishCampaign(campaignName) {
+async function handleDrivePublishCampaign(campaignName, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/drive_publish_campaign', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/drive_publish_campaign', permCheck.reason, message);
+  }
+
   if (!campaignName) {
     return "Usage: /drive_publish_campaign <campaign_name>\nExample: /drive_publish_campaign batch-001-founder-demo-ad";
   }
@@ -1211,3 +2018,590 @@ async function handleDrivePublishCampaign(campaignName) {
 
   return msg;
 }
+
+// ------------------------------------------
+// Core Executions for Gated Commands
+// ------------------------------------------
+
+async function executeRunPublish(text, message, approvalId) {
+  const startTime = Date.now();
+  const { generateRuntimeJobId } = require('../../openclaw/runtime/runtime-job-id');
+  const jobId = generateRuntimeJobId();
+
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let botSlug = '';
+  let userRequest = '';
+  if (firstSpaceIdx === -1) {
+    botSlug = commandTextWithoutCmd;
+    userRequest = '';
+  } else {
+    botSlug = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    userRequest = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  const senderChatId = message.chat?.id || '';
+
+  let execResult;
+  try {
+    execResult = await runtimeExecutor.runBot(botSlug, userRequest, senderChatId, jobId);
+  } catch (err) {
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'failure',
+        durationMs: Date.now() - startTime,
+        errorCategory: 'internal_error',
+        safeMessage: `Runtime execution failed unexpectedly: ${err.message}`
+      });
+    } catch (logErr) {}
+    const { transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecutionFailed(approvalId, `Runtime execution failed unexpectedly: ${err.message}`);
+    return `❌ Runtime execution failed unexpectedly. Please try again or contact admin.`;
+  }
+
+  if (execResult.status !== 'success') {
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'failure',
+        durationMs: Date.now() - startTime,
+        errorCategory: execResult.status === 'unauthorized' ? 'unauthorized' : 'validation_failed',
+        safeMessage: execResult.message
+      });
+    } catch (logErr) {}
+    const { transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecutionFailed(approvalId, execResult.message);
+    return execResult.message;
+  }
+
+  const generatedFilename = execResult.filename;
+  const botName = execResult.botName || botSlug;
+
+  let workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!workspaceRoot || !fs.existsSync(path.join(workspaceRoot, 'openclaw'))) {
+    workspaceRoot = path.join(__dirname, '../../');
+  }
+  const responsesDir = path.resolve(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses');
+  const exactFilePath = path.resolve(responsesDir, path.basename(generatedFilename));
+
+  let publishResult;
+  try {
+    publishResult = await drivePublisher.publishExactRuntimeFile(exactFilePath, { bot: botSlug, jobId: jobId });
+  } catch (err) {
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'failure',
+        durationMs: Date.now() - startTime,
+        errorCategory: 'google_drive_error',
+        safeMessage: `Drive publish failed: ${err.message}`
+      });
+    } catch (logErr) {}
+    const { transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecutionFailed(approvalId, `Drive publish failed: ${err.message}`);
+    return [
+      `✅ *Bot execution successful!*`,
+      `🤖 *Bot:* ${botName}`,
+      `📄 *File:* \`${generatedFilename}\``,
+      ``,
+      `⚠️ *Drive Publish Failed:* An error occurred during publishing.`,
+      `To publish manually, run: /drive_publish_pending`
+    ].join('\n');
+  }
+
+  if (publishResult.status === 'rejected') {
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'failure',
+        durationMs: Date.now() - startTime,
+        errorCategory: 'google_drive_error',
+        safeMessage: `Drive publish rejected: ${publishResult.error || 'unknown'}`
+      });
+    } catch (logErr) {}
+    const { transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecutionFailed(approvalId, `Drive publish rejected: ${publishResult.error}`);
+    return [
+      `✅ *Bot execution successful!*`,
+      `🤖 *Bot:* ${botName}`,
+      `📄 *File:* \`${generatedFilename}\``,
+      ``,
+      `⚠️ *Drive Publish Skipped:* ${publishResult.error}`,
+      `To publish manually, run: /drive_publish_pending`
+    ].join('\n');
+  }
+
+  if (publishResult.status === 'already_published') {
+    const existingLink = publishResult.drive_web_url || publishResult.drive_local_path || '(local copy — no API link)';
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'success',
+        filename: generatedFilename,
+        published: true,
+        publishStatus: 'already_published',
+        duplicateDetected: true,
+        driveLink: existingLink,
+        durationMs: Date.now() - startTime,
+        errorCategory: null,
+        safeMessage: null
+      });
+    } catch (logErr) {}
+    const resultMsg = [
+      `⚠️ *Already Published — No Duplicate Upload*`,
+      ``,
+      `🆔 *Job ID:* \`${jobId}\``,
+      `🤖 *Bot:* ${botName}`,
+      `📄 *File:* \`${generatedFilename}\``,
+      `🔗 *Existing Drive Link:* ${existingLink}`,
+      ``,
+      `Next command: /run_job ${jobId}`
+    ].join('\n');
+
+    const { transitionToExecuted } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecuted(approvalId, jobId, generatedFilename, existingLink, resultMsg);
+    return resultMsg;
+  }
+
+  if (publishResult.status === 'published') {
+    const driveLink = publishResult.drive_web_url || publishResult.drive_local_path || '(local sync — no API link)';
+    try {
+      const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+      runtimeLogger.logEvent({
+        jobId,
+        type: 'runtime_execution',
+        command: 'run_publish',
+        botSlug: botSlug,
+        status: 'success',
+        filename: generatedFilename,
+        published: true,
+        publishStatus: 'published',
+        driveLink: driveLink,
+        durationMs: Date.now() - startTime,
+        errorCategory: null,
+        safeMessage: null
+      });
+    } catch (logErr) {}
+    const resultMsg = [
+      `✅ *Run + Publish Complete!*`,
+      ``,
+      `🆔 *Job ID:* \`${jobId}\``,
+      `🤖 *Bot:* ${botName}`,
+      `📄 *File:* \`${generatedFilename}\``,
+      `🚦 *Drive Status:* PUBLISHED`,
+      `🔗 *Drive Link:* ${driveLink}`,
+      ``,
+      `*Summary:*`,
+      execResult.summary || '(no summary)',
+      ``,
+      `Next command: /drive_latest`
+    ].join('\n');
+
+    const { transitionToExecuted } = require('../../openclaw/runtime/runtime-approvals');
+    transitionToExecuted(approvalId, jobId, generatedFilename, driveLink, resultMsg);
+    return resultMsg;
+  }
+
+  const { transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+  transitionToExecutionFailed(approvalId, publishResult.error || 'Unknown error.');
+  return [
+    `✅ *Bot execution successful!*`,
+    `🤖 *Bot:* ${botName}`,
+    `📄 *File:* \`${generatedFilename}\``,
+    ``,
+    `⚠️ *Drive Publish Failed:* ${publishResult.error || 'Unknown error.'}`,
+    `To publish manually, run: /drive_publish_pending`
+  ].join('\n');
+}
+
+async function executeRunPresetPublish(text, message, approvalId) {
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let presetId = '';
+  let input = '';
+  if (firstSpaceIdx === -1) {
+    presetId = commandTextWithoutCmd;
+    input = '';
+  } else {
+    presetId = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    input = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  const { runPresetPublish } = require('../../openclaw/runtime/runtime-presets');
+  const { transitionToExecuted, transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+  const senderChatId = message.chat?.id || '';
+
+  try {
+    const result = await runPresetPublish(presetId, input, senderChatId);
+    if (result.status === 'success') {
+      transitionToExecuted(approvalId, result.jobId, result.filename, result.driveLink || null, result.message);
+    } else {
+      transitionToExecutionFailed(approvalId, result.message || 'Preset execution failed');
+    }
+    return result.message;
+  } catch (err) {
+    transitionToExecutionFailed(approvalId, err.message);
+    return `❌ Preset execution failed: ${err.message}`;
+  }
+}
+
+// ------------------------------------------
+// Approval Command Handlers
+// ------------------------------------------
+
+async function handleApprovalList(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_list', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/approval_list', permCheck.reason, message);
+  }
+
+  const { listApprovals } = require('../../openclaw/runtime/runtime-approvals');
+  // Load recent approvals, count pending up to 50, but filter to return at most 5 pending
+  const list = listApprovals(50);
+  const pending = list.filter(a => a.status === 'pending').slice(0, 5);
+
+  if (pending.length === 0) {
+    return "No pending approvals found.";
+  }
+
+  let msg = "📋 *Pending Approvals (Max 5)*\n\n";
+  pending.forEach(a => {
+    msg += `• *Approval ID:* \`${a.approvalId}\`\n`;
+    msg += `  *Command:* \`${a.command}\`\n`;
+    if (a.botSlug) msg += `  *Bot:* \`${a.botSlug}\`\n`;
+    if (a.presetId) msg += `  *Preset:* \`${a.presetId}\`\n`;
+    msg += `  *Risk Tier:* \`${a.commandTier}\`\n`;
+    msg += `  *Created:* ${a.createdAt}\n`;
+    msg += `  *Expires:* ${a.expiresAt}\n`;
+    msg += `  *Preview:* ${a.inputPreview.substring(0, 100)}\n`;
+    msg += `  *To approve:* /approve_run ${a.approvalId}\n\n`;
+  });
+  return msg.trim();
+}
+
+async function handleApprovalInfo(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_info', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/approval_info', permCheck.reason, message);
+  }
+
+  if (!approvalId || !approvalId.trim()) {
+    return "❌ Missing approval ID.\nUsage: /approval_info <approval_id>";
+  }
+
+  const { getApproval } = require('../../openclaw/runtime/runtime-approvals');
+  const a = getApproval(approvalId.trim());
+
+  if (!a) {
+    return "❌ Error: Approval not found or invalid format.";
+  }
+
+  let msg = `🎯 *Approval Info: ${a.approvalId}*\n\n`;
+  msg += `• *Original Command:* \`${a.command}\`\n`;
+  if (a.botSlug) msg += `• *Bot Slug:* \`${a.botSlug}\`\n`;
+  if (a.presetId) msg += `• *Preset ID:* \`${a.presetId}\`\n`;
+  msg += `• *Risk Tier:* \`${a.commandTier}\`\n`;
+  msg += `• *Requested Action:* Execute original parameters\n`;
+  msg += `• *Preview:* ${a.inputPreview}\n`;
+  msg += `• *Created:* ${a.createdAt}\n`;
+  msg += `• *Expires:* ${a.expiresAt}\n`;
+  msg += `• *Status:* \`${a.status.toUpperCase()}\`\n\n`;
+
+  if (a.status === 'pending') {
+    msg += `*Next commands:*\n`;
+    msg += `  /approve_run ${a.approvalId}\n`;
+    msg += `  /reject_run ${a.approvalId}`;
+  } else {
+    if (a.resultJobId) msg += `• *Result Job ID:* \`${a.resultJobId}\`\n`;
+    if (a.resultFilename) msg += `• *Result File:* \`${a.resultFilename}\`\n`;
+    if (a.driveLink) {
+      const sanitizedLink = a.driveLink.replace(/[a-zA-Z]:\\[\\\w\s.-]+/g, 'openclaw/outbox/').replace(/\/[\w\s.-]+\/[\w\s.-]+/g, 'openclaw/outbox/');
+      msg += `• *Drive Link:* ${sanitizedLink}\n`;
+    }
+  }
+  return msg;
+}
+
+async function handleApproveRun(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approve_run', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/approve_run', permCheck.reason, message);
+  }
+
+  if (!approvalId || !approvalId.trim()) {
+    return "❌ Error: Missing Approval ID. Usage: /approve_run <approval_id>";
+  }
+
+  const { getApproval, transitionToApproved, transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+  const record = getApproval(approvalId.trim());
+  if (!record) {
+    return "❌ Error: Approval not found or invalid format.";
+  }
+
+  if (record.status === 'expired') {
+    return `❌ Error: Approval is expired (Expires: ${record.expiresAt}). Please recreate the command.`;
+  }
+  if (record.status !== 'pending') {
+    return `❌ Error: Approval is no longer pending (current status: ${record.status}).`;
+  }
+
+  const approverChatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const approverHash = roles.hashChatIdForLogs(approverChatId);
+  const isSuperAdmin = roles.hasRole(approverChatId, 'super_admin');
+
+  if (approverHash === record.requestedByChatIdHash && !isSuperAdmin) {
+    const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+    runtimeLogger.logEvent({
+      event: 'approval_decision',
+      command: 'approve_run',
+      approvalId: record.approvalId,
+      status: 'failure',
+      errorCategory: 'unauthorized',
+      selfApprovalDenied: true,
+      safeMessage: `Self-approval denied for approval ID: ${record.approvalId}`
+    });
+    return `❌ Self-Approval Denied: Operators and non-super_admins cannot approve their own gated commands.`;
+  }
+
+  // Re-check original command permission against the approver's chat ID
+  const isAuthorizedApprover = isSuperAdmin || (roles.getEffectiveCapabilities(approverChatId).has('approve_publish') && record.commandTier === 'publish');
+
+  if (!isAuthorizedApprover) {
+    return `❌ Access Denied: You are not authorized to approve commands of tier ${record.commandTier}.`;
+  }
+
+  // Transition to approved
+  transitionToApproved(record.approvalId);
+
+  // Execute based on command type
+  try {
+    if (record.command === 'run_publish') {
+      return await handleRunPublish(record.safePayload.text, record.safePayload.message, record.approvalId);
+    } else if (record.command === 'run_preset_publish') {
+      return await handleRunPresetPublish(record.safePayload.text, record.safePayload.message, record.approvalId);
+    } else if (record.command === 'drive_republish_latest') {
+      return await handleDriveRepublishLatest(record.safePayload.message, record.approvalId);
+    } else {
+      transitionToExecutionFailed(record.approvalId, `Unknown command type: ${record.command}`);
+      return `❌ Error: Unknown approved command type in approval record: ${record.command}`;
+    }
+  } catch (err) {
+    transitionToExecutionFailed(record.approvalId, err.message);
+    return `❌ Approval execution failed: ${err.message}`;
+  }
+}
+
+async function handleRejectRun(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/reject_run', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/reject_run', permCheck.reason, message);
+  }
+
+  if (!approvalId || !approvalId.trim()) {
+    return "❌ Error: Missing Approval ID. Usage: /reject_run <approval_id>";
+  }
+
+  const { getApproval, rejectApproval } = require('../../openclaw/runtime/runtime-approvals');
+  const record = getApproval(approvalId.trim());
+  if (!record) {
+    return "❌ Error: Approval not found or invalid format.";
+  }
+
+  if (record.status === 'expired') {
+    return `❌ Error: Approval is expired (Expires: ${record.expiresAt}).`;
+  }
+  if (record.status !== 'pending') {
+    return `❌ Error: Approval is no longer pending (current status: ${record.status}).`;
+  }
+
+  rejectApproval(record.approvalId);
+  return `✅ Pending run ${record.approvalId} successfully rejected.`;
+}
+
+async function handleApprovalHistory(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_history', message);
+  const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+
+  if (!permCheck.allowed) {
+    runtimeLogger.logEvent({
+      event: 'approval_history_viewed',
+      command: 'approval_history',
+      status: 'failure',
+      errorCategory: 'unauthorized',
+      safeMessage: 'Access Denied: You are not authorized to view approval history.'
+    });
+    return formatPermissionDenied('/approval_history', permCheck.reason, message);
+  }
+
+  const { getApprovalHistory, summarizeApprovalForTelegram } = require('../../openclaw/runtime/runtime-approvals');
+  const history = getApprovalHistory(10);
+
+  runtimeLogger.logEvent({
+    event: 'approval_history_viewed',
+    command: 'approval_history',
+    resultCount: history.length
+  });
+
+  if (history.length === 0) {
+    return "No approval history found.";
+  }
+
+  let msg = "📋 *Approval History (Last 10)*\n\n";
+  const formatted = history.map(a => summarizeApprovalForTelegram(a));
+  msg += formatted.join('\n\n');
+  return msg;
+}
+
+async function handleApprovalSearch(keyword, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_search', message);
+  const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+
+  if (!permCheck.allowed) {
+    runtimeLogger.logEvent({
+      event: 'approval_search_performed',
+      command: 'approval_search',
+      status: 'failure',
+      errorCategory: 'unauthorized',
+      safeMessage: 'Access Denied: You are not authorized to search approvals.'
+    });
+    return formatPermissionDenied('/approval_search', permCheck.reason, message);
+  }
+
+  if (!keyword || !keyword.trim()) {
+    return "❌ Usage: /approval_search <keyword>\nExample: /approval_search content-forge";
+  }
+
+  const { searchApprovals, sanitizeApprovalSearchQuery, summarizeApprovalForTelegram } = require('../../openclaw/runtime/runtime-approvals');
+  const sanitizedKeyword = sanitizeApprovalSearchQuery(keyword);
+  const results = searchApprovals(sanitizedKeyword, 5);
+
+  runtimeLogger.logEvent({
+    event: 'approval_search_performed',
+    command: 'approval_search',
+    resultCount: results.length,
+    safeMessage: `Search query: ${sanitizedKeyword}`
+  });
+
+  if (results.length === 0) {
+    return "No approvals found matching that search.";
+  }
+
+  let msg = `🔍 *Approval Search Results for "${sanitizedKeyword}" (Max 5)*\n\n`;
+  const formatted = results.map(a => summarizeApprovalForTelegram(a));
+  msg += formatted.join('\n\n');
+  return msg;
+}
+
+async function handleApprovalByStatus(status, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_by_status', message);
+  const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+
+  if (!permCheck.allowed) {
+    runtimeLogger.logEvent({
+      event: 'approval_status_filtered',
+      command: 'approval_by_status',
+      status: 'failure',
+      errorCategory: 'unauthorized',
+      safeMessage: 'Access Denied: You are not authorized to view approvals by status.'
+    });
+    return formatPermissionDenied('/approval_by_status', permCheck.reason, message);
+  }
+
+  if (!status || !status.trim()) {
+    return "❌ Usage: /approval_by_status <status>\nExample: /approval_by_status pending";
+  }
+
+  const cleanStatus = status.trim().toLowerCase();
+  const allowed = ['pending', 'approved', 'rejected', 'expired', 'executed', 'failed'];
+  if (!allowed.includes(cleanStatus)) {
+    return `❌ Invalid status: '${status}'. Allowed statuses are: pending, approved, rejected, expired, executed, failed.`;
+  }
+
+  const { getApprovalsByStatus, summarizeApprovalForTelegram } = require('../../openclaw/runtime/runtime-approvals');
+  const results = getApprovalsByStatus(cleanStatus, 10);
+
+  runtimeLogger.logEvent({
+    event: 'approval_status_filtered',
+    command: 'approval_by_status',
+    resultCount: results.length,
+    statusFilter: cleanStatus
+  });
+
+  if (results.length === 0) {
+    return `No approvals found with status '${cleanStatus}'.`;
+  }
+
+  let msg = `📋 *Approvals by Status: ${cleanStatus.toUpperCase()} (Max 10)*\n\n`;
+  const formatted = results.map(a => summarizeApprovalForTelegram(a));
+  msg += formatted.join('\n\n');
+  return msg;
+}
+
+async function handleApprovalCleanupExpired(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/approval_cleanup_expired', message);
+  const runtimeLogger = require('../../openclaw/runtime/runtime-logger');
+
+  if (!permCheck.allowed) {
+    runtimeLogger.logEvent({
+      event: 'approval_cleanup_expired',
+      command: 'approval_cleanup_expired',
+      status: 'failure',
+      errorCategory: 'unauthorized',
+      safeMessage: 'Access Denied: You are not authorized to clean up expired approvals.'
+    });
+    return formatPermissionDenied('/approval_cleanup_expired', permCheck.reason, message);
+  }
+
+  const { cleanupExpiredApprovals } = require('../../openclaw/runtime/runtime-approvals');
+  const count = cleanupExpiredApprovals();
+
+  runtimeLogger.logEvent({
+    event: 'approval_cleanup_expired',
+    command: 'approval_cleanup_expired',
+    resultCount: count
+  });
+
+  return [
+    `Expired approvals updated: ${count}`,
+    `Next command:`,
+    ` /approval_by_status expired`
+  ].join('\n');
+}
+
+module.exports = { handleCommand };

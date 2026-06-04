@@ -55,12 +55,12 @@ async function runTests() {
   // Test 2: Check Bots Command List (Registry status parsing)
   console.log('\n--- Running Test 2: Registry Status Parsing ---');
   const botsResponse = await handleCommand('/bots', { chat: { id: 123 } });
-  assert(botsResponse.includes('- Revenue Master Orchestrator') && botsResponse.includes('- Content Forge'), 'Active Runtime should contain Revenue Master and Content Forge');
+  assert(botsResponse.includes('- Revenue Master Orchestrator') && botsResponse.includes('- Content Forge') && botsResponse.includes('- Lead Acquisition Engine'), 'Active Runtime should contain Revenue Master, Content Forge, and Lead Acquisition Engine');
   assert(!botsResponse.includes('Active Queue-Only:\n- Content Forge'), 'Active Queue-Only should NOT contain Content Forge');
   assert(!botsResponse.includes('Active Queue-Only:\n- Revenue Master Orchestrator'), 'Active Queue-Only should NOT contain Revenue Master');
+  assert(!botsResponse.includes('Active Queue-Only:\n- Lead Acquisition Engine'), 'Active Queue-Only should NOT contain Lead Acquisition Engine');
   assert(botsResponse.includes('- System Master Orchestrator'), 'Active Queue-Only should contain System Master');
   assert(botsResponse.includes('- Cresca Content & AEO Engine'), 'Active Queue-Only should contain Cresca Content');
-  assert(botsResponse.includes('- Lead Acquisition Engine'), 'Active Queue-Only should contain Lead Acquisition');
   assert(botsResponse.includes('- Revenue Optimization Engine'), 'Active Queue-Only should contain Revenue Optimization');
   assert(botsResponse.includes('- Weekly Command Center'), 'Active Queue-Only should contain Weekly Command');
   assert(botsResponse.includes('- Client Value Maximizer'), 'Active Queue-Only should contain Client Value');
@@ -97,7 +97,7 @@ async function runTests() {
       chat: { id: 123 }
     });
 
-    const isRuntime = expectedBotSlug === 'revenue-master-orchestrator' || expectedBotSlug === 'content-forge';
+    const isRuntime = expectedBotSlug === 'revenue-master-orchestrator' || expectedBotSlug === 'content-forge' || expectedBotSlug === 'lead-acquisition-engine';
     if (isRuntime) {
       assert(response.toLowerCase().includes('request received.'), 'Response should report "request received."');
       assert(response.includes(`Bot: ${expectedBotSlug}`), `Response should state Bot: ${expectedBotSlug}`);

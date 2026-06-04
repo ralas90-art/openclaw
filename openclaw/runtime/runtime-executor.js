@@ -7,6 +7,7 @@ const { isBotAllowed, RUNTIME_ENABLED_BOTS } = require('./runtime-allowlist');
 const { loadBotInstructions } = require('./bot-loader');
 const { generateResponse } = require('./model-adapter');
 const { writeResult } = require('./result-writer');
+const { logEvent } = require('./runtime-logger');
 
 /**
  * Orchestrates the execution of a runtime bot.
@@ -15,39 +16,105 @@ const { writeResult } = require('./result-writer');
  * @param {string|number} senderChatId
  * @returns {Promise<{ status: string, botSlug?: string, botName?: string, filename?: string, summary?: string, message: string }>}
  */
-async function runBot(botSlug, userRequest, senderChatId) {
-  // 1. Validate Admin Authorization Chat ID
-  const chatIdStr = senderChatId ? String(senderChatId).trim() : '';
-  const isAuthorized = config.allowedChatIds.includes(chatIdStr);
+async function runBot(botSlug, userRequest, senderChatId, jobId = null, presetInfo = null) {
+  const startTime = Date.now();
+  if (!jobId) {
+    const { generateRuntimeJobId } = require('./runtime-job-id');
+    jobId = generateRuntimeJobId();
+  }
 
-  if (!isAuthorized) {
+  const commandName = (presetInfo && presetInfo.command) ? presetInfo.command : 'run_bot';
+  const presetId = (presetInfo && presetInfo.id) ? presetInfo.id : null;
+
+  // 1. Validate Admin Authorization via centralized permission check
+  const { requireCommandPermission } = require('./runtime-permissions');
+  const permCheck = requireCommandPermission(commandName, senderChatId);
+  const chatIdStr = senderChatId ? String(senderChatId).trim() : 'unknown';
+
+  if (!permCheck.allowed) {
+    const errMsg = `❌ Access Denied: You are not authorized to execute runtime bots (Your Chat ID: ${chatIdStr}).`;
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: botSlug || null,
+      status: 'failure',
+      durationMs: Date.now() - startTime,
+      errorCategory: 'unauthorized',
+      senderChatId,
+      safeMessage: 'Access Denied: You are not authorized to execute runtime bots.'
+    });
     return {
       status: 'unauthorized',
-      message: `❌ Access Denied: You are not authorized to execute runtime bots (Your Chat ID: ${chatIdStr || 'unknown'}).`
+      jobId,
+      message: errMsg
     };
   }
 
   // 2. Validate Bot Slug Allowlist
   if (!botSlug) {
+    const errMsg = '❌ Rejection: Bot slug is missing.\nUsage: /run_bot <bot_slug> <user_request>\nExample: /run_bot revenue-master-orchestrator Create a GHL system plan';
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: null,
+      status: 'failure',
+      durationMs: Date.now() - startTime,
+      errorCategory: 'validation_failed',
+      senderChatId,
+      safeMessage: 'Rejection: Bot slug is missing.'
+    });
     return {
       status: 'rejected',
-      message: '❌ Rejection: Bot slug is missing.\nUsage: /run_bot <bot_slug> <user_request>\nExample: /run_bot revenue-master-orchestrator Create a GHL system plan'
+      jobId,
+      message: errMsg
     };
   }
 
   const slug = botSlug.trim().toLowerCase();
   if (!isBotAllowed(slug)) {
+    const errMsg = `❌ Rejection: Bot '${botSlug}' is not approved for runtime execution. Approved bots: ` + RUNTIME_ENABLED_BOTS.join(', ');
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: slug,
+      status: 'failure',
+      durationMs: Date.now() - startTime,
+      errorCategory: 'validation_failed',
+      senderChatId,
+      safeMessage: `Rejection: Bot '${botSlug}' is not approved for runtime execution.`
+    });
     return {
       status: 'rejected',
-      message: `❌ Rejection: Bot '${botSlug}' is not approved for runtime execution. Approved bots: ` + RUNTIME_ENABLED_BOTS.join(', ')
+      jobId,
+      message: errMsg
     };
   }
 
   // 3. Validate User Request Content
   if (!userRequest || !userRequest.trim()) {
+    const errMsg = `❌ Rejection: Empty request details.\nUsage: /run_bot ${slug} <user_request>\nExample: /run_bot ${slug} Create a Cresca OS GHL implementation plan for a home services business`;
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: slug,
+      status: 'failure',
+      durationMs: Date.now() - startTime,
+      errorCategory: 'validation_failed',
+      senderChatId,
+      safeMessage: 'Rejection: Empty request details.'
+    });
     return {
       status: 'rejected',
-      message: `❌ Rejection: Empty request details.\nUsage: /run_bot ${slug} <user_request>\nExample: /run_bot ${slug} Create a Cresca OS GHL implementation plan for a home services business`
+      jobId,
+      message: errMsg
     };
   }
 
@@ -78,6 +145,16 @@ async function runBot(botSlug, userRequest, senderChatId) {
       );
     }
 
+    if (slug === 'lead-acquisition-engine') {
+      systemPromptLines.push(
+        '',
+        `LEAD ACQUISITION SAFETY BOUNDARY (v1.7):`,
+        `- The bot must remain strictly output-only.`,
+        `- Allowed: Generate strategy documents, lead acquisition plans, research briefs, GHL pipeline implementation plans, cold outreach scripts, qualification frameworks, and Google Places research criteria.`,
+        `- Strictly Forbidden: Do not call Google Places API, do not scrape websites, do not enrich leads, do not send emails, do not send SMS, do not create GHL contacts, do not create GHL opportunities, do not write to Airtable, do not trigger external automations, and do not execute outbound actions.`
+      );
+    }
+
     systemPromptLines.push(
       '',
       `OUTPUT FORMAT CONSTRAINT:`,
@@ -99,16 +176,19 @@ async function runBot(botSlug, userRequest, senderChatId) {
 
     // 7. Write formatted markdown file to outbox
     const fileResult = writeResult(
+      jobId,
       slug,
       botName,
       safeUserRequest,
       llmResult.summary,
-      llmResult.content
+      llmResult.content,
+      presetInfo
     );
 
     // 8. Construct response
     const displayMsg = [
       `✅ Runtime execution successful!`,
+      `🆔 *Job ID:* \`${jobId}\``,
       `🤖 *Bot:* ${botName}`,
       `📄 *File:* \`${fileResult.filename}\``,
       ``,
@@ -116,12 +196,31 @@ async function runBot(botSlug, userRequest, senderChatId) {
       llmResult.summary,
       ``,
       `*Next Steps:*`,
+      `To inspect this job, run:`,
+      `/run_job ${jobId}`,
       `To publish this file to Google Drive, run:`,
       `/drive_publish_pending`
     ].join('\n');
 
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: slug,
+      status: 'success',
+      filename: fileResult.filename,
+      published: false,
+      driveLink: null,
+      durationMs: Date.now() - startTime,
+      errorCategory: null,
+      senderChatId,
+      safeMessage: null
+    });
+
     return {
       status: 'success',
+      jobId,
       botSlug: slug,
       botName,
       filename: fileResult.filename,
@@ -130,9 +229,36 @@ async function runBot(botSlug, userRequest, senderChatId) {
     };
 
   } catch (err) {
+    const durationMs = Date.now() - startTime;
+    let category = 'internal_error';
+    const msgLower = err.message.toLowerCase();
+    if (msgLower.includes('credentials') || msgLower.includes('api key') || msgLower.includes('unauthorized') || msgLower.includes('forbidden') || msgLower.includes('missing credentials')) {
+      category = 'credentials_missing';
+    } else if (msgLower.includes('timeout') || msgLower.includes('network') || msgLower.includes('fetch')) {
+      category = 'network_timeout';
+    } else if (msgLower.includes('instruction') || msgLower.includes('invalid') || msgLower.includes('validation') || msgLower.includes('not found')) {
+      category = 'validation_failed';
+    } else if (msgLower.includes('llm') || msgLower.includes('adapter') || msgLower.includes('model')) {
+      category = 'llm_adapter_error';
+    }
+
+    logEvent({
+      jobId,
+      type: 'runtime_execution',
+      command: commandName,
+      presetId,
+      botSlug: slug || botSlug || null,
+      status: 'failure',
+      durationMs,
+      errorCategory: category,
+      senderChatId,
+      safeMessage: `Runtime execution failed: ${err.message}`
+    });
+
     // Capture and bubble errors cleanly without exposing internals or stack traces
     return {
       status: 'error',
+      jobId,
       message: `❌ Runtime execution failed: ${err.message}`
     };
   }

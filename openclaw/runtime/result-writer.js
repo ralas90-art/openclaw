@@ -8,14 +8,17 @@ const { getWorkspaceRoot } = require('./bot-loader');
 
 /**
  * Formats and writes the runtime result to the outbox.
+ * @param {string} jobId
  * @param {string} botSlug
  * @param {string} botName
  * @param {string} userRequest
  * @param {string} summary
  * @param {string} content
+ * @param {string} content
+ * @param {object} [presetInfo=null]
  * @returns {{ filename: string, fullPath: string, formattedMarkdown: string }}
  */
-function writeResult(botSlug, botName, userRequest, summary, content) {
+function writeResult(jobId, botSlug, botName, userRequest, summary, content, presetInfo = null) {
   // 1. Sanitize bot slug for filename safety
   const safeSlug = botSlug.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -40,9 +43,19 @@ function writeResult(botSlug, botName, userRequest, summary, content) {
   }
 
   // 4. Assemble standard markdown content template
-  const formattedMarkdown = [
+  const markdownLines = [
     `# OpenClaw Runtime Result`,
     ``,
+    `## Job ID`,
+    jobId || 'unknown',
+    ``
+  ];
+
+  if (presetInfo && presetInfo.id) {
+    markdownLines.push(`## Preset Used`, `${presetInfo.id} (${presetInfo.name})`, ``);
+  }
+
+  markdownLines.push(
     `## Request`,
     userRequest.trim(),
     ``,
@@ -58,8 +71,11 @@ function writeResult(botSlug, botName, userRequest, summary, content) {
     `## Next Steps`,
     `Recommended next command:`,
     `- /drive_publish_pending`,
-    `- /drive_latest`
-  ].join('\n');
+    `- /drive_latest`,
+    `- /run_job ${jobId || 'unknown'}`
+  );
+
+  const formattedMarkdown = markdownLines.join('\n');
 
   const fullPath = path.join(targetDir, filename);
   

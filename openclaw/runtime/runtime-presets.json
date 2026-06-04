@@ -1,0 +1,82 @@
+{
+  "cleaning_lead_plan": {
+    "name": "Cleaning Lead Acquisition Plan",
+    "bot": "lead-acquisition-engine",
+    "mode": "run_bot",
+    "template": "Create a local lead acquisition plan for cleaning companies in {{market}}. Include niche targeting, ideal customer profile, offer angle, prospecting sources, outreach hooks, qualification criteria, and GHL pipeline recommendations. Do not scrape, enrich, message, or push leads externally.",
+    "variables": ["market"],
+    "example": "/run_preset cleaning_lead_plan Suffolk County NY",
+    "safetyNotes": "Text-only blueprint. No external scraping, enrichment, or GHL CRM mutation.",
+    "allowedPublish": false
+  },
+  "solar_lead_plan": {
+    "name": "Solar Lead Acquisition Plan",
+    "bot": "lead-acquisition-engine",
+    "mode": "run_bot",
+    "template": "Create a local lead acquisition plan for solar dealers in {{market}}. Include niche targeting, ideal customer profile, offer angle, prospecting sources, outreach hooks, qualification criteria, and GHL pipeline recommendations. Do not scrape, enrich, message, or push leads externally.",
+    "variables": ["market"],
+    "example": "/run_preset solar_lead_plan Florida solar dealers",
+    "safetyNotes": "Text-only blueprint. No external scraping, enrichment, or GHL CRM mutation.",
+    "allowedPublish": false
+  },
+  "content_hooks": {
+    "name": "Marketing Hooks Generator",
+    "bot": "content-forge",
+    "mode": "run_bot",
+    "template": "Generate high-converting marketing hooks and copy angles for {{topic}}. Focus on dynamic hooks, painful problem statements, unique mechanisms, and clear calls to action. Maintain compliant, business-appropriate language.",
+    "variables": ["topic"],
+    "example": "/run_preset content_hooks Cresca OS targeting cleaning business owners",
+    "safetyNotes": "Compliant content only. No false claims or unsupported performance guarantees.",
+    "allowedPublish": false
+  },
+  "short_video_prompt": {
+    "name": "Short-Form Video Script",
+    "bot": "content-forge",
+    "mode": "run_bot",
+    "template": "Create a short-form video concept and script for {{topic}}. Include visual cues, hook ideas, 30-second narration script, compliance check, and platform format recommendations.",
+    "variables": ["topic"],
+    "example": "/run_preset short_video_prompt SeptiVolt solar sales training",
+    "safetyNotes": "Compliant content only. No false claims or unsupported performance guarantees.",
+    "allowedPublish": false
+  },
+  "ghl_setup_plan": {
+    "name": "GoHighLevel Setup Blueprint",
+    "bot": "revenue-master-orchestrator",
+    "mode": "run_bot",
+    "template": "Develop a detailed GoHighLevel (GHL) workflow automation and setup plan for a {{funnel}}. Map pipelines, trigger events, custom field names, SMS/email sequences, tag routing, and contact safety boundaries.",
+    "variables": ["funnel"],
+    "example": "/run_preset ghl_setup_plan cleaning business quote funnel",
+    "safetyNotes": "Strategic workflow blueprint. No actual GHL API writes or account modification.",
+    "allowedPublish": false
+  },
+  "offer_builder": {
+    "name": "Core Offer Blueprint",
+    "bot": "revenue-master-orchestrator",
+    "mode": "run_bot",
+    "template": "Construct a premium offer blueprint and value stack for {{topic}}. Define core offer, pricing structure, bonuses, risk reversal guarantee, and sales hook copy.",
+    "variables": ["topic"],
+    "example": "/run_preset offer_builder AI employee for home service businesses",
+    "safetyNotes": "Strategic offer builder. Compliant guarantees and value stacking structure only.",
+    "allowedPublish": false
+  },
+  "publish_content_hooks": {
+    "name": "Publish Content Hooks",
+    "bot": "content-forge",
+    "mode": "run_publish",
+    "template": "Generate high-converting marketing hooks and copy angles for {{topic}}. Focus on dynamic hooks, painful problem statements, unique mechanisms, and clear calls to action. Maintain compliant, business-appropriate language.",
+    "variables": ["topic"],
+    "example": "/run_preset_publish publish_content_hooks Cresca OS targeting cleaning business owners",
+    "safetyNotes": "Controlled publishing. Compliant content only. Generates file and publishes to Drive.",
+    "allowedPublish": true
+  },
+  "publish_lead_plan": {
+    "name": "Publish Lead Acquisition Plan",
+    "bot": "lead-acquisition-engine",
+    "mode": "run_publish",
+    "template": "Create a local lead acquisition plan for cleaning companies in {{market}}. Include niche targeting, ideal customer profile, offer angle, prospecting sources, outreach hooks, qualification criteria, and GHL pipeline recommendations. Do not scrape, enrich, message, or push leads externally.",
+    "variables": ["market"],
+    "example": "/run_preset_publish publish_lead_plan Suffolk County cleaning companies",
+    "safetyNotes": "Controlled publishing. Text-only blueprint. Generates file and publishes to Drive.",
+    "allowedPublish": true
+  }
+}
