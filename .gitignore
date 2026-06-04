@@ -19,3 +19,7 @@ openclaw/outbox/telegram-responses/*
 # Test mock workspaces (auto-generated)
 testing/mock-workspace*/
 
+# OpenClaw logs
+openclaw/runtime/logs/*
+!openclaw/runtime/logs/.gitkeep
+

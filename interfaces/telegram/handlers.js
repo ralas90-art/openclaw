@@ -488,6 +488,22 @@ async function handleCommand(text, message) {
   if (command === '/approval_cleanup_expired' || command === '/approvalcleanupexpired') {
     return await handleApprovalCleanupExpired(message);
   }
+  if (command === '/dryrun_action' || command === '/dryrunaction') {
+    return await handleDryRunAction(text, message);
+  }
+  if (command === '/dryrun_publish' || command === '/dryrunpublish') {
+    return await handleDryRunPublish(text, message);
+  }
+  if (command === '/dryrun_info' || command === '/dryruninfo') {
+    const dryrunId = text.trim().split(/\s+/)[1];
+    return await handleDryRunInfo(dryrunId, message);
+  }
+  if (command === '/dryrun_history' || command === '/dryrunhistory') {
+    return await handleDryRunHistory(message);
+  }
+  if (command === '/dryrun_types' || command === '/dryruntypes') {
+    return await handleDryRunTypes(message);
+  }
 
 
   // 2. OpenClaw Bot Routing
@@ -557,6 +573,11 @@ function handleHelp() {
 /approval_search <keyword> - Searches approval records by keyword (also /approvalsearch)
 /approval_by_status <status> - Lists approvals by status (also /approvalbystatus)
 /approval_cleanup_expired - Admin-only maintenance command to clean up expired pending approvals (also /approvalcleanupexpired)
+/dry_run_types - List supported dry-run action types (also /dryruntypes)
+/dryrun_action <type> <req> - Create dry-run preview (also /dryrunaction)
+/dryrun_publish <type> <req> - Request gated dry-run publish (also /dryrunpublish)
+/dryrun_info <dryrun_id> - Show dry-run details (also /dryruninfo)
+/dryrun_history - Show recent dry-run history (also /dryrunhistory)
 ` +
 `\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflows:\n  Manual:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\n  Controlled (single command):\n  /run_publish content-forge <user_request>\n  /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n   Controlled Run+Publish:\n   /run_publish content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n   Controlled Run+Publish:\n   /run_publish revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):
    /leads prospect
@@ -909,7 +930,7 @@ async function handleRunStatus(message) {
   const status = runtimeInspector.getRuntimeStatus();
   
   let msg = "⚙️ *OpenClaw Runtime Status*\n\n";
-  msg += "• *Status:* `" + status.status.toUpperCase() + "`\n";
+  msg += "• *Status:* `" + status.status.toUpperCase() + "` (online)\n";
   msg += "• *Active Provider:* `" + status.modelProvider + "`\n";
   msg += "• *Approved Bots:* " + status.approvedBots.join(', ') + "\n";
   msg += "• *Outbox Result Count:* " + status.outboxResultCount + "\n";
@@ -1157,6 +1178,9 @@ async function handleRunConfig(message) {
   msg += "• *Role System:* `" + cfg.roleSystem + "`\n";
   msg += "• *Self-Approval:* `" + cfg.selfApprovalProtection + "`\n";
   msg += "• *External Actions:* `Disabled`\n";
+  msg += "• *External Action Dry-Run:* `" + cfg.externalActionDryRun + "`\n";
+  msg += "• *Real External Actions:* `" + cfg.realExternalActions + "`\n";
+  msg += "• *Supported Dry-Run Action Types:* `" + cfg.supportedDryRunActionTypesCount + "`\n";
   msg += "• *Approval Gates:* `" + cfg.approvalGates + "`\n";
   if (cfg.approvalGates === 'Enabled') {
     msg += "• *Approval TTL:* `" + cfg.approvalTtlMinutes + " minutes`\n";
@@ -1483,6 +1507,284 @@ async function handleRunPresetPublish(text, message, approvalId = null) {
   }
 
   return await executeRunPresetPublish(text, message, approvalId);
+}
+
+// ------------------------------------------
+// Dry-Run Mode Command Handlers
+// ------------------------------------------
+
+async function handleDryRunTypes(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/dryrun_types', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/dryrun_types', permCheck.reason, message);
+  }
+
+  const { listDryRunTypes } = require('../../openclaw/runtime/runtime-dryrun');
+  const types = listDryRunTypes();
+
+  let msg = "📋 *Supported Dry-Run Action Types*\n\n";
+  for (const t of types) {
+    msg += `• *${t.actionType}*\n`;
+    msg += `  *Desc:* ${t.description}\n`;
+    msg += `  *Required Fields:* ${t.requiredFields.join(', ')}\n`;
+    msg += `  *Example:* \`${t.example}\`\n\n`;
+  }
+  msg += "Use `/dryrun_action <type> <request>` to run a simulation.";
+  return msg;
+}
+
+async function handleDryRunHistory(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/dryrun_history', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/dryrun_history', permCheck.reason, message);
+  }
+
+  const { getDryRunHistory } = require('../../openclaw/runtime/runtime-dryrun');
+  const history = getDryRunHistory(10);
+
+  if (history.length === 0) {
+    return "No dry-run history found.";
+  }
+
+  let msg = "📜 *Recent Dry-Run History (Last 10)*\n\n";
+  history.forEach((record, index) => {
+    msg += `${index + 1}. \`${record.dryrunId}\`\n`;
+    msg += `   • *Action:* \`${record.actionType}\` | *Status:* \`${record.status}\`\n`;
+    msg += `   • *Job ID:* \`${record.jobId}\`\n`;
+    msg += `   • *File:* \`${record.filename}\`\n`;
+    msg += `   • *Time:* ${record.createdAt}\n\n`;
+  });
+  return msg.trim();
+}
+
+async function handleDryRunInfo(dryrunId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/dryrun_info', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/dryrun_info', permCheck.reason, message);
+  }
+
+  if (!dryrunId || !dryrunId.trim()) {
+    return "❌ Missing Dry-Run ID. Usage: /dryrun_info <dryrun_id>";
+  }
+
+  const { getDryRunRecord, isValidDryRunId } = require('../../openclaw/runtime/runtime-dryrun');
+  const cleanId = dryrunId.trim();
+  if (!isValidDryRunId(cleanId)) {
+    return "❌ Error: Dry-run record not found or invalid format.";
+  }
+
+  const record = getDryRunRecord(cleanId);
+  if (!record) {
+    return "❌ Error: Dry-run record not found or invalid format.";
+  }
+
+  const validationStatus = record.validation.success ? 'Passed' : 'Failed (Missing: ' + record.validation.missingFields.join(', ') + ')';
+
+  let msg = `🎯 *Dry-Run Info: ${record.dryrunId}*\n\n`;
+  msg += `• *Job ID:* \`${record.jobId}\`\n`;
+  msg += `• *Action Type:* \`${record.actionType}\`\n`;
+  msg += `• *Status:* \`DRY_RUN_ONLY\`\n`;
+  msg += `• *Created:* ${record.createdAt}\n`;
+  msg += `• *File:* \`${record.filename}\`\n`;
+  msg += `• *Validation:* ${validationStatus}\n`;
+  msg += `• *External Execution:* \`Disabled\`\n\n`;
+  msg += `*Next commands:*\n`;
+  msg += `• \`/run_job ${record.jobId}\`\n`;
+  msg += `• \`/dryrun_history\``;
+  return msg;
+}
+
+async function handleDryRunAction(text, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/dryrun_action', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/dryrun_action', permCheck.reason, message);
+  }
+
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let actionType = '';
+  let request = '';
+  if (firstSpaceIdx === -1) {
+    actionType = commandTextWithoutCmd;
+    request = '';
+  } else {
+    actionType = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    request = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  if (!actionType) {
+    return "❌ Missing action type.\nUsage: /dryrun_action <action_type> <request>";
+  }
+
+  const { validateDryRunActionType, createDryRunPreview, formatDryRunForTelegram } = require('../../openclaw/runtime/runtime-dryrun');
+  if (!validateDryRunActionType(actionType)) {
+    return `❌ Invalid action type: '${actionType}'. Use /dryrun_types to list supported action types.`;
+  }
+
+  if (!request || !request.trim()) {
+    return `❌ Missing request text for action type: ${actionType}.\nUsage: /dryrun_action ${actionType} <request>`;
+  }
+
+  const { generateRuntimeJobId } = require('../../openclaw/runtime/runtime-job-id');
+  const jobId = generateRuntimeJobId();
+
+  try {
+    const record = createDryRunPreview(actionType, request, { jobId, botSlug: 'tech-dryrun' });
+    return formatDryRunForTelegram(record);
+  } catch (err) {
+    return `❌ Error generating dry-run preview: ${err.message}`;
+  }
+}
+
+async function handleDryRunPublish(text, message, approvalId = null) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/dryrun_publish', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/dryrun_publish', permCheck.reason, message);
+  }
+
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let actionType = '';
+  let request = '';
+  if (firstSpaceIdx === -1) {
+    actionType = commandTextWithoutCmd;
+    request = '';
+  } else {
+    actionType = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    request = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  if (!actionType) {
+    return "❌ Missing action type.\nUsage: /dryrun_publish <action_type> <request>";
+  }
+
+  const { validateDryRunActionType } = require('../../openclaw/runtime/runtime-dryrun');
+  if (!validateDryRunActionType(actionType)) {
+    return `❌ Invalid action type: '${actionType}'. Use /dryrun_types to list supported action types.`;
+  }
+
+  if (!request || !request.trim()) {
+    return `❌ Missing request text for action type: ${actionType}.\nUsage: /dryrun_publish ${actionType} <request>`;
+  }
+
+  if (!approvalId && process.env.OPENCLAW_NO_APPROVAL_GATE !== 'true') {
+    const { createApproval } = require('../../openclaw/runtime/runtime-approvals');
+    const record = createApproval(
+      message.chat?.id,
+      'dryrun_publish',
+      'publish',
+      null,
+      null,
+      `${actionType}: ${request.substring(0, 100)}`,
+      { text, message }
+    );
+
+    return [
+      `Approval Required`,
+      `Approval ID: ${record.approvalId}`,
+      `Command: dryrun_publish`,
+      `Preview: ${record.inputPreview}`,
+      `Expires: ${new Date(record.expiresAt).toISOString()}`,
+      `To approve:`,
+      ` /approve_run ${record.approvalId}`,
+      ``,
+      `To reject:`,
+      ` /reject_run ${record.approvalId}`
+    ].join('\n');
+  }
+
+  return await executeDryRunPublish(text, message, approvalId);
+}
+
+async function executeDryRunPublish(text, message, approvalId) {
+  const trimmed = text.trim();
+  const commandWord = trimmed.split(/\s+/)[0];
+  const commandTextWithoutCmd = trimmed.substring(commandWord.length).trim();
+
+  const firstSpaceIdx = commandTextWithoutCmd.search(/\s/);
+  let actionType = '';
+  let request = '';
+  if (firstSpaceIdx === -1) {
+    actionType = commandTextWithoutCmd;
+    request = '';
+  } else {
+    actionType = commandTextWithoutCmd.substring(0, firstSpaceIdx).trim();
+    request = commandTextWithoutCmd.substring(firstSpaceIdx).trim();
+  }
+
+  const { generateRuntimeJobId } = require('../../openclaw/runtime/runtime-job-id');
+  const jobId = generateRuntimeJobId();
+
+  const { createDryRunPreview } = require('../../openclaw/runtime/runtime-dryrun');
+  const { transitionToExecuted, transitionToExecutionFailed } = require('../../openclaw/runtime/runtime-approvals');
+
+  let record;
+  try {
+    record = createDryRunPreview(actionType, request, { jobId, botSlug: 'tech-dryrun' });
+  } catch (err) {
+    transitionToExecutionFailed(approvalId, `Dry-run generation failed: ${err.message}`);
+    return `❌ Dry-run generation failed: ${err.message}`;
+  }
+
+  let workspaceRoot = process.env.OPENCLAW_WORKSPACE_ROOT;
+  if (!workspaceRoot || !fs.existsSync(path.join(workspaceRoot, 'openclaw'))) {
+    workspaceRoot = path.join(__dirname, '../../');
+  }
+  const exactFilePath = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses', record.filename);
+
+  let publishResult;
+  try {
+    publishResult = await drivePublisher.publishExactRuntimeFile(exactFilePath, { bot: 'tech-dryrun', jobId });
+  } catch (err) {
+    transitionToExecutionFailed(approvalId, `Drive publish failed: ${err.message}`);
+    return [
+      `✅ *Dry-run successful!*`,
+      `📄 *File:* \`${record.filename}\``,
+      ``,
+      `⚠️ *Drive Publish Failed:* ${err.message}`
+    ].join('\n');
+  }
+
+  const driveLink = publishResult.drive_web_url || publishResult.drive_local_path || '(local sync — no API link)';
+
+  // Log dryrun_published event
+  const { logEvent } = require('../../openclaw/runtime/runtime-logger');
+  logEvent({
+    event: 'dryrun_published',
+    dryrunId: record.dryrunId,
+    jobId,
+    actionType,
+    status: 'DRY_RUN_ONLY',
+    filename: record.filename,
+    published: true,
+    driveLink
+  });
+
+  const resultMsg = [
+    `✅ *Dry-Run + Publish Complete!*`,
+    ``,
+    `🆔 *Job ID:* \`${jobId}\``,
+    `🧪 *Dry-Run ID:* \`${record.dryrunId}\``,
+    `📄 *File:* \`${record.filename}\``,
+    `🚦 *Drive Status:* PUBLISHED`,
+    `🔗 *Drive Link:* ${driveLink}`,
+    ``,
+    `Next command: /drive_latest`
+  ].join('\n');
+
+  transitionToExecuted(approvalId, jobId, record.filename, driveLink, resultMsg);
+  return resultMsg;
 }
 
 // ------------------------------------------
@@ -2412,6 +2714,8 @@ async function handleApproveRun(approvalId, message) {
       return await handleRunPresetPublish(record.safePayload.text, record.safePayload.message, record.approvalId);
     } else if (record.command === 'drive_republish_latest') {
       return await handleDriveRepublishLatest(record.safePayload.message, record.approvalId);
+    } else if (record.command === 'dryrun_publish') {
+      return await handleDryRunPublish(record.safePayload.text, record.safePayload.message, record.approvalId);
     } else {
       transitionToExecutionFailed(record.approvalId, `Unknown command type: ${record.command}`);
       return `❌ Error: Unknown approved command type in approval record: ${record.command}`;

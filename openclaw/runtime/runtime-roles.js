@@ -12,31 +12,41 @@ const CAPABILITIES = {
   view_config: 'view_config',
   admin_maintenance: 'admin_maintenance',
   drive_publish: 'drive_publish',
-  approval_audit: 'approval_audit'
+  approval_audit: 'approval_audit',
+  dryrun_create: 'dryrun_create',
+  dryrun_publish_request: 'dryrun_publish_request',
+  dryrun_view: 'dryrun_view'
 };
 
 const ROLE_CAPABILITIES = {
   super_admin: Object.values(CAPABILITIES),
   operator: [
     CAPABILITIES.read_runtime,
-    CAPABILITIES.generate_runtime
+    CAPABILITIES.generate_runtime,
+    CAPABILITIES.dryrun_create,
+    CAPABILITIES.dryrun_view
   ],
   publisher: [
     CAPABILITIES.read_runtime,
     CAPABILITIES.generate_runtime,
     CAPABILITIES.request_publish,
     CAPABILITIES.drive_publish,
-    CAPABILITIES.approval_audit
+    CAPABILITIES.approval_audit,
+    CAPABILITIES.dryrun_create,
+    CAPABILITIES.dryrun_publish_request,
+    CAPABILITIES.dryrun_view
   ],
   approver: [
     CAPABILITIES.read_runtime,
     CAPABILITIES.approval_audit,
     CAPABILITIES.approve_publish,
-    CAPABILITIES.reject_approval
+    CAPABILITIES.reject_approval,
+    CAPABILITIES.dryrun_view
   ],
   viewer: [
     CAPABILITIES.read_runtime,
-    CAPABILITIES.approval_audit
+    CAPABILITIES.approval_audit,
+    CAPABILITIES.dryrun_view
   ]
 };
 

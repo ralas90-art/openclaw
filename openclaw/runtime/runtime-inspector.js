@@ -143,6 +143,14 @@ function getRuntimeStatus() {
       } catch (e) { return 0; }
     })(),
     externalActionsEnabled: 'no',
+    externalActionDryRun: 'Enabled',
+    realExternalActions: 'Disabled',
+    supportedDryRunActionTypesCount: (() => {
+      try {
+        const { listDryRunTypes } = require('./runtime-dryrun');
+        return listDryRunTypes().length;
+      } catch (e) { return 0; }
+    })(),
     approvalGates: 'Enabled',
     approvalGatesEnabled: true,
     approvalTtlMinutes: parseInt(process.env.OPENCLAW_APPROVAL_TTL_MINUTES, 10) || 60,

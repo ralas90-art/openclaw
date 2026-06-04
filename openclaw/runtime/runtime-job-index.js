@@ -212,7 +212,7 @@ function rebuildJobIndex() {
     // 2. Scan responses directory
     const responsesDir = path.join(workspaceRoot, 'openclaw', 'outbox', 'telegram-responses');
     if (fs.existsSync(responsesDir)) {
-      const files = fs.readdirSync(responsesDir).filter(f => f.endsWith('_runtime_result.md'));
+      const files = fs.readdirSync(responsesDir).filter(f => (f.endsWith('_runtime_result.md') || f.endsWith('_dryrun_result.md')) && !f.startsWith('.'));
       stats.resultFilesScanned = files.length;
 
       for (const f of files) {
@@ -234,11 +234,13 @@ function rebuildJobIndex() {
             const presetMatch = content.match(/## Preset Used\r?\n([a-zA-Z0-9_-]+)/);
             const extPresetId = presetMatch ? presetMatch[1].trim() : null;
 
+            const isDryRun = f.endsWith('_dryrun_result.md');
+
             if (!index[jobId]) {
               index[jobId] = {
                 jobId: jobId,
-                command: extPresetId ? 'run_preset' : 'run_bot',
-                botSlug: extBotSlug || 'unknown',
+                command: isDryRun ? 'dryrun_action' : (extPresetId ? 'run_preset' : 'run_bot'),
+                botSlug: extBotSlug || (isDryRun ? 'tech-dryrun' : 'unknown'),
                 presetId: extPresetId,
                 status: 'success',
                 filename: f,

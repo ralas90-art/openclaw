@@ -32,6 +32,10 @@ function getMetrics() {
   let readOnlyCommandCount = 0;
   let selfApprovalDeniedCount = 0;
   
+  let dryRunCount = 0;
+  let dryRunPublishedCount = 0;
+  let dryRunValidationFailureCount = 0;
+  
   const botCounts = {};
  
   for (const ev of events) {
@@ -116,6 +120,13 @@ function getMetrics() {
         publishFailure++;
       }
     }
+    if (ev.event === 'dryrun_created') {
+      dryRunCount++;
+    } else if (ev.event === 'dryrun_published') {
+      dryRunPublishedCount++;
+    } else if (ev.event === 'dryrun_validation_failed') {
+      dryRunValidationFailureCount++;
+    }
   }
  
   let mostUsedBot = null;
@@ -181,7 +192,10 @@ function getMetrics() {
     expiredApprovals,
     executedApprovals,
     failedApprovals,
-    selfApprovalDeniedCount
+    selfApprovalDeniedCount,
+    dryRunCount,
+    dryRunPublishedCount,
+    dryRunValidationFailureCount
   };
 }
 
@@ -310,6 +324,14 @@ function getSafeConfig() {
       } catch (e) { return 0; }
     })(),
     externalActionsEnabled: 'no',
+    externalActionDryRun: 'Enabled',
+    realExternalActions: 'Disabled',
+    supportedDryRunActionTypesCount: (() => {
+      try {
+        const { listDryRunTypes } = require('./runtime-dryrun');
+        return listDryRunTypes().length;
+      } catch (e) { return 0; }
+    })(),
     approvalGates: 'Enabled',
     approvalTtlMinutes: parseInt(process.env.OPENCLAW_APPROVAL_TTL_MINUTES, 10) || 60,
     gatedTiers: ['publish'],
@@ -334,7 +356,8 @@ function getSafeConfig() {
       '/drive_latest', '/drive_publish_latest', '/drive_publish_pending',
       '/drive_republish_latest', '/drive_publish_file', '/drive_publish_campaign',
       '/approval_list', '/approval_info', '/approve_run', '/reject_run',
-      '/approval_history', '/approval_search', '/approval_by_status', '/approval_cleanup_expired'
+      '/approval_history', '/approval_search', '/approval_by_status', '/approval_cleanup_expired',
+      '/dryrun_action', '/dryrun_publish', '/dryrun_info', '/dryrun_history', '/dryrun_types'
     ]
   };
 }

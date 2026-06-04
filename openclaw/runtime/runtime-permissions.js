@@ -403,6 +403,67 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'admin_maintenance',
     description: 'Clean up expired pending approvals.'
+  },
+  dryrun_types: {
+    commands: ['/dryrun_types', '/dryruntypes'],
+    tier: 'read_only',
+    category: 'dryrun_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'dryrun_view',
+    description: 'List supported dry-run action types.'
+  },
+  dryrun_history: {
+    commands: ['/dryrun_history', '/dryrunhistory'],
+    tier: 'read_only',
+    category: 'dryrun_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'dryrun_view',
+    description: 'Show history of recent dry-runs.'
+  },
+  dryrun_info: {
+    commands: ['/dryrun_info', '/dryruninfo'],
+    tier: 'read_only',
+    category: 'dryrun_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'dryrun_view',
+    description: 'Show details of a dry-run record.'
+  },
+  dryrun_action: {
+    commands: ['/dryrun_action', '/dryrunaction'],
+    tier: 'generate_only',
+    category: 'dryrun_simulation',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: true,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'dryrun_create',
+    description: 'Create a dry-run external action preview.'
+  },
+  dryrun_publish: {
+    commands: ['/dryrun_publish', '/dryrunpublish'],
+    tier: 'publish',
+    category: 'dryrun_simulation',
+    requiresAdmin: true,
+    requiresApproval: true,
+    mutatesState: true,
+    generatesOutput: true,
+    publishesExternally: true,
+    externalAction: false,
+    capability: 'dryrun_publish_request',
+    description: 'Create an approval-gated dry-run action preview.'
   }
 };
 
@@ -454,7 +515,12 @@ function normalizeCommand(commandText) {
     'approvalhistory': 'approval_history',
     'approvalsearch': 'approval_search',
     'approvalbystatus': 'approval_by_status',
-    'approvalcleanupexpired': 'approval_cleanup_expired'
+    'approvalcleanupexpired': 'approval_cleanup_expired',
+    'dryrunaction': 'dryrun_action',
+    'dryrunpublish': 'dryrun_publish',
+    'dryruninfo': 'dryrun_info',
+    'dryrunhistory': 'dryrun_history',
+    'dryruntypes': 'dryrun_types'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {
