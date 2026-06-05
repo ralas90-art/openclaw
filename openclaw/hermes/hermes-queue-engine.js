@@ -105,6 +105,12 @@ function updateHermesJobStatus(hermesJobId, status, metadata = {}) {
   job.status = status;
   
   if (metadata && typeof metadata === 'object') {
+    if (metadata.approvalId) {
+      job.approvalId = metadata.approvalId;
+    }
+    if (metadata.runtimeJobId) {
+      job.runtimeJobId = metadata.runtimeJobId;
+    }
     job.metadata = { ...job.metadata, ...metadata };
   }
 

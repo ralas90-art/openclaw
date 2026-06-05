@@ -242,8 +242,9 @@ To ensure developer-friendly debugging, Hermes will support end-to-end trace map
 *   **Summary**: Built the core persistence schema and validation models. Implemented file-store loading, atomic JSON writing with temporary locking, deterministic hashing for duplicate active checks, and lifecycle transition functions. Verified the foundation using 16 comprehensive sandbox assertions.
 *   **Files Created**: `hermes-job-schema.js`, `hermes-queue-store.js`, `hermes-dedupe.js`, `hermes-queue-engine.js`, `scratch/test-hermes-queue-engine.js`.
 
-### [ ] H3 — Runtime Dispatcher Adapter (Future Phase)
-*   Implement `runtime-dispatcher-adapter.js` bridging queue states to the frozen Runtime Orchestration API via unified `source: "hermes"` calls.
+### [x] H3 — Runtime Dispatcher Adapter (Completed)
+*   **Summary**: Implemented `runtime-dispatcher-adapter.js` providing payload transformation, endpoint selection, and synchronous status transitions. Connects Hermes queue states with the frozen Runtime Orchestration API under the unified `source: "hermes"` contract. Automatically maps gated approvals (`awaiting_approval`) and captures error categories/safe messages on rejections. Verified with 7 sandbox tests.
+*   **Files Created**: `runtime-dispatcher-adapter.js`, `scratch/test-hermes-runtime-dispatcher-adapter.js`.
 
 ### [ ] H4 — Telegram Queue Control Plane (Future Phase)
 *   Implement `/hermes_status`, `/hermes_queue`, `/hermes_latest`, `/hermes_read`, `/hermes_approve`, `/hermes_cancel`, `/hermes_retry` command handlers.
