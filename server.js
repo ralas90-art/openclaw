@@ -2,11 +2,22 @@ require('dotenv').config();
 // Trigger Railway rebuild
 
 // Sanitize environment variables to strip accidental quotes and whitespace
-['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_ALLOWED_USER_IDS', 'TELEGRAM_ALLOWED_CHAT_IDS', 'INTERNAL_ADMIN_TOKEN'].forEach(key => {
+['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_ALLOWED_USER_IDS', 'TELEGRAM_ALLOWED_CHAT_IDS'].forEach(key => {
   if (process.env[key]) {
     process.env[key] = process.env[key].replace(/^["']|["']$/g, '').trim();
   }
 });
+
+// Conservative sanitization for INTERNAL_ADMIN_TOKEN
+if (process.env.INTERNAL_ADMIN_TOKEN) {
+  let t = process.env.INTERNAL_ADMIN_TOKEN.trim();
+  if (t.startsWith('"') && t.endsWith('"') && t.length >= 2) {
+    t = t.substring(1, t.length - 1);
+  } else if (t.startsWith("'") && t.endsWith("'") && t.length >= 2) {
+    t = t.substring(1, t.length - 1);
+  }
+  process.env.INTERNAL_ADMIN_TOKEN = t;
+}
 
 const express = require('express');
 const cors = require('cors');

@@ -132,7 +132,30 @@ function protectDashboard(req, res, next) {
   const token = req.query.token || req.headers['x-admin-token'];
   const expected = getAdminToken();
   
-  if (!token || token !== expected) {
+  const crypto = require('crypto');
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const ipHash = crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
+  const actor = `ip_hash_${ipHash}`;
+  
+  if (!token) {
+    audit.logDashboardAction({
+      actionType: 'access',
+      actor,
+      resultStatus: 'denied',
+      safeMessage: 'missing_dashboard_token',
+      metadata: { denialReason: 'missing_dashboard_token' }
+    });
+    return res.status(401).send(renderLoginPage());
+  }
+  
+  if (token !== expected) {
+    audit.logDashboardAction({
+      actionType: 'access',
+      actor,
+      resultStatus: 'denied',
+      safeMessage: 'invalid_dashboard_token',
+      metadata: { denialReason: 'invalid_dashboard_token' }
+    });
     return res.status(401).send(renderLoginPage());
   }
   next();
@@ -183,17 +206,30 @@ function verifyPostAction(req, res, next) {
 
   // 3. Check Token Auth
   const token = req.query.token || req.headers['x-admin-token'] || (req.body && req.body.token);
-  if (!token || token !== expected) {
+  if (!token) {
     audit.logDashboardAction({
       actionType,
       hermesJobId: jobId,
       approvalId,
       actor,
       resultStatus: 'denied',
-      safeMessage: 'Invalid or missing INTERNAL_ADMIN_TOKEN on POST action.',
-      metadata: { denialReason: 'UNAUTHORIZED_TOKEN' }
+      safeMessage: 'missing_dashboard_token',
+      metadata: { denialReason: 'missing_dashboard_token' }
     });
-    return res.status(401).send('Unauthorized: Invalid or missing token.');
+    return res.status(401).send('Unauthorized: missing_dashboard_token');
+  }
+
+  if (token !== expected) {
+    audit.logDashboardAction({
+      actionType,
+      hermesJobId: jobId,
+      approvalId,
+      actor,
+      resultStatus: 'denied',
+      safeMessage: 'invalid_dashboard_token',
+      metadata: { denialReason: 'invalid_dashboard_token' }
+    });
+    return res.status(401).send('Unauthorized: invalid_dashboard_token');
   }
 
   // 4. Check and Consume Nonce
@@ -204,10 +240,10 @@ function verifyPostAction(req, res, next) {
       approvalId,
       actor,
       resultStatus: 'denied',
-      safeMessage: `Invalid, missing, or expired CSRF nonce.`,
-      metadata: { denialReason: 'INVALID_OR_EXPIRED_NONCE' }
+      safeMessage: 'expired_session',
+      metadata: { denialReason: 'expired_session' }
     });
-    return res.status(400).send('Bad Request: Invalid, missing, or expired confirmation token (nonce).');
+    return res.status(400).send('Bad Request: expired_session');
   }
 
   next();
@@ -529,7 +565,7 @@ function renderDashboardShell(title, activeTab, content, token) {
     </head>
     <body>
       <nav>
-        <a href="/dashboard${tParam}" class="nav-logo">
+        <a href="/dashboard" onclick="appendToken(this)" class="nav-logo">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="url(#logoGrad)" />
             <path d="M2 17L12 22L22 17" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -544,11 +580,11 @@ function renderDashboardShell(title, activeTab, content, token) {
           <h1>Hermes Portal</h1>
         </a>
         <div class="nav-links">
-          <a href="/dashboard${tParam}" class="nav-link ${activeTab === 'overview' ? 'active' : ''}">Overview</a>
-          <a href="/dashboard/queue${tParam}" class="nav-link ${activeTab === 'queue' ? 'active' : ''}">Queue</a>
-          <a href="/dashboard/trace${tParam}" class="nav-link ${activeTab === 'trace' ? 'active' : ''}">Trace</a>
-          <a href="/dashboard/brief${tParam}" class="nav-link ${activeTab === 'brief' ? 'active' : ''}">Daily Brief</a>
-          <a href="/dashboard/usage${tParam}" class="nav-link ${activeTab === 'usage' ? 'active' : ''}">LLM Usage</a>
+          <a href="/dashboard" onclick="appendToken(this)" class="nav-link ${activeTab === 'overview' ? 'active' : ''}">Overview</a>
+          <a href="/dashboard/queue" onclick="appendToken(this)" class="nav-link ${activeTab === 'queue' ? 'active' : ''}">Queue</a>
+          <a href="/dashboard/trace" onclick="appendToken(this)" class="nav-link ${activeTab === 'trace' ? 'active' : ''}">Trace</a>
+          <a href="/dashboard/brief" onclick="appendToken(this)" class="nav-link ${activeTab === 'brief' ? 'active' : ''}">Daily Brief</a>
+          <a href="/dashboard/usage" onclick="appendToken(this)" class="nav-link ${activeTab === 'usage' ? 'active' : ''}">LLM Usage</a>
         </div>
       </nav>
       <div class="main-container">
@@ -558,9 +594,24 @@ function renderDashboardShell(title, activeTab, content, token) {
         OpenClaw Hermes Dashboard &copy; 2026. All operations are strictly dry-run-only.
       </footer>
       <script>
-        const tok = '${token}';
+        function appendToken(el) {
+          const token = sessionStorage.getItem('hermes_admin_token');
+          if (!token) return;
+          const separator = el.href.includes('?') ? '&' : '?';
+          el.href += separator + 'token=' + encodeURIComponent(token);
+        }
+
+        // Try reading token from query or URL if passed
+        const urlParams = new URLSearchParams(window.location.search);
+        const tok = urlParams.get('token');
         if (tok) {
           sessionStorage.setItem('hermes_admin_token', tok);
+          // Clean the token query parameter after successful login too
+          urlParams.delete('token');
+          const newQuery = urlParams.toString();
+          const newSearch = newQuery ? '?' + newQuery : '';
+          window.history.historyState = {};
+          window.history.replaceState({}, document.title, window.location.pathname + newSearch);
         }
       </script>
     </body>
@@ -821,11 +872,11 @@ router.get('/queue', protectDashboard, (req, res) => {
                   <td><code>${j.requestedBy || 'system'}</code></td>
                   <td>${j.updatedAt}</td>
                   <td>
-                    <a href="/dashboard/trace?jobId=${j.hermesJobId}&token=${encodeURIComponent(token)}">Trace Lifecycle</a>
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'queued' || j.status === 'approved')) ? ` | <a href="/dashboard/action/confirm?action=dispatch&jobId=${j.hermesJobId}&token=${encodeURIComponent(token)}" style="color: var(--accent-green);">Dispatch</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'awaiting_approval' && j.approvalId)) ? ` | <a href="/dashboard/action/confirm?action=approve&approvalId=${j.approvalId}&token=${encodeURIComponent(token)}" style="color: var(--accent-purple);">Approve</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'failed' || j.status === 'blocked')) ? ` | <a href="/dashboard/action/confirm?action=retry&jobId=${j.hermesJobId}&token=${encodeURIComponent(token)}" style="color: var(--accent-yellow);">Retry</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status !== 'completed' && j.status !== 'failed' && j.status !== 'canceled')) ? ` | <a href="/dashboard/action/confirm?action=cancel&jobId=${j.hermesJobId}&token=${encodeURIComponent(token)}" style="color: var(--accent-red);">Cancel</a>` : ''}
+                    <a href="/dashboard/trace?jobId=${j.hermesJobId}" onclick="appendToken(this)">Trace Lifecycle</a>
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'queued' || j.status === 'approved')) ? ` | <a href="/dashboard/action/confirm?action=dispatch&jobId=${j.hermesJobId}" onclick="appendToken(this)" style="color: var(--accent-green);">Dispatch</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'awaiting_approval' && j.approvalId)) ? ` | <a href="/dashboard/action/confirm?action=approve&approvalId=${j.approvalId}" onclick="appendToken(this)" style="color: var(--accent-purple);">Approve</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'failed' || j.status === 'blocked')) ? ` | <a href="/dashboard/action/confirm?action=retry&jobId=${j.hermesJobId}" onclick="appendToken(this)" style="color: var(--accent-yellow);">Retry</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status !== 'completed' && j.status !== 'failed' && j.status !== 'canceled')) ? ` | <a href="/dashboard/action/confirm?action=cancel&jobId=${j.hermesJobId}" onclick="appendToken(this)" style="color: var(--accent-red);">Cancel</a>` : ''}
                   </td>
                 </tr>
               `).join('')}
@@ -993,16 +1044,16 @@ router.get('/trace', protectDashboard, (req, res) => {
                 <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
             `;
             if (canDispatch) {
-              html += `<a href="/dashboard/action/confirm?action=dispatch&jobId=${job.hermesJobId}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">🚀 Dispatch Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=dispatch&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">🚀 Dispatch Job</a>`;
             }
             if (canApprove) {
-              html += `<a href="/dashboard/action/confirm?action=approve&approvalId=${job.approvalId}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">✅ Approve Execution</a>`;
+              html += `<a href="/dashboard/action/confirm?action=approve&approvalId=${job.approvalId}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">✅ Approve Execution</a>`;
             }
             if (canRetry) {
-              html += `<a href="/dashboard/action/confirm?action=retry&jobId=${job.hermesJobId}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">🔄 Retry Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=retry&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">🔄 Retry Job</a>`;
             }
             if (canCancel) {
-              html += `<a href="/dashboard/action/confirm?action=cancel&jobId=${job.hermesJobId}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">❌ Cancel Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=cancel&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; color: white;">❌ Cancel Job</a>`;
             }
             html += `
                 </div>
@@ -1170,13 +1221,13 @@ router.get('/brief', protectDashboard, (req, res) => {
               if (act.command && process.env.DASHBOARD_ACTIONS_ENABLED === 'true') {
                 if (act.command.startsWith('/approve_run ')) {
                   const appVal = act.command.substring(13).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=approve&approvalId=${encodeURIComponent(appVal)}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Approve Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=approve&approvalId=${encodeURIComponent(appVal)}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Approve Now</a></div>`;
                 } else if (act.command.startsWith('/hermes_retry ')) {
                   const jobVal = act.command.substring(14).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=retry&jobId=${encodeURIComponent(jobVal)}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-yellow) 0%, var(--accent-red) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Retry Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=retry&jobId=${encodeURIComponent(jobVal)}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-yellow) 0%, var(--accent-red) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Retry Now</a></div>`;
                 } else if (act.command.startsWith('/hermes_dispatch ')) {
                   const jobVal = act.command.substring(17).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=dispatch&jobId=${encodeURIComponent(jobVal)}&token=${encodeURIComponent(token)}" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Dispatch Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=dispatch&jobId=${encodeURIComponent(jobVal)}" onclick="appendToken(this)" class="filter-btn" style="background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%); text-decoration: none; padding: 0.25rem 0.75rem; font-size: 0.8rem; display: inline-block; border-radius: 0.25rem; color: white;">Dispatch Now</a></div>`;
                 }
               }
               return `
@@ -1511,7 +1562,7 @@ router.get('/usage', protectDashboard, (req, res) => {
                   <td>${e.totalTokens.toLocaleString()} <span style="font-size: 0.75rem; color: var(--text-secondary);">(${e.inputTokens}/${e.outputTokens})</span></td>
                   <td>$${e.estimatedCostUsd.toFixed(5)}</td>
                   <td><span class="badge ${e.isEstimated ? 'badge-running' : 'badge-completed'}">${e.isEstimated ? 'Estimated' : 'Actual'}</span></td>
-                  <td><a href="/dashboard/trace?jobId=${e.hermesJobId || e.runtimeJobId || ''}&token=${encodeURIComponent(token)}">Trace</a></td>
+                  <td><a href="/dashboard/trace?jobId=${e.hermesJobId || e.runtimeJobId || ''}" onclick="appendToken(this)">Trace</a></td>
                 </tr>
               `).join('')}
           </tbody>
@@ -1556,7 +1607,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
       <div class="detail-row"><span class="detail-label">Status:</span><span><span class="badge badge-${job.status}">${job.status}</span></span></div>
       <div class="detail-row"><span class="detail-label">Input Preview:</span><span><code>${job.inputSummary}</code></span></div>
     `;
-    targetUrl = `/dashboard/action/dispatch?token=${encodeURIComponent(token)}`;
+    targetUrl = '/dashboard/action/dispatch';
   } else if (action === 'cancel') {
     title = 'Confirm Job Cancellation';
     const job = engine.readHermesJob(jobId);
@@ -1570,7 +1621,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
         <textarea name="reason" placeholder="Explain why this job is being canceled..." style="width:100%; box-sizing:border-box; height:80px; background:rgba(15,11,38,0.6); border:1px solid var(--border); border-radius:0.5rem; color:white; padding:0.5rem; font-family:inherit;" required>Operator canceled execution via Web Dashboard</textarea>
       </div>
     `;
-    targetUrl = `/dashboard/action/cancel?token=${encodeURIComponent(token)}`;
+    targetUrl = '/dashboard/action/cancel';
   } else if (action === 'retry') {
     title = 'Confirm Job Retry';
     const job = engine.readHermesJob(jobId);
@@ -1581,7 +1632,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
       <div class="detail-row"><span class="detail-label">Previous Status:</span><span><span class="badge badge-${job.status}">${job.status}</span></span></div>
       <div class="detail-row"><span class="detail-label">Safe Error Msg:</span><span>${job.safeMessage || 'N/A'}</span></div>
     `;
-    targetUrl = `/dashboard/action/retry?token=${encodeURIComponent(token)}`;
+    targetUrl = '/dashboard/action/retry';
   } else if (action === 'approve') {
     title = 'Confirm Action Approval';
     const { getApproval } = require('../runtime/runtime-approvals');
@@ -1593,7 +1644,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
       <div class="detail-row"><span class="detail-label">Bot / Preset:</span><span><code>${record.botSlug || record.presetId || 'N/A'}</code></span></div>
       <div class="detail-row"><span class="detail-label">Preview:</span><span><code>${record.inputPreview}</code></span></div>
     `;
-    targetUrl = `/dashboard/action/approve?token=${encodeURIComponent(token)}`;
+    targetUrl = '/dashboard/action/approve';
   } else {
     return res.status(400).send('Invalid action type');
   }
@@ -1609,6 +1660,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
         <input type="hidden" name="jobId" value="${jobId || ''}" />
         <input type="hidden" name="approvalId" value="${approvalId || ''}" />
         <input type="hidden" name="nonce" value="${nonce}" />
+        <input type="hidden" name="token" id="form-token" value="" />
         
         <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem;">
           ${detailsHtml}
@@ -1619,6 +1671,14 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
           <button type="submit" class="filter-btn" style="padding: 0.75rem 2rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-blue) 100%); color: white;">Confirm & Execute</button>
         </div>
       </form>
+      <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          const t = sessionStorage.getItem("hermes_admin_token");
+          if (t) {
+            document.getElementById("form-token").value = t;
+          }
+        });
+      </script>
     </div>
   `;
 
@@ -1627,7 +1687,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
 
 // POST /dashboard/action/dispatch
 router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.query.token;
+  const token = req.body.token || req.query.token;
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1675,7 +1735,7 @@ router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (re
 
 // POST /dashboard/action/cancel
 router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) => {
-  const token = req.query.token;
+  const token = req.body.token || req.query.token;
   const jobId = req.body.jobId || req.query.jobId;
   const reason = req.body.reason || req.query.reason || 'Operator canceled execution via dashboard';
 
@@ -1719,7 +1779,7 @@ router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) 
 
 // POST /dashboard/action/retry
 router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.query.token;
+  const token = req.body.token || req.query.token;
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1768,7 +1828,7 @@ router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, 
 
 // POST /dashboard/action/approve
 router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.query.token;
+  const token = req.body.token || req.query.token;
   const approvalId = req.body.approvalId || req.query.approvalId;
 
   if (!approvalId) {
