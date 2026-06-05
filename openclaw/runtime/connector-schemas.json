@@ -1,0 +1,94 @@
+{
+  "ghl": {
+    "connectorId": "ghl",
+    "name": "GoHighLevel CRM Connector",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "ghl_contact_create_preview",
+      "ghl_opportunity_create_preview",
+      "ghl_pipeline_update_preview"
+    ],
+    "requiredEnvVars": [
+      "GHL_API_KEY",
+      "GHL_LOCATION_ID"
+    ],
+    "notes": "Simulated GoHighLevel API client mapping contact insertions and pipeline transitions.",
+    "safetyBoundary": "No active writes to GHL. Payloads are processed inside the local dry-run sandbox only."
+  },
+  "airtable": {
+    "connectorId": "airtable",
+    "name": "Airtable Leads Database Connector",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "airtable_lead_record_preview"
+    ],
+    "requiredEnvVars": [
+      "AIRTABLE_API_KEY",
+      "AIRTABLE_BASE_ID"
+    ],
+    "notes": "Simulated Airtable integration mapping lead qualification metrics.",
+    "safetyBoundary": "No live base insertions or updates. Schema fields are validated config-only."
+  },
+  "google_places": {
+    "connectorId": "google_places",
+    "name": "Google Places Research API Connector",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "google_places_research_preview"
+    ],
+    "requiredEnvVars": [
+      "GOOGLE_PLACES_API_KEY"
+    ],
+    "notes": "Simulated lead location lookup and geographical validation.",
+    "safetyBoundary": "No active search queries are dispatched to Google APIs. Mock listings are compiled locally."
+  },
+  "webhook": {
+    "connectorId": "webhook",
+    "name": "Outbound Custom Webhook Dispatcher",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "webhook_payload_preview"
+    ],
+    "requiredEnvVars": [
+      "OUTBOUND_WEBHOOK_URL"
+    ],
+    "notes": "Simulated payload triggers for external automation routes.",
+    "safetyBoundary": "No HTTP POST requests are dispatched. Payload structure is compiled to response markdown only."
+  },
+  "email": {
+    "connectorId": "email",
+    "name": "Outbound Email Campaign Dispatcher",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "outbound_email_sequence_preview"
+    ],
+    "requiredEnvVars": [
+      "SMTP_SERVER",
+      "SMTP_USER",
+      "SMTP_PASSWORD"
+    ],
+    "notes": "Simulated outreach messaging sequence compiler.",
+    "safetyBoundary": "No active email dispatch. Message structure is compiled to preview markdown reports."
+  },
+  "sms": {
+    "connectorId": "sms",
+    "name": "Outbound SMS Sequence Dispatcher",
+    "status": "dry_run_only",
+    "realExecutionEnabled": false,
+    "supportedDryRunActions": [
+      "outbound_sms_sequence_preview"
+    ],
+    "requiredEnvVars": [
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_PHONE_NUMBER"
+    ],
+    "notes": "Simulated text outreach campaign validator.",
+    "safetyBoundary": "No active SMS messages are dispatched via Twilio or carriers. Text sequences are saved as mock files."
+  }
+}

@@ -332,6 +332,15 @@ function getSafeConfig() {
         return listDryRunTypes().length;
       } catch (e) { return 0; }
     })(),
+    connectorRegistry: 'Enabled',
+    realExternalExecution: 'Disabled',
+    connectorCount: (() => {
+      try {
+        const { listConnectors } = require('./connector-registry');
+        return listConnectors().length;
+      } catch (e) { return 6; }
+    })(),
+    connectorsDryRunOnly: 'Yes',
     approvalGates: 'Enabled',
     approvalTtlMinutes: parseInt(process.env.OPENCLAW_APPROVAL_TTL_MINUTES, 10) || 60,
     gatedTiers: ['publish'],

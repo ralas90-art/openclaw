@@ -446,6 +446,17 @@ async function handleCommand(text, message) {
   if (command === '/my_role' || command === '/myrole') {
     return await handleMyRole(message);
   }
+  if (command === '/connector_list' || command === '/connectorlist') {
+    return await handleConnectorList(message);
+  }
+  if (command === '/connector_info' || command === '/connectorinfo') {
+    const connectorId = text.trim().split(/\s+/)[1];
+    return await handleConnectorInfo(connectorId, message);
+  }
+  if (command === '/connector_validate' || command === '/connectorvalidate') {
+    const connectorId = text.trim().split(/\s+/)[1];
+    return await handleConnectorValidate(connectorId, message);
+  }
   if (command === '/preset_list' || command === '/presetlist') {
     return await handlePresetList(message);
   }
@@ -578,6 +589,9 @@ function handleHelp() {
 /dryrun_publish <type> <req> - Request gated dry-run publish (also /dryrunpublish)
 /dryrun_info <dryrun_id> - Show dry-run details (also /dryruninfo)
 /dryrun_history - Show recent dry-run history (also /dryrunhistory)
+/connector_list - List external action connectors (also /connectorlist)
+/connector_info <id> - Show connector metadata (also /connectorinfo)
+/connector_validate <id> - Check environment variables for a connector (also /connectorvalidate)
 ` +
 `\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflows:\n  Manual:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\n  Controlled (single command):\n  /run_publish content-forge <user_request>\n  /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n   Controlled Run+Publish:\n   /run_publish content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n   Controlled Run+Publish:\n   /run_publish revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):
    /leads prospect
@@ -1181,6 +1195,10 @@ async function handleRunConfig(message) {
   msg += "• *External Action Dry-Run:* `" + cfg.externalActionDryRun + "`\n";
   msg += "• *Real External Actions:* `" + cfg.realExternalActions + "`\n";
   msg += "• *Supported Dry-Run Action Types:* `" + cfg.supportedDryRunActionTypesCount + "`\n";
+  msg += "• *Connector Registry:* `" + cfg.connectorRegistry + "`\n";
+  msg += "• *Real External Execution:* `" + cfg.realExternalExecution + "`\n";
+  msg += "• *Connectors:* `" + cfg.connectorCount + "`\n";
+  msg += "• *Dry-run only:* `" + cfg.connectorsDryRunOnly + "`\n";
   msg += "• *Approval Gates:* `" + cfg.approvalGates + "`\n";
   if (cfg.approvalGates === 'Enabled') {
     msg += "• *Approval TTL:* `" + cfg.approvalTtlMinutes + " minutes`\n";
@@ -1351,6 +1369,89 @@ async function handleMyRole(message) {
   msg += `• *Your Roles:* ${userRoles.length > 0 ? userRoles.join(', ') : 'none'}\n`;
   msg += `• *Effective Capabilities:* ${userCaps.length > 0 ? userCaps.join(', ') : 'none'}\n`;
   msg += `• *Access Model:* role-based`;
+  return msg;
+}
+
+async function handleConnectorList(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/connector_list', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/connector_list', permCheck.reason, message);
+  }
+
+  const { listConnectors } = require('../../openclaw/runtime/connector-registry');
+  const connectors = listConnectors();
+
+  let msg = "🔌 *OpenClaw Connector Registry*\n\n";
+  for (const c of connectors) {
+    msg += `• *Connector:* \`${c.connectorId}\` (${c.name})\n`;
+    msg += `  *Execution:* \`Disabled\` | *Status:* \`${c.status.toUpperCase()}\`\n`;
+    msg += `  *Actions:* ${c.supportedDryRunActions.map(a => `\`${a}\``).join(', ')}\n\n`;
+  }
+  msg += "Use `/connector_info <id>` to inspect details.";
+  return msg;
+}
+
+async function handleConnectorInfo(connectorId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/connector_info', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/connector_info', permCheck.reason, message);
+  }
+
+  if (!connectorId || !connectorId.trim()) {
+    return "❌ Usage: /connector_info <connector_id>\nExample: /connector_info ghl";
+  }
+
+  const { getConnector } = require('../../openclaw/runtime/connector-registry');
+  const c = getConnector(connectorId);
+  if (!c) {
+    return `❌ Unknown connector ID: '${connectorId.trim()}'. Use /connector_list to list connectors.`;
+  }
+
+  let msg = `🔌 *Connector Info: ${c.name}*\n\n`;
+  msg += `• *ID:* \`${c.connectorId}\`\n`;
+  msg += `• *Status:* \`${c.status.toUpperCase()}\`\n`;
+  msg += `• *Real Execution:* \`Disabled\`\n`;
+  msg += `• *Sandbox Configured:* \`${c.sandboxReady ? 'yes' : 'no'}\`\n`;
+  msg += `• *Required Env Vars:* ${c.requiredEnvVars.map(e => `\`${e}\``).join(', ')}\n`;
+  msg += `• *Dry-Run Actions:* ${c.supportedDryRunActions.map(a => `\`${a}\``).join(', ')}\n`;
+  msg += `• *Notes:* ${c.notes}\n`;
+  msg += `• *Safety Boundary:* ${c.safetyBoundary}\n\n`;
+  msg += `*Next Command:* \`/connector_validate ${c.connectorId}\``;
+  return msg;
+}
+
+async function handleConnectorValidate(connectorId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/connector_validate', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/connector_validate', permCheck.reason, message);
+  }
+
+  if (!connectorId || !connectorId.trim()) {
+    return "❌ Usage: /connector_validate <connector_id>\nExample: /connector_validate ghl";
+  }
+
+  const { getConnector, validateConnector } = require('../../openclaw/runtime/connector-registry');
+  const c = getConnector(connectorId);
+  if (!c) {
+    return `❌ Unknown connector ID: '${connectorId.trim()}'.`;
+  }
+
+  const val = validateConnector(connectorId);
+  
+  let msg = `🔍 *Connector Validation: ${c.name}*\n\n`;
+  msg += `• *ID:* \`${c.connectorId}\`\n`;
+  msg += `• *Status:* \`${val.valid ? '🟢 VALID' : '🔴 INVALID (Missing Env Vars)'}\`\n\n`;
+  msg += `*Environment Checks:*\n`;
+  
+  for (const envVar of val.requiredEnvVars) {
+    const present = !val.missingEnvVars.includes(envVar);
+    msg += `• \`${envVar}\`: ${present ? '✅ Present' : '❌ Missing'}\n`;
+  }
+  
+  msg += `\n*Note:* No network or API connections were initiated. This is a configuration status check.`;
   return msg;
 }
 

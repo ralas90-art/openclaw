@@ -464,6 +464,42 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'dryrun_publish_request',
     description: 'Create an approval-gated dry-run action preview.'
+  },
+  connector_list: {
+    commands: ['/connector_list', '/connectorlist'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List future external action connectors in dry-run-only mode.'
+  },
+  connector_info: {
+    commands: ['/connector_info', '/connectorinfo'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Show metadata for a specific connector.'
+  },
+  connector_validate: {
+    commands: ['/connector_validate', '/connectorvalidate'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'view_config',
+    description: 'Check required environment variables presence for a connector.'
   }
 };
 
@@ -520,7 +556,10 @@ function normalizeCommand(commandText) {
     'dryrunpublish': 'dryrun_publish',
     'dryruninfo': 'dryrun_info',
     'dryrunhistory': 'dryrun_history',
-    'dryruntypes': 'dryrun_types'
+    'dryruntypes': 'dryrun_types',
+    'connectorlist': 'connector_list',
+    'connectorinfo': 'connector_info',
+    'connectorvalidate': 'connector_validate'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

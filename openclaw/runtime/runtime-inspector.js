@@ -145,6 +145,15 @@ function getRuntimeStatus() {
     externalActionsEnabled: 'no',
     externalActionDryRun: 'Enabled',
     realExternalActions: 'Disabled',
+    connectorRegistry: 'Enabled',
+    realExternalExecution: 'Disabled',
+    connectorCount: (() => {
+      try {
+        const { listConnectors } = require('./connector-registry');
+        return listConnectors().length;
+      } catch (e) { return 6; }
+    })(),
+    connectorsDryRunOnly: 'Yes',
     supportedDryRunActionTypesCount: (() => {
       try {
         const { listDryRunTypes } = require('./runtime-dryrun');
