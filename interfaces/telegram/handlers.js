@@ -516,6 +516,42 @@ async function handleCommand(text, message) {
     return await handleDryRunTypes(message);
   }
 
+  // Hermes Core Queue Commands
+  if (command === '/hermes_status' || command === '/hermesstatus') {
+    return await handleHermesStatus(message);
+  }
+  if (command === '/hermes_queue' || command === '/hermesqueue') {
+    const filterArg = text.trim().split(/\s+/)[1];
+    return await handleHermesQueue(filterArg, message);
+  }
+  if (command === '/hermes_latest' || command === '/hermeslatest') {
+    return await handleHermesLatest(message);
+  }
+  if (command === '/hermes_read' || command === '/hermesread') {
+    const jobId = text.trim().split(/\s+/)[1];
+    return await handleHermesRead(jobId, message);
+  }
+  if (command === '/hermes_cancel' || command === '/hermescancel') {
+    const tokens = text.trim().split(/\s+/);
+    const jobId = tokens[1];
+    const reason = tokens.slice(2).join(' ');
+    return await handleHermesCancel(jobId, reason, message);
+  }
+  if (command === '/hermes_retry' || command === '/hermesretry') {
+    const jobId = text.trim().split(/\s+/)[1];
+    return await handleHermesRetry(jobId, message);
+  }
+  if (command === '/hermes_dispatch' || command === '/hermesdispatch') {
+    const jobId = text.trim().split(/\s+/)[1];
+    return await handleHermesDispatch(jobId, message);
+  }
+  if (command === '/hermes_approval' || command === '/hermesapproval') {
+    return await handleHermesApproval(message);
+  }
+  if (command === '/hermes_approve' || command === '/hermesapprove') {
+    const approvalId = text.trim().split(/\s+/)[1];
+    return await handleHermesApprove(approvalId, message);
+  }
 
   // 2. OpenClaw Bot Routing
   if (command === '/content_forge' || command === '/contentforge' || command === '/cf') {
@@ -3007,6 +3043,266 @@ async function handleApprovalCleanupExpired(message) {
     `Next command:`,
     ` /approval_by_status expired`
   ].join('\n');
+}
+
+// ------------------------------------------
+// Hermes Command Handlers
+// ------------------------------------------
+
+async function handleHermesStatus(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_status', chatId);
+  }
+
+  const formatters = require('../../openclaw/hermes/hermes-telegram-formatters');
+  return formatters.formatHermesStatus();
+}
+
+async function handleHermesQueue(filterArg, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_queue', chatId);
+  }
+
+  const formatters = require('../../openclaw/hermes/hermes-telegram-formatters');
+  return formatters.formatHermesQueue(filterArg);
+}
+
+async function handleHermesLatest(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_latest', chatId);
+  }
+
+  const formatters = require('../../openclaw/hermes/hermes-telegram-formatters');
+  return formatters.formatHermesLatest();
+}
+
+async function handleHermesRead(jobId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_read', chatId);
+  }
+
+  const formatters = require('../../openclaw/hermes/hermes-telegram-formatters');
+  return formatters.formatHermesRead(jobId);
+}
+
+async function handleHermesCancel(jobId, reason, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  
+  const isAuthorized = roles.hasRole(chatId, 'super_admin') ||
+                       roles.hasRole(chatId, 'operator') ||
+                       roles.hasRole(chatId, 'publisher') ||
+                       roles.hasRole(chatId, 'approver');
+  if (!isAuthorized) {
+    return roles.formatRoleDenied('/hermes_cancel', chatId);
+  }
+
+  if (!jobId || !jobId.trim()) {
+    return `Usage: /hermes_cancel <hermesJobId> [reason]`;
+  }
+
+  const cleanId = jobId.trim();
+  const engine = require('../../openclaw/hermes/hermes-queue-engine');
+  const job = engine.readHermesJob(cleanId);
+  if (!job) {
+    return `❌ Error: Job \`${cleanId}\` not found in queue.`;
+  }
+
+  if (job.status === 'completed') {
+    return `❌ Rejection: Cannot cancel job \`${cleanId}\` because it is already COMPLETED.`;
+  }
+  if (job.status === 'failed') {
+    return `❌ Rejection: Cannot cancel job \`${cleanId}\` because it has already FAILED.`;
+  }
+  if (job.status === 'canceled') {
+    return `⚠️ Job \`${cleanId}\` is already canceled.`;
+  }
+
+  const cancelReason = reason ? reason.trim() : 'Operator canceled execution via Telegram';
+  try {
+    const updated = engine.cancelHermesJob(cleanId, cancelReason);
+    return `✅ Job \`${cleanId}\` successfully canceled.\nStatus: \`${updated.status.toUpperCase()}\`\nReason: ${cancelReason}`;
+  } catch (err) {
+    return `❌ Error canceling job: ${err.message}`;
+  }
+}
+
+async function handleHermesRetry(jobId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  
+  const isAuthorized = roles.hasRole(chatId, 'super_admin') ||
+                       roles.hasRole(chatId, 'operator') ||
+                       roles.hasRole(chatId, 'publisher') ||
+                       roles.hasRole(chatId, 'approver');
+  if (!isAuthorized) {
+    return roles.formatRoleDenied('/hermes_retry', chatId);
+  }
+
+  if (!jobId || !jobId.trim()) {
+    return `Usage: /hermes_retry <hermesJobId>`;
+  }
+
+  const cleanId = jobId.trim();
+  const engine = require('../../openclaw/hermes/hermes-queue-engine');
+  const adapter = require('../../openclaw/hermes/runtime-dispatcher-adapter');
+
+  const job = engine.readHermesJob(cleanId);
+  if (!job) {
+    return `❌ Error: Job \`${cleanId}\` not found in queue.`;
+  }
+
+  if (job.status !== 'failed' && job.status !== 'blocked') {
+    return `❌ Rejection: Can only retry FAILED or BLOCKED jobs. Current status: \`${job.status.toUpperCase()}\``;
+  }
+
+  try {
+    const newJob = engine.createHermesJob({
+      requestedBy: job.requestedBy,
+      botId: job.botId,
+      inputSummary: job.inputSummary,
+      priority: job.priority || 'normal',
+      metadata: {
+        ...(job.metadata || {}),
+        originalHermesJobId: job.hermesJobId
+      }
+    });
+
+    const result = await adapter.dispatchHermesJobToRuntime(newJob.hermesJobId);
+    
+    let reply = `🔄 *Retry Initiated successfully!*\n\n`;
+    reply += `• *Original Job ID:* \`${job.hermesJobId}\`\n`;
+    reply += `• *New Job ID:* \`${newJob.hermesJobId}\`\n`;
+    reply += `• *Dispatch Status:* \`${result.status.toUpperCase()}\`\n`;
+    if (result.approvalId) reply += `• *Approval ID:* \`${result.approvalId}\`\n`;
+    if (result.outputPath) reply += `• *Output Path:* \`${result.outputPath}\`\n`;
+    if (result.driveLink) reply += `• *Drive Link:* ${result.driveLink}\n`;
+    if (result.safeMessage) reply += `• *Message:* ${result.safeMessage}\n`;
+
+    return reply;
+  } catch (err) {
+    return `❌ Retry failed: ${err.message}`;
+  }
+}
+
+async function handleHermesDispatch(jobId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  
+  const isAuthorized = roles.hasRole(chatId, 'super_admin') ||
+                       roles.hasRole(chatId, 'operator') ||
+                       roles.hasRole(chatId, 'publisher') ||
+                       roles.hasRole(chatId, 'approver');
+  if (!isAuthorized) {
+    return roles.formatRoleDenied('/hermes_dispatch', chatId);
+  }
+
+  if (!jobId || !jobId.trim()) {
+    return `Usage: /hermes_dispatch <hermesJobId>`;
+  }
+
+  const cleanId = jobId.trim();
+  const engine = require('../../openclaw/hermes/hermes-queue-engine');
+  const adapter = require('../../openclaw/hermes/runtime-dispatcher-adapter');
+
+  const job = engine.readHermesJob(cleanId);
+  if (!job) {
+    return `❌ Error: Job \`${cleanId}\` not found in queue.`;
+  }
+
+  if (job.status !== 'queued' && job.status !== 'approved') {
+    return `❌ Rejection: Can only dispatch QUEUED or APPROVED jobs. Current status: \`${job.status.toUpperCase()}\``;
+  }
+
+  try {
+    const result = await adapter.dispatchHermesJobToRuntime(cleanId);
+    
+    let reply = `🚀 *Manual Dispatch Executed!*\n\n`;
+    reply += `• *Job ID:* \`${cleanId}\`\n`;
+    reply += `• *Outcome Status:* \`${result.status.toUpperCase()}\`\n`;
+    if (result.approvalId) reply += `• *Approval ID:* \`${result.approvalId}\`\n`;
+    if (result.outputPath) reply += `• *Output Path:* \`${result.outputPath}\`\n`;
+    if (result.driveLink) reply += `• *Drive Link:* ${result.driveLink}\n`;
+    if (result.safeMessage) reply += `• *Message:* ${result.safeMessage}\n`;
+
+    return reply;
+  } catch (err) {
+    return `❌ Dispatch failed: ${err.message}`;
+  }
+}
+
+async function handleHermesApproval(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_approval', chatId);
+  }
+
+  const formatters = require('../../openclaw/hermes/hermes-telegram-formatters');
+  return formatters.formatHermesApproval();
+}
+
+async function handleHermesApprove(approvalId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+
+  const isAuthorized = roles.hasRole(chatId, 'super_admin') ||
+                       roles.hasRole(chatId, 'approver');
+  if (!isAuthorized) {
+    return roles.formatRoleDenied('/hermes_approve', chatId);
+  }
+
+  if (!approvalId || !approvalId.trim()) {
+    return `Usage: /hermes_approve <approvalId>`;
+  }
+
+  const cleanApprovalId = approvalId.trim();
+  const engine = require('../../openclaw/hermes/hermes-queue-engine');
+  const store = require('../../openclaw/hermes/hermes-queue-store');
+  const { getApproval } = require('../../openclaw/runtime/runtime-approvals');
+
+  // Find linked Hermes job
+  const queue = store.loadQueue();
+  const job = Object.values(queue).find(j => j.approvalId === cleanApprovalId);
+
+  // Call existing Runtime approval mechanism
+  const resultText = await handleApproveRun(cleanApprovalId, message);
+
+  // If there was a linked Hermes job, update it based on the approval outcome
+  if (job) {
+    const record = getApproval(cleanApprovalId);
+    if (record) {
+      if (record.status === 'executed') {
+        engine.completeHermesJob(job.hermesJobId, {
+          outputPath: record.resultFilename,
+          driveLink: record.driveLink,
+          runtimeJobId: record.resultJobId
+        });
+      } else if (record.status === 'failed') {
+        engine.failHermesJob(job.hermesJobId, {
+          errorCategory: 'execution',
+          safeMessage: record.safeMessage || 'Execution failed during approval.'
+        });
+      } else if (record.status === 'rejected') {
+        engine.cancelHermesJob(job.hermesJobId, 'Approval rejected by admin');
+      }
+    }
+  }
+
+  return resultText;
 }
 
 module.exports = { handleCommand };

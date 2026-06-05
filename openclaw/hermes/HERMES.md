@@ -246,8 +246,19 @@ To ensure developer-friendly debugging, Hermes will support end-to-end trace map
 *   **Summary**: Implemented `runtime-dispatcher-adapter.js` providing payload transformation, endpoint selection, and synchronous status transitions. Connects Hermes queue states with the frozen Runtime Orchestration API under the unified `source: "hermes"` contract. Automatically maps gated approvals (`awaiting_approval`) and captures error categories/safe messages on rejections. Verified with 7 sandbox tests.
 *   **Files Created**: `runtime-dispatcher-adapter.js`, `scratch/test-hermes-runtime-dispatcher-adapter.js`.
 
-### [ ] H4 — Telegram Queue Control Plane (Future Phase)
-*   Implement `/hermes_status`, `/hermes_queue`, `/hermes_latest`, `/hermes_read`, `/hermes_approve`, `/hermes_cancel`, `/hermes_retry` command handlers.
+### [x] H4 — Telegram Queue Control Plane (Completed)
+*   **Summary**: Implemented the Telegram administrative controls interface for Hermes queue visibility and management. Added handlers for `/hermes_status`, `/hermes_queue`, `/hermes_latest`, `/hermes_read`, `/hermes_cancel`, `/hermes_retry`, `/hermes_dispatch`, `/hermes_approval`, and `/hermes_approve` inside the main command router. Evaluated all operations against the central capability-based roles system. Verified with 10 sandbox tests.
+*   **Commands Implemented**:
+    *   `/hermes_status` (Read Only) — Displays total/active/completed/failed queue stats, latest Job ID, and execution configuration.
+    *   `/hermes_queue [filter]` (Read Only) — Lists recent queue jobs, accepting optional status filters (`active`, `failed`, `approval`, `completed`).
+    *   `/hermes_latest` (Read Only) — Displays detailed status and latest lifecycle trace event for the most recent job.
+    *   `/hermes_read <job_id>` (Read Only) — Displays comprehensive details and the last 5 trace events of a specific Hermes job.
+    *   `/hermes_approval` (Read Only) — Lists all Hermes jobs currently in `awaiting_approval` status.
+    *   `/hermes_cancel <job_id> [reason]` (Gated Operator) — Safely cancels active jobs and appends a lifecycle record. Rejects completed/failed runs.
+    *   `/hermes_retry <job_id>` (Gated Operator) — Clones failed/blocked jobs and re-runs them via the Hermes dispatcher. Blocks duplicate active jobs.
+    *   `/hermes_dispatch <job_id>` (Gated Operator) — Triggers manual dispatch of a queued or approved job to the Bot Runtime using the dispatcher adapter.
+    *   `/hermes_approve <approval_id>` (Gated Approver) — Approves a gated publisher command using the existing approvals engine and updates the linked Hermes job status.
+*   **Role Gates**: Read commands require a role mapping with `read_runtime` capability. Cancel, retry, and dispatch require `operator`, `publisher`, `approver`, or `super_admin`. Approvals require `approver` or `super_admin`.
 
 ### [ ] H5 — Queue Daemon Inbox Poller (Future Phase)
 *   Implement a background folder watcher on `openclaw/inbox/` to dynamically ingest queued Telegram command files and auto-trigger triaging.
