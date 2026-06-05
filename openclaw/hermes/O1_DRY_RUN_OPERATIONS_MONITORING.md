@@ -7,7 +7,7 @@ This document tracks system performance, operational checks, and security teleme
 ## 🛰️ 1. Deployment Details
 
 *   **Monitoring Start Date:** June 5, 2026
-*   **Git Commit Hash:** `eb5648e`
+*   **Git Commit Hash:** `ce92fb0`
 *   **Railway Service Name:** `openclaw-hermes`
 *   **Operating Mode:** Controlled Dry-Run Only (Auto-dispatch disabled, external writes disabled)
 
@@ -33,6 +33,7 @@ This document tracks system performance, operational checks, and security teleme
 | Date | Incident/Restart Description | Action Taken | Resolution Status |
 | :--- | :--- | :--- | :--- |
 | 2026-06-05 | Staging deployment boot check | Verified database, queue, and log storage init | Resolved (System Online) |
+| 2026-06-05 | Stale token login redirect loop | Implemented client-side loop break & URL scrub | Resolved (Deployed & Verified) |
 
 ### B. Failures & Blocked Jobs Log
 | Date | Job ID | Bot / Workflow | Error Category | Safe Error Message |
@@ -57,7 +58,8 @@ This document tracks system performance, operational checks, and security teleme
 ### F. Dashboard Security Log (Auth, Rate Limits, Nonces)
 | Date | Requester (Hashed IP) | Endpoint | Denial Reason | Logged Status |
 | :--- | :--- | :--- | :--- | :--- |
-| 2026-06-05 | Staging Smoke test | POST `/action/dispatch` | `UNAUTHORIZED_TOKEN` / `MISSING_SERVER_TOKEN` | Audited correctly |
+| 2026-06-05 | Staging Smoke test | GET `/dashboard` | `missing_dashboard_token` | Audited correctly |
+| 2026-06-05 | Staging Smoke test | POST `/action/dispatch` | `invalid_dashboard_token` | Audited correctly |
 
 ---
 
