@@ -260,11 +260,12 @@ To ensure developer-friendly debugging, Hermes will support end-to-end trace map
     *   `/hermes_approve <approval_id>` (Gated Approver) — Approves a gated publisher command using the existing approvals engine and updates the linked Hermes job status.
 *   **Role Gates**: Read commands require a role mapping with `read_runtime` capability. Cancel, retry, and dispatch require `operator`, `publisher`, `approver`, or `super_admin`. Approvals require `approver` or `super_admin`.
 
-### [ ] H5 — Queue Daemon Inbox Poller (Future Phase)
-*   Implement a background folder watcher on `openclaw/inbox/` to dynamically ingest queued Telegram command files and auto-trigger triaging.
+### [x] H5 — Queue Daemon Inbox Poller (Completed)
+*   **Summary**: Implemented the inbox poller engine and request validation schema. Sweeps incoming JSON payload files written to `openclaw/inbox/telegram-requests/`, validates structure against strict rules, maps them to normalized Hermes job parameters, registers them in the persistent queue (status starts as `queued` with no auto-dispatch), and archives processed requests to `processed/` and rejected files to `rejected/` along with safe diagnostic reason files. Verified with 8 sandbox assertions.
+*   **Files Created**: `hermes-inbox-schema.js`, `hermes-inbox-poller.js`, `scratch/test-hermes-inbox-poller.js`.
 
-### [ ] H6 — Triage Matching Automation (Future Phase)
-*   Establish pattern-matching logic to map queue inputs dynamically to approved bot slugs.
+### [ ] H6 — Observability/Search (Future Phase)
+*   Improve search indexes, query logs, status checks, and detailed trace maps.
 
-### [ ] H7 — Live Integration Gates (Future Phase)
-*   Allow enabling real GHL CRM, Airtable, Twilio SMS/Email, or Webhook execution inside the Connector Registry under strict operator configuration switches.
+### [ ] H7 — Production Validation (Future Phase)
+*   Perform production smoke testing, role gates validation, and live sandbox sign-offs.

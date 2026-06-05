@@ -49,7 +49,23 @@ function saveQueue(data) {
   const tempFile = `${file}.tmp`;
   try {
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
-    fs.renameSync(tempFile, file);
+    
+    // Windows rename resilience retry loop
+    let retries = 10;
+    while (retries > 0) {
+      try {
+        fs.renameSync(tempFile, file);
+        break;
+      } catch (renameErr) {
+        retries--;
+        if (retries === 0) {
+          throw renameErr;
+        }
+        // Wait 10ms synchronously
+        const stop = Date.now() + 10;
+        while (Date.now() < stop) {}
+      }
+    }
   } catch (err) {
     // Cleanup temp file if write failed
     if (fs.existsSync(tempFile)) {
