@@ -236,16 +236,23 @@ To ensure developer-friendly debugging, Hermes will support end-to-end trace map
 
 ---
 
-## 🚀 H2 — Hermes Queue Engine Implementation Roadmap
+## 🚀 Implementation Roadmap Status
 
-The next phase of developments will focus on implementing the active engine loops:
+### [x] H2 — Hermes Queue Engine Foundation (Completed)
+*   **Summary**: Built the core persistence schema and validation models. Implemented file-store loading, atomic JSON writing with temporary locking, deterministic hashing for duplicate active checks, and lifecycle transition functions. Verified the foundation using 16 comprehensive sandbox assertions.
+*   **Files Created**: `hermes-job-schema.js`, `hermes-queue-store.js`, `hermes-dedupe.js`, `hermes-queue-engine.js`, `scratch/test-hermes-queue-engine.js`.
 
-1.  **Queue Daemon Setup**:
-    *   Create a background queue monitor reading the inbox folder.
-    *   Implement job priority queues and persistence file lock structures.
-2.  **Triage Automation**:
-    *   Setup pattern matches mapping user inputs to target approved bot slugs.
-3.  **Adapter Implementation**:
-    *   Write `runtime-dispatcher-adapter.js` executing calls to the Runtime Orchestration API.
-4.  **Status Comms**:
-    *   Expose the `/hermes_` Telegram handlers.
+### [ ] H3 — Runtime Dispatcher Adapter (Future Phase)
+*   Implement `runtime-dispatcher-adapter.js` bridging queue states to the frozen Runtime Orchestration API via unified `source: "hermes"` calls.
+
+### [ ] H4 — Telegram Queue Control Plane (Future Phase)
+*   Implement `/hermes_status`, `/hermes_queue`, `/hermes_latest`, `/hermes_read`, `/hermes_approve`, `/hermes_cancel`, `/hermes_retry` command handlers.
+
+### [ ] H5 — Queue Daemon Inbox Poller (Future Phase)
+*   Implement a background folder watcher on `openclaw/inbox/` to dynamically ingest queued Telegram command files and auto-trigger triaging.
+
+### [ ] H6 — Triage Matching Automation (Future Phase)
+*   Establish pattern-matching logic to map queue inputs dynamically to approved bot slugs.
+
+### [ ] H7 — Live Integration Gates (Future Phase)
+*   Allow enabling real GHL CRM, Airtable, Twilio SMS/Email, or Webhook execution inside the Connector Registry under strict operator configuration switches.
