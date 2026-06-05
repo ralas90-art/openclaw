@@ -172,7 +172,30 @@ async function runBot(botSlug, userRequest, senderChatId, jobId = null, presetIn
     const safeUserRequest = userRequest.trim().substring(0, config.maxInputChars);
 
     // 6. Invoke LLM Adapter
-    const llmResult = await generateResponse(systemPrompt, safeUserRequest);
+    const llmResult = await generateResponse(systemPrompt, safeUserRequest, { jobId });
+
+    // Capture LLM usage telemetries safely and non-blockingly
+    try {
+      const usageAdapter = require('../usage/llm-usage-runtime-adapter');
+      usageAdapter.safeRecordUsage({
+        provider: config.provider,
+        model: config.model,
+        botId: slug,
+        hermesJobId: (presetInfo && presetInfo.hermesJobId) ? presetInfo.hermesJobId : null,
+        runtimeJobId: jobId,
+        systemPrompt,
+        userPrompt: safeUserRequest,
+        responseContent: llmResult.rawResponse || llmResult.content || '',
+        usage: llmResult.usage,
+        metadata: {
+          command: commandName,
+          presetId,
+          senderChatId
+        }
+      });
+    } catch (telemetryErr) {
+      console.warn(`[runtime-executor] Non-blocking usage telemetry warning: ${telemetryErr.message}`);
+    }
 
     // 7. Write formatted markdown file to outbox
     const fileResult = writeResult(

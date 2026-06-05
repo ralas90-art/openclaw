@@ -552,6 +552,20 @@ async function handleCommand(text, message) {
     const approvalId = text.trim().split(/\s+/)[1];
     return await handleHermesApprove(approvalId, message);
   }
+  if (command === '/hermes_search' || command === '/hermessearch') {
+    const query = text.trim().substring(command.length).trim();
+    return await handleHermesSearch(query, message);
+  }
+  if (command === '/hermes_trace' || command === '/hermestrace') {
+    const jobId = text.trim().split(/\s+/)[1];
+    return await handleHermesTrace(jobId, message);
+  }
+  if (command === '/hermes_failures' || command === '/hermesfailures') {
+    return await handleHermesFailures(message);
+  }
+  if (command === '/hermes_health' || command === '/hermeshealth') {
+    return await handleHermesHealth(message);
+  }
 
   // 2. OpenClaw Bot Routing
   if (command === '/content_forge' || command === '/contentforge' || command === '/cf') {
@@ -3305,4 +3319,75 @@ async function handleHermesApprove(approvalId, message) {
   return resultText;
 }
 
-module.exports = { handleCommand };
+async function handleHermesSearch(query, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_search', chatId);
+  }
+
+  if (!query || !query.trim()) {
+    return `Usage: /hermes_search <query_keyword>`;
+  }
+
+  const cleanQuery = query.trim();
+  const search = require('../../openclaw/hermes/hermes-search');
+  const formatters = require('../../openclaw/hermes/hermes-trace-formatters');
+  const results = search.searchHermesJobs(cleanQuery, { limit: 10 });
+
+  if (results.length === 0) {
+    return `No jobs found matching query '${cleanQuery}'.`;
+  }
+
+  let msg = `🔍 *Hermes Search Results for '${cleanQuery}' (Max 10)*\n\n`;
+  const formatted = results.map(j => formatters.formatOneLineSummary(j));
+  msg += formatted.join('\n');
+  return msg;
+}
+
+async function handleHermesTrace(jobId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_trace', chatId);
+  }
+
+  if (!jobId || !jobId.trim()) {
+    return `Usage: /hermes_trace <hermesJobId>`;
+  }
+
+  const cleanJobId = jobId.trim();
+  const obs = require('../../openclaw/hermes/hermes-observability');
+  return obs.buildHermesTrace(cleanJobId);
+}
+
+async function handleHermesFailures(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_failures', chatId);
+  }
+
+  const obs = require('../../openclaw/hermes/hermes-observability');
+  return obs.buildHermesFailureSummary(10);
+}
+
+async function handleHermesHealth(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/hermes_health', chatId);
+  }
+
+  const obs = require('../../openclaw/hermes/hermes-observability');
+  return obs.buildHermesQueueSummary();
+}
+
+module.exports = {
+  handleCommand,
+  handleHermesApprove
+};

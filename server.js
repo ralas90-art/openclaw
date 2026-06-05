@@ -420,6 +420,10 @@ app.get('/admin/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin-ui', 'dist', 'index.html'));
 });
 
+// OpenClaw Hermes Dashboard Router
+const { dashboardRouter } = require('./openclaw/dashboard');
+app.use('/dashboard', dashboardRouter);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });

@@ -264,8 +264,34 @@ To ensure developer-friendly debugging, Hermes will support end-to-end trace map
 *   **Summary**: Implemented the inbox poller engine and request validation schema. Sweeps incoming JSON payload files written to `openclaw/inbox/telegram-requests/`, validates structure against strict rules, maps them to normalized Hermes job parameters, registers them in the persistent queue (status starts as `queued` with no auto-dispatch), and archives processed requests to `processed/` and rejected files to `rejected/` along with safe diagnostic reason files. Verified with 8 sandbox assertions.
 *   **Files Created**: `hermes-inbox-schema.js`, `hermes-inbox-poller.js`, `scratch/test-hermes-inbox-poller.js`.
 
-### [ ] H6 — Observability/Search (Future Phase)
-*   Improve search indexes, query logs, status checks, and detailed trace maps.
+### [x] H6 — Observability/Search (Completed)
+*   **Summary**: Built the observability reports, detailed execution trace visualizers, and multi-criteria read-only search indices. Implemented data sanitization routines protecting absolute user paths, code stack traces, and API key tokens. Integrated new capability-gated commands (`/hermes_search`, `/hermes_trace`, `/hermes_failures`, `/hermes_health`) in the Telegram interface. Verified with 8 sandbox assertions.
+*   **Trace Lifecycle Model**:
+    `Inbox Request (requestId) -> Hermes Job (hermesJobId) -> Runtime Job (runtimeJobId) -> Approval (approvalId) -> Output Path -> Drive Link -> Status`
+*   **Files Created**: `hermes-trace-formatters.js`, `hermes-observability.js`, `hermes-search.js`, `scratch/test-hermes-observability-search.js`.
 
-### [ ] H7 — Production Validation (Future Phase)
-*   Perform production smoke testing, role gates validation, and live sandbox sign-offs.
+### [x] H7 — Production Validation (Completed)
+*   **Summary**: Conducted final production smoke testing, role capability boundaries check, and end-to-end flow checks (Flow A to H). Built a sandboxed validation script proving inbox sweeps, dispatcher adaptions, approval gates, duplicate preventions, retries, role security gates, and registry dry-run blocks. All 10 test suites are green with 0 failures. Created the final sign-off report certifying readiness.
+*   **Files Created**: `scratch/test-hermes-production-validation.js`, `hermes-production-validation-report.md`.
+
+---
+
+## 🚀 Controlled Operations Mode — Dry-Run Production Pilot
+
+This section outlines the operational constraints, system configuration, and safety boundaries for the Hermes pilot execution in live staging/production environments.
+
+### 1. Operational Mode Status
+Hermes is certified as production-ready **ONLY for dry-run operations**. 
+* **Real Connector Execution Status:** **INACTIVE** (`realExecutionEnabled: false`).
+* **Active Security Boundaries:**
+  * All external network integrations (GHL CRM writes, Twilio SMS, Airtable updates, email notifications, direct webhook dispatches, Google Places queries) are entirely simulated.
+  * Runtime Executor code is frozen; no internal modifications are allowed.
+  * Dispatch operations translate variables into local mock outbox assets only.
+
+### 2. Future Activation Requirements
+Moving beyond Controlled Operations Mode to Live Production Mode (enabling real external writes) is strictly gated and requires a separate, explicit **Activation Phase**. Transitioning requires:
+1. **Security Policy Approval:** Formal verification and authorization of live external execution schemas.
+2. **Infrastructure Validation:** Sandbox auditing of live CRM, Twilio, and Airtable environment API keys.
+3. **Connector Activation Deployment:** Modifying `connector-schemas.json` and `connector-registry.js` to enable `realExecutionEnabled: true` for authorized connector IDs.
+4. **Smoke-Testing Gated Writes:** Performing controlled, single-recipient write tests under super-admin supervision before turning on auto-dispatch rules.
+

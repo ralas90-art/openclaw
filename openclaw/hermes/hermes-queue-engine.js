@@ -252,6 +252,38 @@ function completeHermesJob(hermesJobId, resultPayload = {}) {
   return job;
 }
 
+/**
+ * Retries a failed or blocked Hermes job. Clones details and preserves trace linkage.
+ * @param {string} hermesJobId
+ * @returns {Promise<object>}
+ */
+async function retryHermesJob(hermesJobId) {
+  const job = readHermesJob(hermesJobId);
+  if (!job) {
+    throw new Error(`Job not found for ID '${hermesJobId}'`);
+  }
+
+  if (job.status !== 'failed' && job.status !== 'blocked') {
+    throw new Error(`Can only retry FAILED or BLOCKED jobs. Current status: ${job.status}`);
+  }
+
+  const newJob = createHermesJob({
+    requestedBy: job.requestedBy,
+    botId: job.botId,
+    inputSummary: job.inputSummary,
+    priority: job.priority || 'normal',
+    metadata: {
+      ...(job.metadata || {}),
+      originalHermesJobId: job.hermesJobId
+    }
+  });
+
+  // Dynamically require to avoid circular dependency
+  const adapter = require('./runtime-dispatcher-adapter');
+  const result = await adapter.dispatchHermesJobToRuntime(newJob.hermesJobId);
+  return { newJob, result };
+}
+
 module.exports = {
   createHermesJob,
   readHermesJob,
@@ -263,5 +295,7 @@ module.exports = {
   cancelHermesJob,
   blockHermesJob,
   failHermesJob,
-  completeHermesJob
+  completeHermesJob,
+  retryHermesJob
 };
+

@@ -63,7 +63,15 @@ async function generateResponse(systemPrompt, userPrompt, options = {}) {
       );
       
       const text = response.data.choices[0].message.content;
-      return parseStructuredResponse(text);
+      const parsed = parseStructuredResponse(text);
+      if (response.data.usage) {
+        parsed.usage = {
+          inputTokens: response.data.usage.prompt_tokens || 0,
+          outputTokens: response.data.usage.completion_tokens || 0,
+          totalTokens: response.data.usage.total_tokens || 0
+        };
+      }
+      return parsed;
     } catch (err) {
       throw new Error(`OpenAI API call failed: ${getCleanErrorMessage(err)}`);
     }
@@ -96,7 +104,15 @@ async function generateResponse(systemPrompt, userPrompt, options = {}) {
       );
       
       const text = response.data.content[0].text;
-      return parseStructuredResponse(text);
+      const parsed = parseStructuredResponse(text);
+      if (response.data.usage) {
+        parsed.usage = {
+          inputTokens: response.data.usage.input_tokens || 0,
+          outputTokens: response.data.usage.output_tokens || 0,
+          totalTokens: (response.data.usage.input_tokens + response.data.usage.output_tokens) || 0
+        };
+      }
+      return parsed;
     } catch (err) {
       throw new Error(`Anthropic API call failed: ${getCleanErrorMessage(err)}`);
     }
@@ -128,7 +144,15 @@ async function generateResponse(systemPrompt, userPrompt, options = {}) {
       );
       
       const text = response.data.choices[0].message.content;
-      return parseStructuredResponse(text);
+      const parsed = parseStructuredResponse(text);
+      if (response.data.usage) {
+        parsed.usage = {
+          inputTokens: response.data.usage.prompt_tokens || 0,
+          outputTokens: response.data.usage.completion_tokens || 0,
+          totalTokens: response.data.usage.total_tokens || 0
+        };
+      }
+      return parsed;
     } catch (err) {
       throw new Error(`OpenRouter API call failed: ${getCleanErrorMessage(err)}`);
     }

@@ -56,7 +56,7 @@ async function createRuntimeBotRun({ botSlug, request, actor, source, metadata }
   }
 
   const jobId = generateRuntimeJobId();
-  const res = await runBot(botSlug, request, actor, jobId);
+  const res = await runBot(botSlug, request, actor, jobId, metadata && metadata.hermesJobId ? { hermesJobId: metadata.hermesJobId } : null);
   if (res.status !== 'success') {
     return {
       ok: false,
@@ -101,7 +101,7 @@ async function createRuntimePresetRun({ presetId, input, actor, source, metadata
   }
 
   const jobId = generateRuntimeJobId();
-  const res = await runPreset(presetId, input, actor, { jobId });
+  const res = await runPreset(presetId, input, actor, { jobId, metadata });
   if (res.status !== 'success') {
     return {
       ok: false,

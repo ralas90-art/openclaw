@@ -170,7 +170,8 @@ async function runPreset(presetId, input, senderChatId, options = {}) {
   const presetInfo = {
     id: presetId,
     name: preset.name,
-    command: 'run_preset'
+    command: 'run_preset',
+    hermesJobId: (options.metadata && options.metadata.hermesJobId) ? options.metadata.hermesJobId : null
   };
 
   try {
@@ -328,7 +329,8 @@ async function runPresetPublish(presetId, input, senderChatId, options = {}) {
   const presetInfo = {
     id: presetId,
     name: preset.name,
-    command: 'run_preset_publish'
+    command: 'run_preset_publish',
+    hermesJobId: (options.metadata && options.metadata.hermesJobId) ? options.metadata.hermesJobId : null
   };
 
   let execResult;
