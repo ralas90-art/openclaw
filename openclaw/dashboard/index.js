@@ -298,6 +298,7 @@ function renderLoginPage() {
       <div class="login-card">
         <h1>Hermes Portal Auth</h1>
         <p>Enter your administration security token</p>
+        <div id="error-message" style="display: none; color: #ef4444; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 1.5rem; text-align: center;"></div>
         <input type="password" id="token" placeholder="INTERNAL_ADMIN_TOKEN" onkeydown="if(event.key==='Enter') login()"/>
         <button onclick="login()">Enter Dashboard</button>
       </div>
@@ -312,11 +313,20 @@ function renderLoginPage() {
         const urlParams = new URLSearchParams(window.location.search);
         const tok = urlParams.get('token');
         if (tok) {
-          sessionStorage.setItem('hermes_admin_token', tok);
+          // Since the server served the login page (protectDashboard middleware rejected it),
+          // the token in the URL query parameter must be invalid.
+          sessionStorage.removeItem('hermes_admin_token');
+          const errDiv = document.getElementById('error-message');
+          if (errDiv) {
+            errDiv.style.display = 'block';
+            errDiv.textContent = 'Invalid security token. Please try again.';
+          }
+          // Clean the query parameter from address bar
+          window.history.replaceState({}, document.title, window.location.pathname);
         } else {
           const saved = sessionStorage.getItem('hermes_admin_token');
           if (saved) {
-            window.location.search = '?token=' + encodeURIComponent(saved);
+            window.location.href = window.location.pathname + '?token=' + encodeURIComponent(saved);
           }
         }
       </script>
