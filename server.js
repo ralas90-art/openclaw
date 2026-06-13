@@ -425,6 +425,9 @@ apiRouter.get('/reports/executive-weekly', async (req, res) => {
 
 app.use('/api/admin', apiRouter);
 
+// Jarvis API Routes
+app.use('/api/jarvis', require('./jarvis/routes'));
+
 // Serve static React admin UI
 app.use('/admin', express.static(path.join(__dirname, 'admin-ui', 'dist')));
 app.get('/admin/{*path}', (req, res) => {

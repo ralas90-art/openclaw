@@ -548,6 +548,18 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'List pending recommended actions.'
+  },
+  jarvis_mobile_inbox: {
+    commands: ['/jarvis_mobile_inbox'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Show recent mobile uploads.'
   }
 };
 
@@ -611,7 +623,8 @@ function normalizeCommand(commandText) {
     'jarvisbrief': 'jarvis_brief',
     'jarvisyesterday': 'jarvis_yesterday',
     'jarvisproject': 'jarvis_project',
-    'jarvisnext': 'jarvis_next'
+    'jarvisnext': 'jarvis_next',
+    'jarvismobileinbox': 'jarvis_mobile_inbox'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

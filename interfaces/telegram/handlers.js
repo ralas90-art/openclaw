@@ -388,6 +388,9 @@ async function handleCommand(text, message) {
   if (command === '/jarvis_next' || command === '/jarvisnext') {
     return await handleJarvisNext(message);
   }
+  if (command === '/jarvis_mobile_inbox' || command === '/jarvismobileinbox') {
+    return await handleJarvisMobileInbox(message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -3463,6 +3466,20 @@ async function handleJarvisNext(message) {
     return await controller.getNextActions();
   } catch (err) {
     return `❌ Error fetching next actions: ${err.message}`;
+  }
+}
+
+async function handleJarvisMobileInbox(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_mobile_inbox', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_mobile_inbox', permCheck.reason, message);
+  }
+  const controller = require('../../jarvis/controller');
+  try {
+    return await controller.getMobileInbox();
+  } catch (err) {
+    return `❌ Error fetching mobile inbox: ${err.message}`;
   }
 }
 

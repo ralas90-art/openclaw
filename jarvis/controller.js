@@ -269,9 +269,40 @@ async function getNextActions() {
   return md;
 }
 
+
+/**
+ * 5. Compiles list of unprocessed mobile uploads
+ */
+async function getMobileInbox() {
+  console.log('[JarvisController] Querying unprocessed mobile inbox...');
+  const rows = await queryDb(
+    "SELECT * FROM jarvis_mobile_uploads WHERE processed = false ORDER BY created_at DESC LIMIT 10;"
+  );
+  
+  let md = "# 📥 Unprocessed Mobile Inbox\n\n";
+  if (rows.length === 0) {
+    md += "✅ Mobile inbox is clear. No unprocessed notes or tasks found.";
+  } else {
+    for (const r of rows) {
+      const date = new Date(r.created_at).toISOString().substring(0, 16).replace('T', ' ');
+      md += "• *[" + r.intake_source.toUpperCase() + "]* `[" + r.task_type + "]` at _" + date + "_\n";
+      if (r.project_slug) {
+        md += "  *Project:* `" + r.project_slug + "`\n";
+      }
+      md += "  *Content:* " + r.text_content + "\n";
+      if (r.notes) {
+        md += "  *Notes:* " + r.notes + "\n";
+      }
+      md += "  *ID:* `" + r.id + "`\n\n";
+    }
+  }
+  return md;
+}
+
 module.exports = {
   getDailyBrief,
   getYesterdaySummary,
   getProjectStatus,
-  getNextActions
+  getNextActions,
+  getMobileInbox
 };
