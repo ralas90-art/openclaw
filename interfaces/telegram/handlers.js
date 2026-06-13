@@ -373,6 +373,21 @@ async function handleCommand(text, message) {
 
   // 1. Registry & Help Commands
   if (command === '/help') return handleHelp();
+
+  // Jarvis Personal Assistant Commands
+  if (command === '/jarvis_brief' || command === '/jarvisbrief') {
+    return await handleJarvisBrief(message);
+  }
+  if (command === '/jarvis_yesterday' || command === '/jarvisyesterday') {
+    return await handleJarvisYesterday(message);
+  }
+  if (command === '/jarvis_project' || command === '/jarvisproject') {
+    const slug = text.trim().split(/\s+/)[1];
+    return await handleJarvisProject(slug, message);
+  }
+  if (command === '/jarvis_next' || command === '/jarvisnext') {
+    return await handleJarvisNext(message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -3387,7 +3402,72 @@ async function handleHermesHealth(message) {
   return obs.buildHermesQueueSummary();
 }
 
+
+// =====================================================================
+// Jarvis Assistant Command Handlers (Phase 2)
+// =====================================================================
+
+async function handleJarvisBrief(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_brief', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_brief', permCheck.reason, message);
+  }
+  const controller = require('../../jarvis/controller');
+  try {
+    return await controller.getDailyBrief();
+  } catch (err) {
+    return `❌ Error generating Daily Brief: ${err.message}`;
+  }
+}
+
+async function handleJarvisYesterday(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_yesterday', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_yesterday', permCheck.reason, message);
+  }
+  const controller = require('../../jarvis/controller');
+  try {
+    return await controller.getYesterdaySummary();
+  } catch (err) {
+    return `❌ Error generating yesterday's summary: ${err.message}`;
+  }
+}
+
+async function handleJarvisProject(slug, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_project', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_project', permCheck.reason, message);
+  }
+  if (!slug) {
+    return `Usage: /jarvis_project <project_slug>\nExample: /jarvis_project septivolt`;
+  }
+  const controller = require('../../jarvis/controller');
+  try {
+    return await controller.getProjectStatus(slug);
+  } catch (err) {
+    return `❌ Error fetching project status: ${err.message}`;
+  }
+}
+
+async function handleJarvisNext(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_next', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_next', permCheck.reason, message);
+  }
+  const controller = require('../../jarvis/controller');
+  try {
+    return await controller.getNextActions();
+  } catch (err) {
+    return `❌ Error fetching next actions: ${err.message}`;
+  }
+}
+
 module.exports = {
+
   handleCommand,
   handleHermesApprove
 };

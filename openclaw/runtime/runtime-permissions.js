@@ -500,6 +500,54 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'view_config',
     description: 'Check required environment variables presence for a connector.'
+  },
+  jarvis_brief: {
+    commands: ['/jarvis_brief'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Inspect live daily briefs.'
+  },
+  jarvis_yesterday: {
+    commands: ['/jarvis_yesterday'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View completed work log from yesterday.'
+  },
+  jarvis_project: {
+    commands: ['/jarvis_project'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Show project memory status cards.'
+  },
+  jarvis_next: {
+    commands: ['/jarvis_next'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List pending recommended actions.'
   }
 };
 
@@ -559,7 +607,11 @@ function normalizeCommand(commandText) {
     'dryruntypes': 'dryrun_types',
     'connectorlist': 'connector_list',
     'connectorinfo': 'connector_info',
-    'connectorvalidate': 'connector_validate'
+    'connectorvalidate': 'connector_validate',
+    'jarvisbrief': 'jarvis_brief',
+    'jarvisyesterday': 'jarvis_yesterday',
+    'jarvisproject': 'jarvis_project',
+    'jarvisnext': 'jarvis_next'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {
