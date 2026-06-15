@@ -3418,7 +3418,8 @@ async function handleJarvisBrief(message) {
   }
   const controller = require('../../jarvis/controller');
   try {
-    return await controller.getDailyBrief();
+    const result = await controller.getDailyBrief();
+    return typeof result === 'object' ? result.raw_brief_markdown : result;
   } catch (err) {
     return `❌ Error generating Daily Brief: ${err.message}`;
   }

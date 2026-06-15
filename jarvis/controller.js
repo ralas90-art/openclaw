@@ -30,9 +30,31 @@ async function queryDb(sqlText, params = []) {
 /**
  * 1. Generates and returns a markdown daily brief, saving it to database and snapshots
  */
-async function getDailyBrief() {
+async function getDailyBrief(refresh = false) {
   console.log('[JarvisController] Compiling prioritized Daily Brief...');
   const todayStr = new Date().toISOString().substring(0, 10);
+
+  // 1. Idempotency Check: return existing brief if refresh is false
+  if (!refresh) {
+    try {
+      // Ensure column exists first
+      await queryDb("ALTER TABLE jarvis_daily_briefs ADD COLUMN IF NOT EXISTS siri_summary TEXT;");
+      
+      const rows = await queryDb(
+        "SELECT raw_brief_markdown, siri_summary FROM jarvis_daily_briefs WHERE brief_date = $1;",
+        [todayStr]
+      );
+      if (rows.length > 0 && rows[0].raw_brief_markdown) {
+        console.log('[JarvisController] Returning cached today brief (idempotent).');
+        return {
+          raw_brief_markdown: rows[0].raw_brief_markdown,
+          siri_summary: rows[0].siri_summary || "No Siri summary available."
+        };
+      }
+    } catch (err) {
+      console.warn('[JarvisController] Idempotency check failed:', err.message);
+    }
+  }
 
   // Source 1: Hermes / OpenClaw queue activity
   let hermesTotal = 0;
@@ -128,17 +150,53 @@ async function getDailyBrief() {
     md += `\n`;
   }
 
+  // Compile Siri-friendly spoken summary
+  let siriSummary = `Good morning Rob! Here is your Jarvis summary for today. `;
+  const totalDone = completedTasks.length + hermesCompleted;
+  if (totalDone > 0) {
+    siriSummary += `In the last twenty four hours, you completed ${totalDone} tasks. `;
+  } else {
+    siriSummary += `You have no completed tasks logged since yesterday. `;
+  }
+  
+  siriSummary += `You have ${projects.length} active projects. `;
+  
+  const totalBlocks = blockers.length + hermesFailed;
+  if (totalBlocks > 0) {
+    siriSummary += `Warning: There are ${totalBlocks} active blockers or system execution failures that need your attention. `;
+  } else {
+    siriSummary += `All systems are stable with no active blockers. `;
+  }
+  
+  if (nextActions.length > 0) {
+    siriSummary += `Your top recommended next action is: ${nextActions[0].action} for project ${nextActions[0].project_slug || 'system'}. `;
+  } else {
+    siriSummary += `You have no pending next actions today. `;
+  }
+  
+  const totalApprovals = pendingApprovals.length + hermesPendingApproval;
+  if (totalApprovals > 0) {
+    siriSummary += `You have ${totalApprovals} gated executions awaiting your approval. `;
+  } else {
+    siriSummary += `No pending approvals outstanding. `;
+  }
+  
+  siriSummary += `Have a productive day!`;
+
   // Save/Upsert brief to database
+  await queryDb("ALTER TABLE jarvis_daily_briefs ADD COLUMN IF NOT EXISTS siri_summary TEXT;");
+  
   const insertSql = `
-    INSERT INTO jarvis_daily_briefs (brief_date, completed_summary, active_summary, blockers_summary, next_actions_summary, suggested_commands, raw_brief_markdown)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO jarvis_daily_briefs (brief_date, completed_summary, active_summary, blockers_summary, next_actions_summary, suggested_commands, raw_brief_markdown, siri_summary)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (brief_date) DO UPDATE
     SET completed_summary = EXCLUDED.completed_summary,
         active_summary = EXCLUDED.active_summary,
         blockers_summary = EXCLUDED.blockers_summary,
         next_actions_summary = EXCLUDED.next_actions_summary,
         suggested_commands = EXCLUDED.suggested_commands,
-        raw_brief_markdown = EXCLUDED.raw_brief_markdown;
+        raw_brief_markdown = EXCLUDED.raw_brief_markdown,
+        siri_summary = EXCLUDED.siri_summary;
   `;
   
   const compSummary = `Tasks completed: ${completedTasks.length}, Hermes completed: ${hermesCompleted}`;
@@ -153,7 +211,8 @@ async function getDailyBrief() {
     blockSummary,
     nextSummary,
     JSON.stringify(suggestedCmds),
-    md
+    md,
+    siriSummary
   ]);
 
   // Synchronize snapshots
@@ -163,7 +222,10 @@ async function getDailyBrief() {
     console.warn('[JarvisController] Exporter warning:', err.message);
   }
 
-  return md;
+  return {
+    raw_brief_markdown: md,
+    siri_summary: siriSummary
+  };
 }
 
 /**
