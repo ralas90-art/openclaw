@@ -333,17 +333,43 @@ async function getNextActions() {
 
 
 /**
- * 5. Compiles list of unprocessed mobile uploads
+ * 5. Compiles list of mobile uploads with optional filters:
+ * - 'all': all uploads
+ * - 'processed': only processed uploads
+ * - '<project_slug>': only uploads for a specific project
+ * - default: only unprocessed uploads
  */
-async function getMobileInbox() {
-  console.log('[JarvisController] Querying unprocessed mobile inbox...');
-  const rows = await queryDb(
-    "SELECT * FROM jarvis_mobile_uploads WHERE processed = false ORDER BY created_at DESC LIMIT 10;"
-  );
+async function getMobileInbox(filter) {
+  const cleanFilter = filter ? filter.trim().toLowerCase() : null;
+  console.log(`[JarvisController] Querying mobile inbox with filter: ${cleanFilter || 'default (unprocessed)'}...`);
+  
+  let sqlText = "SELECT * FROM jarvis_mobile_uploads ";
+  let params = [];
+  
+  if (cleanFilter === 'all') {
+    sqlText += "ORDER BY created_at DESC LIMIT 10;";
+  } else if (cleanFilter === 'processed') {
+    sqlText += "WHERE processed = true ORDER BY created_at DESC LIMIT 10;";
+  } else if (cleanFilter) {
+    sqlText += "WHERE project_slug = $1 ORDER BY created_at DESC LIMIT 10;";
+    params = [cleanFilter];
+  } else {
+    sqlText += "WHERE processed = false ORDER BY created_at DESC LIMIT 10;";
+  }
+
+  const rows = await queryDb(sqlText, params);
   
   let md = "# 📥 Unprocessed Mobile Inbox\n\n";
+  if (cleanFilter === 'all') {
+    md = "# 📥 All Mobile Inbox\n\n";
+  } else if (cleanFilter === 'processed') {
+    md = "# 📥 Processed Mobile Inbox\n\n";
+  } else if (cleanFilter) {
+    md = `# 📥 Mobile Inbox for Project: ${cleanFilter}\n\n`;
+  }
+
   if (rows.length === 0) {
-    md += "✅ Mobile inbox is clear. No unprocessed notes or tasks found.";
+    md += "✅ Mobile inbox is clear. No matching notes or tasks found.";
   } else {
     for (const r of rows) {
       const date = new Date(r.created_at).toISOString().substring(0, 16).replace('T', ' ');
@@ -361,10 +387,82 @@ async function getMobileInbox() {
   return md;
 }
 
+/**
+ * 6. Marks a mobile upload as processed
+ */
+async function markUploadProcessed(uploadId) {
+  if (!uploadId) {
+    throw new Error('Missing uploadId parameter.');
+  }
+  const cleanId = uploadId.trim();
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (!uuidRegex.test(cleanId)) {
+    throw new Error('Invalid upload ID format. Must be a valid UUID.');
+  }
+
+  console.log(`[JarvisController] Marking mobile upload ${cleanId} as processed...`);
+  const rows = await queryDb(
+    "UPDATE jarvis_mobile_uploads SET processed = true, updated_at = NOW() WHERE id = $1 RETURNING id;",
+    [cleanId]
+  );
+
+  if (rows.length === 0) {
+    throw new Error('Mobile upload record not found.');
+  }
+
+  return true;
+}
+
+/**
+ * 7. Assigns an upload to a project and marks it as processed
+ */
+async function processUploadToProject(uploadId, projectSlug) {
+  if (!uploadId || !projectSlug) {
+    throw new Error('Missing uploadId or project_slug parameter.');
+  }
+  const cleanId = uploadId.trim();
+  const cleanSlug = projectSlug.trim().toLowerCase();
+  
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (!uuidRegex.test(cleanId)) {
+    throw new Error('Invalid upload ID format. Must be a valid UUID.');
+  }
+
+  // Validate that project slug exists in jarvis_projects
+  console.log(`[JarvisController] Validating project slug: ${cleanSlug}...`);
+  const projects = await queryDb(
+    "SELECT slug FROM jarvis_projects WHERE slug = $1 AND status = 'active';",
+    [cleanSlug]
+  );
+  if (projects.length === 0) {
+    throw new Error(`Invalid project slug: '${projectSlug}'. Project does not exist or is inactive.`);
+  }
+
+  // Validate that the upload exists first
+  console.log(`[JarvisController] Checking if upload exists: ${cleanId}...`);
+  const uploads = await queryDb(
+    "SELECT id FROM jarvis_mobile_uploads WHERE id = $1;",
+    [cleanId]
+  );
+  if (uploads.length === 0) {
+    throw new Error('Mobile upload record not found.');
+  }
+
+  console.log(`[JarvisController] Mapping upload ${cleanId} to project ${cleanSlug} and marking processed...`);
+  const rows = await queryDb(
+    "UPDATE jarvis_mobile_uploads SET project_slug = $1, processed = true, updated_at = NOW() WHERE id = $2 RETURNING *;",
+    [cleanSlug, cleanId]
+  );
+
+  return rows[0];
+}
+
 module.exports = {
   getDailyBrief,
   getYesterdaySummary,
   getProjectStatus,
   getNextActions,
-  getMobileInbox
+  getMobileInbox,
+  markUploadProcessed,
+  processUploadToProject
 };

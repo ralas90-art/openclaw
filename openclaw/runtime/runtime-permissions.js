@@ -560,6 +560,30 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'Show recent mobile uploads.'
+  },
+  jarvis_mark_processed: {
+    commands: ['/jarvis_mark_processed'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Mark a mobile upload as processed.'
+  },
+  jarvis_process_inbox: {
+    commands: ['/jarvis_process_inbox'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Assign a mobile upload to a project and mark it as processed.'
   }
 };
 
@@ -624,7 +648,9 @@ function normalizeCommand(commandText) {
     'jarvisyesterday': 'jarvis_yesterday',
     'jarvisproject': 'jarvis_project',
     'jarvisnext': 'jarvis_next',
-    'jarvismobileinbox': 'jarvis_mobile_inbox'
+    'jarvismobileinbox': 'jarvis_mobile_inbox',
+    'jarvismarkprocessed': 'jarvis_mark_processed',
+    'jarvisprocessinbox': 'jarvis_process_inbox'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

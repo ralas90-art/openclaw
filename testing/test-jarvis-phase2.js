@@ -13,12 +13,15 @@ async function setupMockData() {
   const client = new Client({ connectionString: DB_URL });
   await client.connect();
   try {
+    // Clear today's cached brief to force a clean generation for testing
+    await client.query("DELETE FROM jarvis_daily_briefs WHERE brief_date = CURRENT_DATE;");
+
     // 1. Insert completed task yesterday
     await client.query(`
       INSERT INTO jarvis_completed_tasks (project_slug, task_name, outcome, completed_at)
       VALUES 
-        ('septivolt', 'Build simulator UI variant', 'Delivered slider overlays.', NOW() - INTERVAL '12 hours'),
-        ('cresca-os', 'Verify copywriting schema tags', 'Google rich snippets verified.', NOW() - INTERVAL '12 hours')
+        ('septivolt', 'Build simulator UI variant', 'Delivered slider overlays.', NOW() - INTERVAL '30 hours'),
+        ('cresca-os', 'Verify copywriting schema tags', 'Google rich snippets verified.', NOW() - INTERVAL '30 hours')
       ON CONFLICT DO NOTHING;
     `);
 

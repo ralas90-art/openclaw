@@ -389,7 +389,20 @@ async function handleCommand(text, message) {
     return await handleJarvisNext(message);
   }
   if (command === '/jarvis_mobile_inbox' || command === '/jarvismobileinbox') {
-    return await handleJarvisMobileInbox(message);
+    const parts = text.trim().split(/\s+/);
+    const filter = parts[1];
+    return await handleJarvisMobileInbox(filter, message);
+  }
+  if (command === '/jarvis_mark_processed' || command === '/jarvismarkprocessed') {
+    const parts = text.trim().split(/\s+/);
+    const uploadId = parts[1];
+    return await handleJarvisMarkProcessed(uploadId, message);
+  }
+  if (command === '/jarvis_process_inbox' || command === '/jarvisprocessinbox') {
+    const parts = text.trim().split(/\s+/);
+    const uploadId = parts[1];
+    const projectSlug = parts[2];
+    return await handleJarvisProcessInbox(uploadId, projectSlug, message);
   }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
@@ -3470,17 +3483,73 @@ async function handleJarvisNext(message) {
   }
 }
 
-async function handleJarvisMobileInbox(message) {
+async function handleJarvisMobileInbox(filter, message) {
+  let actualFilter = filter;
+  let actualMessage = message;
+  if (filter && typeof filter === 'object' && filter.chat) {
+    actualMessage = filter;
+    actualFilter = undefined;
+  }
+  
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
-  const permCheck = requireCommandPermission('/jarvis_mobile_inbox', message);
+  const permCheck = requireCommandPermission('/jarvis_mobile_inbox', actualMessage);
   if (!permCheck.allowed) {
-    return formatPermissionDenied('/jarvis_mobile_inbox', permCheck.reason, message);
+    return formatPermissionDenied('/jarvis_mobile_inbox', permCheck.reason, actualMessage);
   }
   const controller = require('../../jarvis/controller');
   try {
-    return await controller.getMobileInbox();
+    return await controller.getMobileInbox(actualFilter);
   } catch (err) {
     return `❌ Error fetching mobile inbox: ${err.message}`;
+  }
+}
+
+async function handleJarvisMarkProcessed(uploadId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_mark_processed', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_mark_processed', permCheck.reason, message);
+  }
+  
+  if (!uploadId) {
+    return `❌ Usage: /jarvis_mark_processed <uploadId>`;
+  }
+
+  const controller = require('../../jarvis/controller');
+  try {
+    await controller.markUploadProcessed(uploadId);
+    return `✅ Mobile upload \`${uploadId}\` has been marked as processed.`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisProcessInbox(uploadId, projectSlug, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_process_inbox', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_process_inbox', permCheck.reason, message);
+  }
+  
+  if (!uploadId || !projectSlug) {
+    return `❌ Usage: /jarvis_process_inbox <uploadId> <project_slug>`;
+  }
+
+  const controller = require('../../jarvis/controller');
+  try {
+    const record = await controller.processUploadToProject(uploadId, projectSlug);
+    return [
+      `✅ *Mobile Upload Processed & Assigned*`,
+      ``,
+      `• *Upload ID:* \`${record.id}\``,
+      `• *Project:* \`${record.project_slug}\``,
+      `• *Source:* \`${record.intake_source.toUpperCase()}\``,
+      `• *Type:* \`${record.task_type}\``,
+      `• *Content:* ${record.text_content}`,
+      `• *Status:* \`Processed\``
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
   }
 }
 
