@@ -377,7 +377,12 @@ async function getMobileInbox(filter) {
       if (r.project_slug) {
         md += "  *Project:* `" + r.project_slug + "`\n";
       }
-      md += "  *Content:* " + r.text_content + "\n";
+      if (r.text_content) {
+        md += "  *Content:* " + r.text_content + "\n";
+      }
+      if (r.media_url) {
+        md += "  *Media:* [View Attachment](" + r.media_url + ")\n";
+      }
       if (r.notes) {
         md += "  *Notes:* " + r.notes + "\n";
       }

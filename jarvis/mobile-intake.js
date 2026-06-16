@@ -55,6 +55,60 @@ function checkRateLimit(deviceId) {
 }
 
 /**
+ * Validates the media_url to ensure it uses an allowed domain, 
+ * enforces HTTPS in production, and restricts local testing domains to non-production.
+ */
+function isValidMediaUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    
+    // Check protocol: must be https, unless it is http on localhost/127.0.0.1 in non-production environments
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    
+    if (parsed.protocol !== 'https:') {
+      if (parsed.protocol === 'http:' && isLocalhost && !isProduction) {
+        // Allow http on localhost during local testing
+      } else {
+        return false;
+      }
+    }
+    
+    // Enforce localhost/127.0.0.1 is blocked in production
+    if (isLocalhost && isProduction) {
+      return false;
+    }
+    
+    const hostname = parsed.hostname.toLowerCase();
+    
+    // Allowed exact domains
+    const allowedExact = [
+      'drive.google.com',
+      'docs.google.com',
+      'localhost',
+      '127.0.0.1'
+    ];
+    
+    if (allowedExact.includes(hostname)) {
+      return true;
+    }
+    
+    // Allow subdomains of supabase.co, supabase.in, and supabase.com
+    const isSupabase = hostname.endsWith('.supabase.co') || hostname === 'supabase.co' ||
+                       hostname.endsWith('.supabase.in') || hostname === 'supabase.in' ||
+                       hostname.endsWith('.supabase.com') || hostname === 'supabase.com';
+    
+    if (isSupabase) {
+      return true;
+    }
+    
+    return false;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
  * Mobile Token Authorization Middleware
  */
 async function authenticateMobileToken(req, res, next) {
@@ -108,7 +162,7 @@ async function authenticateMobileToken(req, res, next) {
  */
 async function handleMobileIntake(req, res) {
   try {
-    const allowedFields = ['intake_source', 'task_type', 'project_slug', 'text_content', 'notes'];
+    const allowedFields = ['intake_source', 'task_type', 'project_slug', 'text_content', 'media_url', 'notes'];
     const payload = {};
     
     // Strip unknown fields
@@ -118,7 +172,7 @@ async function handleMobileIntake(req, res) {
       }
     }
     
-    const { intake_source, task_type, project_slug, text_content, notes } = payload;
+    const { intake_source, task_type, project_slug, text_content, media_url, notes } = payload;
     
     // 1. Validate intake_source
     const allowedSources = ['shortcut', 'sharesheet', 'siri'];
@@ -126,23 +180,38 @@ async function handleMobileIntake(req, res) {
       return res.status(400).json({ error: `Bad Request: Invalid intake_source. Must be one of: ${allowedSources.join(', ')}` });
     }
     
-    // 2. Validate task_type (Phase 3A strictly limits to 'text')
-    if (!task_type) {
-      return res.status(400).json({ error: "Bad Request: Missing task_type" });
-    }
-    if (task_type !== 'text') {
-      return res.status(400).json({ error: "Bad Request: task_type must be strictly 'text' in Phase 3A" });
+    // 2. Validate task_type
+    const allowedTaskTypes = ['text', 'screenshot', 'photo'];
+    if (!task_type || !allowedTaskTypes.includes(task_type)) {
+      return res.status(400).json({ error: `Bad Request: Invalid task_type. Must be one of: ${allowedTaskTypes.join(', ')}` });
     }
     
-    // 3. Validate text_content
-    if (!text_content || typeof text_content !== 'string' || text_content.trim() === '') {
-      return res.status(400).json({ error: "Bad Request: text_content is required and must be a non-empty string" });
-    }
-    if (text_content.length > 5000) {
-      return res.status(400).json({ error: "Bad Request: text_content exceeds the limit of 5000 characters" });
+    // 3. Validate media_url
+    if (task_type === 'screenshot' || task_type === 'photo') {
+      if (!media_url || typeof media_url !== 'string' || media_url.trim() === '') {
+        return res.status(400).json({ error: `Bad Request: media_url is required when task_type is '${task_type}'` });
+      }
+      if (!isValidMediaUrl(media_url)) {
+        return res.status(400).json({ error: "Bad Request: media_url must be a valid URL from an approved storage provider (Supabase Storage or Google Drive)" });
+      }
     }
     
-    // 4. Validate project_slug if provided
+    // 4. Validate text_content
+    if (task_type === 'text') {
+      if (!text_content || typeof text_content !== 'string' || text_content.trim() === '') {
+        return res.status(400).json({ error: "Bad Request: text_content is required and must be a non-empty string when task_type is 'text'" });
+      }
+    }
+    if (text_content !== undefined && text_content !== null) {
+      if (typeof text_content !== 'string') {
+        return res.status(400).json({ error: "Bad Request: text_content must be a string" });
+      }
+      if (text_content.length > 5000) {
+        return res.status(400).json({ error: "Bad Request: text_content exceeds the limit of 5000 characters" });
+      }
+    }
+    
+    // 5. Validate project_slug if provided
     let cleanSlug = null;
     if (project_slug) {
       cleanSlug = project_slug.trim().toLowerCase();
@@ -155,12 +224,19 @@ async function handleMobileIntake(req, res) {
       }
     }
     
-    // 5. Insert upload record (processed explicitly set to false)
+    // 6. Insert upload record (processed explicitly set to false)
     const rows = await queryDb(
-      `INSERT INTO jarvis_mobile_uploads (intake_source, task_type, project_slug, text_content, notes, processed)
-       VALUES ($1, $2, $3, $4, $5, false)
-       RETURNING id, intake_source, task_type, project_slug, text_content, notes, processed, created_at`,
-      [intake_source, task_type, cleanSlug, text_content.trim(), notes ? notes.trim() : null]
+      `INSERT INTO jarvis_mobile_uploads (intake_source, task_type, project_slug, text_content, media_url, notes, processed)
+       VALUES ($1, $2, $3, $4, $5, $6, false)
+       RETURNING id, intake_source, task_type, project_slug, text_content, media_url, notes, processed, created_at`,
+      [
+        intake_source,
+        task_type,
+        cleanSlug,
+        text_content ? text_content.trim() : null,
+        media_url ? media_url.trim() : null,
+        notes ? notes.trim() : null
+      ]
     );
     
     const record = rows[0];

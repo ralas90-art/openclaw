@@ -563,7 +563,7 @@ const COMMAND_PERMISSIONS = {
   },
   jarvis_mark_processed: {
     commands: ['/jarvis_mark_processed'],
-    tier: 'read_only',
+    tier: 'state_mutation',
     category: 'runtime_visibility',
     requiresAdmin: true,
     mutatesState: true,
@@ -575,7 +575,7 @@ const COMMAND_PERMISSIONS = {
   },
   jarvis_process_inbox: {
     commands: ['/jarvis_process_inbox'],
-    tier: 'read_only',
+    tier: 'state_mutation',
     category: 'runtime_visibility',
     requiresAdmin: true,
     mutatesState: true,
@@ -835,7 +835,8 @@ function getPermissionSummary() {
     generate_only: [],
     publish: [],
     admin_maintenance: [],
-    external_action: []
+    external_action: [],
+    state_mutation: []
   };
 
   for (const [key, config] of Object.entries(COMMAND_PERMISSIONS)) {
@@ -857,6 +858,8 @@ function getPermissionSummary() {
     `*Tier Summary:*`,
     `• *Read Only:*`,
     `  ` + (tiers.read_only.join(', ') || 'None'),
+    `• *State Mutation:*`,
+    `  ` + (tiers.state_mutation.join(', ') || 'None'),
     `• *Generate Only:*`,
     `  ` + (tiers.generate_only.join(', ') || 'None'),
     `• *Publish:*`,
