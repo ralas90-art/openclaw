@@ -584,6 +584,126 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'Assign a mobile upload to a project and mark it as processed.'
+  },
+  jarvis_process_latest: {
+    commands: ['/jarvis_process_latest'],
+    tier: 'state_mutation',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Triage the most recent unprocessed mobile upload directly to a project.'
+  },
+  jarvis_archive_processed: {
+    commands: ['/jarvis_archive_processed'],
+    tier: 'admin_maintenance',
+    category: 'system_maintenance',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'admin_maintenance',
+    description: 'Archive all processed mobile uploads.'
+  },
+  jarvis_folders: {
+    commands: ['/jarvis_folders'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List all registered local folders.'
+  },
+  jarvis_add_folder: {
+    commands: ['/jarvis_add_folder'],
+    tier: 'state_mutation',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Register a local folder (pending approval).'
+  },
+  jarvis_approve_folder: {
+    commands: ['/jarvis_approve_folder'],
+    tier: 'admin_maintenance',
+    category: 'system_maintenance',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'admin_maintenance',
+    description: 'Approve a registered folder path.'
+  },
+  jarvis_scan: {
+    commands: ['/jarvis_scan'],
+    tier: 'state_mutation',
+    category: 'system_maintenance',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'admin_maintenance',
+    description: 'Read-only filesystem scan + Supabase index mutation. Writes index records but does not modify local files.'
+  },
+  jarvis_files: {
+    commands: ['/jarvis_files'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List indexed local files and mapping suggestions.'
+  },
+  jarvis_connectors: {
+    commands: ['/jarvis_connectors'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List registered connectors and their authorization status.'
+  },
+  jarvis_email_summary: {
+    commands: ['/jarvis_email_summary'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List unread important emails from Gmail.'
+  },
+  jarvis_drive_recent: {
+    commands: ['/jarvis_drive_recent'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List recently modified files from Google Drive.'
   }
 };
 
@@ -650,7 +770,17 @@ function normalizeCommand(commandText) {
     'jarvisnext': 'jarvis_next',
     'jarvismobileinbox': 'jarvis_mobile_inbox',
     'jarvismarkprocessed': 'jarvis_mark_processed',
-    'jarvisprocessinbox': 'jarvis_process_inbox'
+    'jarvisprocessinbox': 'jarvis_process_inbox',
+    'jarvisprocesslatest': 'jarvis_process_latest',
+    'jarvisarchiveprocessed': 'jarvis_archive_processed',
+    'jarvisfolders': 'jarvis_folders',
+    'jarvisaddfolder': 'jarvis_add_folder',
+    'jarvisapprovefolder': 'jarvis_approve_folder',
+    'jarvisscan': 'jarvis_scan',
+    'jarvisfiles': 'jarvis_files',
+    'jarvisconnectors': 'jarvis_connectors',
+    'jarvisemailsummary': 'jarvis_email_summary',
+    'jarvisdriverecent': 'jarvis_drive_recent'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

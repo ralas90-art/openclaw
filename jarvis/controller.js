@@ -150,6 +150,47 @@ async function getDailyBrief(refresh = false) {
     md += `\n`;
   }
 
+  // Section F: Cloud Connector Summaries (Gmail & Google Drive)
+  try {
+    const connectorsSummary = require('./connectors-summary');
+    
+    // 1. Gmail summary
+    const emails = await connectorsSummary.getEmailSummary();
+    if (emails && emails.length > 0) {
+      md += `## 📬 Unread Actionable Emails\n`;
+      const topEmails = emails.slice(0, 4);
+      for (const email of topEmails) {
+        const priorityLabel = email.priority_keyword ? ` 🔥 *[PRIORITY: ${email.priority_keyword.toUpperCase()}]*` : '';
+        const projLabel = email.suggested_project ? ` (Project: \`${email.suggested_project}\`)` : '';
+        md += `* **Subject:** ${email.subject}${priorityLabel}\n`;
+        md += `  *From:* \`${email.from}\`${projLabel}\n`;
+        md += `  *Snippet:* _${email.snippet}_\n`;
+      }
+      if (emails.length > 4) {
+        md += `* ...and ${emails.length - 4} more unread emails.\n`;
+      }
+      md += `\n`;
+    }
+
+    // 2. Google Drive summary
+    const driveFiles = await connectorsSummary.getDriveSummary();
+    if (driveFiles && driveFiles.length > 0) {
+      md += `## 🗂️ Google Drive Activity\n`;
+      const topDrive = driveFiles.slice(0, 4);
+      for (const f of topDrive) {
+        const sizeStr = f.size_bytes ? ` (${(f.size_bytes / 1024).toFixed(1)} KB)` : '';
+        const projLabel = f.suggested_project ? ` (Project: \`${f.suggested_project}\`)` : '';
+        md += `* **[${f.name}](${f.webViewLink})**${sizeStr}${projLabel}\n`;
+      }
+      if (driveFiles.length > 4) {
+        md += `* ...and ${driveFiles.length - 4} more modified files.\n`;
+      }
+      md += `\n`;
+    }
+  } catch (err) {
+    console.warn('[JarvisController] Failed to integrate cloud summaries in Daily Brief:', err.message);
+  }
+
   // Compile Siri-friendly spoken summary
   let siriSummary = `Good morning Rob! Here is your Jarvis summary for today. `;
   const totalDone = completedTasks.length + hermesCompleted;
@@ -343,27 +384,54 @@ async function getMobileInbox(filter) {
   const cleanFilter = filter ? filter.trim().toLowerCase() : null;
   console.log(`[JarvisController] Querying mobile inbox with filter: ${cleanFilter || 'default (unprocessed)'}...`);
   
+  // Ensure archived columns exist
+  try {
+    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;");
+    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;");
+  } catch (err) {
+    console.warn('[JarvisController] Dynamic archiving migration warning:', err.message);
+  }
+  
   let sqlText = "SELECT * FROM jarvis_mobile_uploads ";
   let params = [];
   
   if (cleanFilter === 'all') {
-    sqlText += "ORDER BY created_at DESC LIMIT 10;";
+    sqlText += "WHERE archived = false ORDER BY created_at DESC LIMIT 10;";
   } else if (cleanFilter === 'processed') {
-    sqlText += "WHERE processed = true ORDER BY created_at DESC LIMIT 10;";
+    sqlText += "WHERE processed = true AND archived = false ORDER BY created_at DESC LIMIT 10;";
+  } else if (cleanFilter === 'latest') {
+    sqlText += "WHERE processed = false AND archived = false ORDER BY created_at DESC LIMIT 1;";
+  } else if (cleanFilter === 'today') {
+    sqlText += "WHERE processed = false AND archived = false AND created_at >= CURRENT_DATE ORDER BY created_at DESC LIMIT 20;";
+  } else if (cleanFilter === 'count') {
+    sqlText = "SELECT COUNT(*) as cnt FROM jarvis_mobile_uploads WHERE processed = false AND archived = false;";
+  } else if (cleanFilter === 'archived') {
+    sqlText += "WHERE archived = true ORDER BY archived_at DESC LIMIT 10;";
   } else if (cleanFilter) {
-    sqlText += "WHERE project_slug = $1 ORDER BY created_at DESC LIMIT 10;";
+    sqlText += "WHERE project_slug = $1 AND archived = false ORDER BY created_at DESC LIMIT 10;";
     params = [cleanFilter];
   } else {
-    sqlText += "WHERE processed = false ORDER BY created_at DESC LIMIT 10;";
+    sqlText += "WHERE processed = false AND archived = false ORDER BY created_at DESC LIMIT 10;";
   }
 
   const rows = await queryDb(sqlText, params);
+  
+  if (cleanFilter === 'count') {
+    const cnt = rows.length > 0 ? rows[0].cnt : 0;
+    return `📥 *Mobile Inbox Count*\n\nThere are *${cnt}* unprocessed uploads in the mobile inbox.`;
+  }
   
   let md = "# 📥 Unprocessed Mobile Inbox\n\n";
   if (cleanFilter === 'all') {
     md = "# 📥 All Mobile Inbox\n\n";
   } else if (cleanFilter === 'processed') {
     md = "# 📥 Processed Mobile Inbox\n\n";
+  } else if (cleanFilter === 'latest') {
+    md = "# 📥 Latest Unprocessed Upload\n\n";
+  } else if (cleanFilter === 'today') {
+    md = "# 📥 Today's Unprocessed Mobile Inbox\n\n";
+  } else if (cleanFilter === 'archived') {
+    md = "# 📥 Archived Mobile Inbox\n\n";
   } else if (cleanFilter) {
     md = `# 📥 Mobile Inbox for Project: ${cleanFilter}\n\n`;
   }
@@ -462,12 +530,73 @@ async function processUploadToProject(uploadId, projectSlug) {
   return rows[0];
 }
 
+/**
+ * 8. Triage the single most recent unprocessed upload directly to a project
+ */
+async function processLatestUpload(projectSlug) {
+  if (!projectSlug) {
+    throw new Error('Missing project_slug parameter.');
+  }
+  const cleanSlug = projectSlug.trim().toLowerCase();
+  
+  // Validate that project slug exists in jarvis_projects
+  console.log(`[JarvisController] Validating project slug: ${cleanSlug}...`);
+  const projects = await queryDb(
+    "SELECT slug FROM jarvis_projects WHERE slug = $1 AND status = 'active';",
+    [cleanSlug]
+  );
+  if (projects.length === 0) {
+    throw new Error(`Invalid project slug: '${projectSlug}'. Project does not exist or is inactive.`);
+  }
+
+  // Find the latest unprocessed upload
+  console.log(`[JarvisController] Finding the latest unprocessed upload...`);
+  const uploads = await queryDb(
+    "SELECT id FROM jarvis_mobile_uploads WHERE processed = false AND archived = false ORDER BY created_at DESC LIMIT 1;"
+  );
+  if (uploads.length === 0) {
+    throw new Error('No unprocessed uploads found in the mobile inbox.');
+  }
+
+  const latestId = uploads[0].id;
+  console.log(`[JarvisController] Triaging latest upload ${latestId} to project ${cleanSlug}...`);
+  const rows = await queryDb(
+    "UPDATE jarvis_mobile_uploads SET project_slug = $1, processed = true, updated_at = NOW() WHERE id = $2 RETURNING *;",
+    [cleanSlug, latestId]
+  );
+
+  return rows[0];
+}
+
+/**
+ * 9. Archive all processed uploads (soft-delete from default inbox view)
+ */
+async function archiveProcessedUploads() {
+  console.log('[JarvisController] Archiving processed mobile uploads...');
+  
+  // Ensure archived columns exist
+  try {
+    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;");
+    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;");
+  } catch (err) {
+    console.warn('[JarvisController] Dynamic archiving migration warning:', err.message);
+  }
+
+  const rows = await queryDb(
+    "UPDATE jarvis_mobile_uploads SET archived = true, archived_at = NOW() WHERE processed = true AND archived = false RETURNING id;"
+  );
+  return rows.length;
+}
+
 module.exports = {
+  queryDb,
   getDailyBrief,
   getYesterdaySummary,
   getProjectStatus,
   getNextActions,
   getMobileInbox,
   markUploadProcessed,
-  processUploadToProject
+  processUploadToProject,
+  processLatestUpload,
+  archiveProcessedUploads
 };

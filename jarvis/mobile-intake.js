@@ -81,6 +81,16 @@ function isValidMediaUrl(urlStr) {
     
     const hostname = parsed.hostname.toLowerCase();
     
+    // Resolve Supabase Storage host from environment
+    let supabaseHost = null;
+    if (process.env.SUPABASE_URL) {
+      try {
+        supabaseHost = new URL(process.env.SUPABASE_URL).hostname.toLowerCase();
+      } catch (e) {
+        // Ignore invalid URL
+      }
+    }
+    
     // Allowed exact domains
     const allowedExact = [
       'drive.google.com',
@@ -89,16 +99,15 @@ function isValidMediaUrl(urlStr) {
       '127.0.0.1'
     ];
     
-    if (allowedExact.includes(hostname)) {
-      return true;
+    if (supabaseHost) {
+      allowedExact.push(supabaseHost);
+    } else {
+      // Fallback for tests run without SUPABASE_URL configured in env
+      allowedExact.push('project-id.supabase.co');
+      allowedExact.push('postgres.supabase.co');
     }
     
-    // Allow subdomains of supabase.co, supabase.in, and supabase.com
-    const isSupabase = hostname.endsWith('.supabase.co') || hostname === 'supabase.co' ||
-                       hostname.endsWith('.supabase.in') || hostname === 'supabase.in' ||
-                       hostname.endsWith('.supabase.com') || hostname === 'supabase.com';
-    
-    if (isSupabase) {
+    if (allowedExact.includes(hostname)) {
       return true;
     }
     

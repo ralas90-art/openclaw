@@ -404,6 +404,45 @@ async function handleCommand(text, message) {
     const projectSlug = parts[2];
     return await handleJarvisProcessInbox(uploadId, projectSlug, message);
   }
+  if (command === '/jarvis_process_latest' || command === '/jarvisprocesslatest') {
+    const parts = text.trim().split(/\s+/);
+    const projectSlug = parts[1];
+    return await handleJarvisProcessLatest(projectSlug, message);
+  }
+  if (command === '/jarvis_archive_processed' || command === '/jarvisarchiveprocessed') {
+    return await handleJarvisArchiveProcessed(message);
+  }
+  if (command === '/jarvis_folders' || command === '/jarvisfolders') {
+    const parts = text.trim().split(/\s+/);
+    const filter = parts[1];
+    return await handleJarvisFolders(filter, message);
+  }
+  if (command === '/jarvis_add_folder' || command === '/jarvisaddfolder') {
+    const folderPath = text.substring(command.length).trim();
+    return await handleJarvisAddFolder(folderPath, message);
+  }
+  if (command === '/jarvis_approve_folder' || command === '/jarvisapprovefolder') {
+    const idOrPath = text.substring(command.length).trim();
+    return await handleJarvisApproveFolder(idOrPath, message);
+  }
+  if (command === '/jarvis_scan' || command === '/jarvisscan') {
+    return await handleJarvisScan(message);
+  }
+  if (command === '/jarvis_files' || command === '/jarvisfiles') {
+    const parts = text.trim().split(/\s+/);
+    const filter = parts[1];
+    const arg = parts[2];
+    return await handleJarvisFiles(filter, arg, message);
+  }
+  if (command === '/jarvis_connectors' || command === '/jarvisconnectors') {
+    return await handleJarvisConnectors(message);
+  }
+  if (command === '/jarvis_email_summary' || command === '/jarvisemailsummary') {
+    return await handleJarvisEmailSummary(message);
+  }
+  if (command === '/jarvis_drive_recent' || command === '/jarvisdriverecent') {
+    return await handleJarvisDriveRecent(message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -673,6 +712,16 @@ function handleHelp() {
 /connector_list - List external action connectors (also /connectorlist)
 /connector_info <id> - Show connector metadata (also /connectorinfo)
 /connector_validate <id> - Check environment variables for a connector (also /connectorvalidate)
+/jarvis_process_latest <project_slug> - Assign latest unprocessed upload and mark processed (also /jarvisprocesslatest)
+/jarvis_archive_processed - Archive all processed uploads (also /jarvisarchiveprocessed)
+/jarvis_folders - List registered local folders (also /jarvisfolders)
+/jarvis_add_folder <path> - Register a local folder (pending approval) (also /jarvisaddfolder)
+/jarvis_approve_folder <id_or_path> - Approve a registered folder path (also /jarvisapprovefolder)
+/jarvis_scan - Scan approved folders and index file metadata (also /jarvisscan)
+/jarvis_files [project_slug] - List indexed local files and mapping suggestions (also /jarvisfiles)
+/jarvis_connectors - List registered cloud connectors and status (also /jarvisconnectors)
+/jarvis_email_summary - Show unread important email summaries (also /jarvisemailsummary)
+/jarvis_drive_recent - Show recently modified Google Drive files (also /jarvisdriverecent)
 ` +
 `\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflows:\n  Manual:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\n  Controlled (single command):\n  /run_publish content-forge <user_request>\n  /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n   Controlled Run+Publish:\n   /run_publish content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n   Controlled Run+Publish:\n   /run_publish revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):
    /leads prospect
@@ -683,7 +732,6 @@ function handleHelp() {
    Controlled Run+Publish:
    /run_publish lead-acquisition-engine Create a local prospecting plan for solar installers in Florida\n6. Funnel Audit (Revenue Optimization):\n   /rev_opt audit\n   Funnel Link: https://ggcleaningli.com/quote\n7. Ops (Weekly Command):\n   /weekly review\n   Week Range: May 18 - May 24\n8. Monetize (Client Value):\n   /client_value upsell\n   Brand Name: Cresca OS\n9. Optimization Loop (Auto-Loop):\n   /autoloop review\n   System Being Audited: ad funnel`;
 }
-
 function getSuggestedFollowUp(botSlug, workflow) {
   const b = botSlug.toLowerCase();
   const w = workflow.toLowerCase().replace(/_/g, '-');
@@ -3553,8 +3601,320 @@ async function handleJarvisProcessInbox(uploadId, projectSlug, message) {
   }
 }
 
-module.exports = {
+async function handleJarvisProcessLatest(projectSlug, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_process_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_process_latest', permCheck.reason, message);
+  }
+  
+  if (!projectSlug) {
+    return `❌ Usage: /jarvis_process_latest <project_slug>`;
+  }
 
+  const controller = require('../../jarvis/controller');
+  try {
+    const record = await controller.processLatestUpload(projectSlug);
+    return [
+      `✅ *Latest Mobile Upload Processed & Assigned*`,
+      ``,
+      `• *Upload ID:* \`${record.id}\``,
+      `• *Project:* \`${record.project_slug}\``,
+      `• *Source:* \`${record.intake_source.toUpperCase()}\``,
+      `• *Type:* \`${record.task_type}\``,
+      `• *Content:* ${record.text_content || 'none'}`,
+      `• *Status:* \`Processed\``
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisArchiveProcessed(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_archive_processed', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_archive_processed', permCheck.reason, message);
+  }
+
+  const controller = require('../../jarvis/controller');
+  try {
+    const count = await controller.archiveProcessedUploads();
+    return `🧹 *Inbox Cleaned*\n\nSuccessfully archived *${count}* processed uploads from the database.`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisFolders(filter, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_folders', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_folders', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const folders = await localInventory.listLocalFolders(filter);
+    if (folders.length === 0) {
+      const filterDesc = filter ? ` (${filter})` : '';
+      return `📁 *Jarvis Local Folders*\n\nNo matching folders${filterDesc} registered in the database.`;
+    }
+    
+    let md = `📁 *Jarvis Local Folders*\n\n`;
+    const cleanFilter = filter ? filter.trim().toLowerCase() : null;
+    if (cleanFilter === 'pending') {
+      md = `📁 *Pending Local Folders*\n\n`;
+    } else if (cleanFilter === 'approved') {
+      md = `📁 *Approved Local Folders*\n\n`;
+    }
+
+    for (const f of folders) {
+      const status = f.approved ? '✅ Approved' : '⏳ Pending Approval';
+      md += `• *Path:* \`${f.folder_path}\`\n  *Status:* ${status}\n  *ID:* \`${f.id}\`\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisAddFolder(folderPath, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_add_folder', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_add_folder', permCheck.reason, message);
+  }
+
+  if (!folderPath) {
+    return `❌ Error: Please specify a folder path. Example: \`/jarvis_add_folder C:/my-projects\``;
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const folder = await localInventory.addLocalFolder(folderPath);
+    return [
+      `📁 *Folder Registered (Pending Approval)*`,
+      ``,
+      `• *Path:* \`${folder.folder_path}\``,
+      `• *ID:* \`${folder.id}\``,
+      `• *Status:* \`Pending Approval\``,
+      ``,
+      `Use \`/jarvis_approve_folder ${folder.id}\` to approve this path for indexing.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisApproveFolder(idOrPath, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approve_folder', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approve_folder', permCheck.reason, message);
+  }
+
+  if (!idOrPath) {
+    return `❌ Error: Please specify a folder ID or path to approve.`;
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const folder = await localInventory.approveLocalFolder(idOrPath);
+    return [
+      `✅ *Folder Approved for Indexing*`,
+      ``,
+      `• *Path:* \`${folder.folder_path}\``,
+      `• *ID:* \`${folder.id}\``,
+      `• *Status:* \`Approved\``,
+      ``,
+      `Use \`/jarvis_scan\` to scan files in approved directories.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisScan(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_scan', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_scan', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const stats = await localInventory.scanApprovedFolders();
+    return [
+      `🔍 *File Inventory Scan Complete*`,
+      ``,
+      `• *Folders Scanned:* ${stats.foldersScanned}`,
+      `• *Files Indexed/Updated:* ${stats.filesIndexed}`,
+      `• *Stale File Indexes Removed:* ${stats.filesRemoved}`,
+      ``,
+      `⚠️ *Safety Notice:* Stale database index records for deleted/renamed files were removed, but no local files on your machine were modified, moved, opened, or deleted.`,
+      ``,
+      `Use \`/jarvis_files\` to list indexed files and check project suggestions.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisFiles(filter, arg, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_files', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_files', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const suggestions = await localInventory.getFileSuggestions(filter || null, arg || null);
+    if (suggestions.length === 0) {
+      const filterDesc = filter ? ` with filter '${filter}'` : '';
+      const argDesc = arg ? ` and argument '${arg}'` : '';
+      return `📄 *Indexed Local Files*\n\nNo files found in the index${filterDesc}${argDesc}.`;
+    }
+
+    let md = `📄 *Indexed Local Files & Suggestions*\n\n`;
+    const cleanFilter = filter ? filter.trim().toLowerCase() : null;
+    const cleanArg = arg ? arg.trim().toLowerCase() : null;
+
+    if (cleanFilter === 'recent') {
+      md = `📄 *Recent Indexed Files*\n\n`;
+    } else if (cleanFilter === 'large') {
+      md = `📄 *Largest Indexed Files*\n\n`;
+    } else if (cleanFilter === 'by_type') {
+      md = `📄 *Indexed Files of Type: ${cleanArg}*\n\n`;
+    } else if (cleanFilter === 'unmatched') {
+      md = `📄 *Unmatched Indexed Files*\n\n`;
+    } else if (cleanFilter === 'project') {
+      md = `📄 *Indexed Files for Project: ${cleanArg}*\n\n`;
+    } else if (cleanFilter) {
+      md = `📄 *Indexed Files for Project: ${cleanFilter}*\n\n`;
+    }
+
+    const displayed = suggestions.slice(0, 15);
+    for (const s of displayed) {
+      const sizeKb = (s.size_bytes / 1024).toFixed(1);
+      const date = new Date(s.last_modified).toISOString().substring(0, 16).replace('T', ' ');
+      md += `• *${s.file_name}* (${sizeKb} KB, modified: _${date}_)\n`;
+      md += `  *Path:* \`${s.file_path}\`\n`;
+      if (s.suggested_project) {
+        md += `  *Suggested Project:* \`${s.suggested_project}\` (Reason: ${s.reason})\n`;
+      } else {
+        md += `  *Suggested Project:* \`None\`\n`;
+      }
+      md += `\n`;
+    }
+
+    if (suggestions.length > displayed.length) {
+      md += `_...and ${suggestions.length - displayed.length} more files._`;
+    }
+
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisConnectors(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_connectors', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_connectors', permCheck.reason, message);
+  }
+
+  const connectorsSummary = require('../../jarvis/connectors-summary');
+  try {
+    const list = await connectorsSummary.listConnectorsStatus();
+    let md = `🔗 *Jarvis Cloud Connectors Status*\n\n`;
+    for (const c of list) {
+      const statusIcon = c.status === 'Active' ? '✅' : (c.status === 'Disabled' ? '🚫' : '⚠️');
+      const lastSync = c.last_sync_time 
+        ? `_Last sync:_ ${new Date(c.last_sync_time).toISOString().substring(0, 16).replace('T', ' ')}` 
+        : '_Last sync:_ never';
+      const lastUsed = c.last_used_at
+        ? `_Last used:_ ${new Date(c.last_used_at).toISOString().substring(0, 16).replace('T', ' ')}`
+        : '_Last used:_ never';
+      
+      md += `${statusIcon} *${c.name}*\n`;
+      md += `  *ID:* \`${c.connector_id}\`\n`;
+      md += `  *Status:* \`${c.status}\`\n`;
+      md += `  *Read Scopes:* \`${c.read_permissions.join(', ')}\`\n`;
+      md += `  ${lastSync}\n`;
+      md += `  ${lastUsed}\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisEmailSummary(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_email_summary', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_email_summary', permCheck.reason, message);
+  }
+
+  const connectorsSummary = require('../../jarvis/connectors-summary');
+  try {
+    const emails = await connectorsSummary.getEmailSummary();
+    if (emails === null) {
+      return `⚠️ *Gmail Connector is not authorized.*\n\nPlease configure your Gmail OAuth refresh token in \`jarvis_connector_tokens\` or via environmental variables.`;
+    }
+    if (emails.length === 0) {
+      return `📬 *Unread Actionable Emails Summary*\n\nYour inbox is clear! No unread important emails found.`;
+    }
+
+    let md = `📬 *Unread Actionable Emails Summary*\n\n`;
+    for (const email of emails) {
+      const priorityLabel = email.priority_keyword ? ` 🔥 *[PRIORITY: ${email.priority_keyword.toUpperCase()}]*` : '';
+      const projLabel = email.suggested_project ? ` (Suggested Project: \`${email.suggested_project}\`)` : '';
+      md += `• *Subject:* ${email.subject}${priorityLabel}\n`;
+      md += `  *From:* \`${email.from}\`${projLabel}\n`;
+      md += `  *Snippet:* _${email.snippet}_\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisDriveRecent(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_drive_recent', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_drive_recent', permCheck.reason, message);
+  }
+
+  const connectorsSummary = require('../../jarvis/connectors-summary');
+  try {
+    const files = await connectorsSummary.getDriveSummary();
+    if (files === null) {
+      return `⚠️ *Google Drive Connector is not authorized.*\n\nPlease configure your Google Drive OAuth refresh token in \`jarvis_connector_tokens\` or via environmental variables.`;
+    }
+    if (files.length === 0) {
+      return `🗂️ *Recent Google Drive Modifications*\n\nNo recently modified files found.`;
+    }
+
+    let md = `🗂️ *Recent Google Drive Modifications*\n\n`;
+    for (const f of files) {
+      const sizeStr = f.size_bytes ? ` (${(f.size_bytes / 1024).toFixed(1)} KB)` : '';
+      const date = new Date(f.modifiedTime).toISOString().substring(0, 16).replace('T', ' ');
+      const projLabel = f.suggested_project ? ` (Project: \`${f.suggested_project}\`)` : '';
+      md += `• *[${f.name}](${f.webViewLink})*${sizeStr}${projLabel}\n`;
+      md += `  *Modified:* _${date}_\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+module.exports = {
   handleCommand,
   handleHermesApprove
 };
