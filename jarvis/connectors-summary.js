@@ -106,9 +106,13 @@ async function listConnectorsStatus() {
     let status = 'Not Authorized';
     if (!r.enabled) {
       status = 'Disabled';
+    } else if (r.last_sync_status === 'decryption_error') {
+      status = 'Decryption Error';
     } else if (r.rotation_status === 'revoked') {
       status = 'Revoked';
-    } else if (hasCredentials) {
+    } else if (r.rotation_status === 'needs_reconnect') {
+      status = 'Needs Reconnect';
+    } else if (hasCredentials && (r.rotation_status === 'active' || !r.rotation_status)) {
       status = 'Active';
     }
 
@@ -152,8 +156,19 @@ async function getEmailSummary() {
   } catch (err) {
     console.error('[ConnectorsSummary] Gmail API fetch failed:', err.message);
     const errStr = err.message.toLowerCase();
-    if (errStr.includes('invalid_grant') || errStr.includes('auth') || errStr.includes('credential') || err.code === 400 || err.code === 401) {
+    const isFatalAuthError = errStr.includes('invalid_grant') || errStr.includes('unauthorized_client');
+    if (isFatalAuthError) {
       await handleAuthFailure('gmail');
+    } else {
+      try {
+        await queryDb(
+          `UPDATE jarvis_connector_tokens 
+           SET last_sync_status = 'temporary_error', updated_at = NOW() 
+           WHERE connector_id = 'gmail';`
+        );
+      } catch (dbErr) {
+        // ignore DB logging failure
+      }
     }
     throw err;
   }
@@ -177,8 +192,19 @@ async function getEmailSummary() {
     } catch (err) {
       console.warn(`[ConnectorsSummary] Failed to fetch message details for ${msg.id}: ${err.message}`);
       const errStr = err.message.toLowerCase();
-      if (errStr.includes('invalid_grant') || errStr.includes('auth') || errStr.includes('credential') || err.code === 400 || err.code === 401) {
+      const isFatalAuthError = errStr.includes('invalid_grant') || errStr.includes('unauthorized_client');
+      if (isFatalAuthError) {
         await handleAuthFailure('gmail');
+      } else {
+        try {
+          await queryDb(
+            `UPDATE jarvis_connector_tokens 
+             SET last_sync_status = 'temporary_error', updated_at = NOW() 
+             WHERE connector_id = 'gmail';`
+          );
+        } catch (dbErr) {
+          // ignore DB logging failure
+        }
       }
       continue;
     }
@@ -264,8 +290,19 @@ async function getDriveSummary() {
   } catch (err) {
     console.error('[ConnectorsSummary] Google Drive API fetch failed:', err.message);
     const errStr = err.message.toLowerCase();
-    if (errStr.includes('invalid_grant') || errStr.includes('auth') || errStr.includes('credential') || err.code === 400 || err.code === 401) {
+    const isFatalAuthError = errStr.includes('invalid_grant') || errStr.includes('unauthorized_client');
+    if (isFatalAuthError) {
       await handleAuthFailure('google_drive');
+    } else {
+      try {
+        await queryDb(
+          `UPDATE jarvis_connector_tokens 
+           SET last_sync_status = 'temporary_error', updated_at = NOW() 
+           WHERE connector_id = 'google_drive';`
+        );
+      } catch (dbErr) {
+        // ignore DB logging failure
+      }
     }
     throw err;
   }

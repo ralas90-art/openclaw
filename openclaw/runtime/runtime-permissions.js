@@ -704,6 +704,18 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'List recently modified files from Google Drive.'
+  },
+  jarvis_reconnect_google: {
+    commands: ['/jarvis_reconnect_google'],
+    tier: 'read_only',
+    category: 'connector_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Get secure reconnect URL for Gmail or Google Drive connectors.'
   }
 };
 
@@ -780,7 +792,8 @@ function normalizeCommand(commandText) {
     'jarvisfiles': 'jarvis_files',
     'jarvisconnectors': 'jarvis_connectors',
     'jarvisemailsummary': 'jarvis_email_summary',
-    'jarvisdriverecent': 'jarvis_drive_recent'
+    'jarvisdriverecent': 'jarvis_drive_recent',
+    'jarvisreconnectgoogle': 'jarvis_reconnect_google'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

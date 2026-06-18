@@ -443,6 +443,10 @@ async function handleCommand(text, message) {
   if (command === '/jarvis_drive_recent' || command === '/jarvisdriverecent') {
     return await handleJarvisDriveRecent(message);
   }
+  if (command === '/jarvis_reconnect_google' || command === '/jarvisreconnectgoogle') {
+    const args = text.substring(command.length).trim();
+    return await handleJarvisReconnectGoogle(args, message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -3844,12 +3848,43 @@ async function handleJarvisConnectors(message) {
       md += `  *Status:* \`${c.status}\`\n`;
       md += `  *Read Scopes:* \`${c.read_permissions.join(', ')}\`\n`;
       md += `  ${lastSync}\n`;
-      md += `  ${lastUsed}\n\n`;
+      md += `  ${lastUsed}\n`;
+      if (c.status === 'Revoked' || c.status === 'Needs Reconnect' || c.status === 'Not Authorized' || c.status === 'Decryption Error') {
+        md += `  *Instruction:* Run \`/jarvis_reconnect_google ${c.connector_id}\` to connect/reconnect.\n`;
+      }
+      md += `\n`;
     }
     return md;
   } catch (err) {
     return `❌ Error: ${err.message}`;
   }
+}
+
+async function handleJarvisReconnectGoogle(args, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_reconnect_google', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_reconnect_google', permCheck.reason, message);
+  }
+
+  const parts = (args || '').trim().split(/\s+/);
+  const connectorId = parts[0];
+  const force = parts[1] === 'force';
+
+  if (connectorId !== 'gmail' && connectorId !== 'google_drive') {
+    return `❌ Usage: \`/jarvis_reconnect_google <gmail|google_drive> [force]\``;
+  }
+
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+  const adminToken = process.env.INTERNAL_ADMIN_TOKEN;
+  
+  if (!adminToken) {
+    return `❌ Error: INTERNAL_ADMIN_TOKEN is not configured on the server.`;
+  }
+
+  const url = `${publicUrl}/api/jarvis/google/connect?connector=${connectorId}&token=${adminToken}${force ? '&force=true' : ''}`;
+  
+  return `🔗 *Google Connector Authentication*\n\nClick the link below to authorize Jarvis access to your ${connectorId === 'gmail' ? 'Gmail (Read-Only)' : 'Google Drive (Metadata Read-Only)'}:\n\n[Connect to Google](${url})\n\n_Note: This link contains a sensitive administrative token. Do not share it._`;
 }
 
 async function handleJarvisEmailSummary(message) {
