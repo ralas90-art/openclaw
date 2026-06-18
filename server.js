@@ -8,6 +8,25 @@ require('dotenv').config();
   }
 });
 
+// Sanitize and validate PUBLIC_URL to ensure it contains only the base domain and protocol (no subpaths)
+if (process.env.PUBLIC_URL) {
+  let cleaned = process.env.PUBLIC_URL.replace(/^["']|["']$/g, '').trim().replace(/\/+$/, '');
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${process.env.PUBLIC_URL}" because it contains a path suffix: "${parsed.pathname}". PUBLIC_URL must be the base domain only!`);
+      delete process.env.PUBLIC_URL;
+    } else {
+      process.env.PUBLIC_URL = cleaned;
+    }
+  } catch (err) {
+    console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${process.env.PUBLIC_URL}" because it is not a valid URL: ${err.message}`);
+    delete process.env.PUBLIC_URL;
+  }
+}
+
+
+
 // Conservative sanitization for INTERNAL_ADMIN_TOKEN
 if (process.env.INTERNAL_ADMIN_TOKEN) {
   let t = process.env.INTERNAL_ADMIN_TOKEN.trim();

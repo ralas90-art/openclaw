@@ -8,14 +8,32 @@ const router = express.Router();
 const { authenticateMobileToken, handleMobileIntake } = require('./mobile-intake');
 const { getDailyBrief } = require('./controller');
 
+function cleanPublicUrl(url) {
+  if (!url) return '';
+  let cleaned = url.replace(/^["']|["']$/g, '').trim().replace(/\/+$/, '');
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${url}" because it contains a path suffix: "${parsed.pathname}". PUBLIC_URL must be the base domain only!`);
+      return '';
+    }
+    return cleaned;
+  } catch (err) {
+    console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${url}" because it is not a valid URL: ${err.message}`);
+    return '';
+  }
+}
+
 function getRedirectUri(req) {
-  if (process.env.PUBLIC_URL) {
-    return `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/jarvis/google/callback`;
+  const publicUrl = cleanPublicUrl(process.env.PUBLIC_URL);
+  if (publicUrl) {
+    return `${publicUrl}/api/jarvis/google/callback`;
   }
   const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const host = req.headers.host;
   return `${protocol}://${host}/api/jarvis/google/callback`;
 }
+
 
 
 // POST /api/jarvis/mobile-intake

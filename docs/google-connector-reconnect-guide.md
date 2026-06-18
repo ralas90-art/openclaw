@@ -34,6 +34,12 @@ Ensure your OAuth Client ID has the correct **Authorized redirect URIs** configu
 * **Staging / Production**: `https://your-domain.up.railway.app/api/jarvis/google/callback`
 * **Local Development**: `http://localhost:3000/api/jarvis/google/callback`
 
+> [!IMPORTANT]
+> **Difference between `PUBLIC_URL` and Redirect URIs**
+> * The **`PUBLIC_URL`** environment variable on your server must be configured with **only** the base domain (e.g. `https://your-domain.up.railway.app` or `http://localhost:3000`).
+> * **Do not** set `PUBLIC_URL` to the callback path (`/api/jarvis/google/callback`). The codebase automatically appends the callback path internally where necessary. Setting it to the callback path will cause invalid double-callback redirects and route mapping failures.
+
+
 ### 2. Request a Reconnect Link in Telegram
 Run the reconnect command for the specific connector:
 ```text

@@ -3875,7 +3875,20 @@ async function handleJarvisReconnectGoogle(args, message) {
     return `❌ Usage: \`/jarvis_reconnect_google <gmail|google_drive> [force]\``;
   }
 
-  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+  const rawPublicUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
+  let publicUrl = 'http://localhost:3000';
+  let cleaned = rawPublicUrl.replace(/^["']|["']$/g, '').trim().replace(/\/+$/, '');
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${rawPublicUrl}" because it contains a path suffix: "${parsed.pathname}". PUBLIC_URL must be the base domain only!`);
+    } else {
+      publicUrl = cleaned;
+    }
+  } catch (err) {
+    console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${rawPublicUrl}" because it is not a valid URL: ${err.message}`);
+  }
+
   const adminToken = process.env.INTERNAL_ADMIN_TOKEN;
   
   if (!adminToken) {
