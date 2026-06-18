@@ -3870,12 +3870,24 @@ async function handleJarvisEmailSummary(message) {
     }
 
     let md = `📬 *Unread Actionable Emails Summary*\n\n`;
+    let itemsShown = 0;
+    let truncated = false;
     for (const email of emails) {
       const priorityLabel = email.priority_keyword ? ` 🔥 *[PRIORITY: ${email.priority_keyword.toUpperCase()}]*` : '';
       const projLabel = email.suggested_project ? ` (Suggested Project: \`${email.suggested_project}\`)` : '';
-      md += `• *Subject:* ${email.subject}${priorityLabel}\n`;
-      md += `  *From:* \`${email.from}\`${projLabel}\n`;
-      md += `  *Snippet:* _${email.snippet}_\n\n`;
+      const nextItem = `• *Subject:* ${email.subject}${priorityLabel}\n` +
+                       `  *From:* \`${email.from}\`${projLabel}\n` +
+                       `  *Snippet:* _${email.snippet}_\n\n`;
+      
+      if (md.length + nextItem.length > 3900) {
+        truncated = true;
+        break;
+      }
+      md += nextItem;
+      itemsShown++;
+    }
+    if (truncated) {
+      md += `⚠️ _Note: Showing ${itemsShown} of ${emails.length} unread emails due to Telegram message length limits._`;
     }
     return md;
   } catch (err) {
@@ -3901,12 +3913,24 @@ async function handleJarvisDriveRecent(message) {
     }
 
     let md = `🗂️ *Recent Google Drive Modifications*\n\n`;
+    let itemsShown = 0;
+    let truncated = false;
     for (const f of files) {
       const sizeStr = f.size_bytes ? ` (${(f.size_bytes / 1024).toFixed(1)} KB)` : '';
       const date = new Date(f.modifiedTime).toISOString().substring(0, 16).replace('T', ' ');
       const projLabel = f.suggested_project ? ` (Project: \`${f.suggested_project}\`)` : '';
-      md += `• *[${f.name}](${f.webViewLink})*${sizeStr}${projLabel}\n`;
-      md += `  *Modified:* _${date}_\n\n`;
+      const nextItem = `• *[${f.name}](${f.webViewLink})*${sizeStr}${projLabel}\n` +
+                       `  *Modified:* _${date}_\n\n`;
+      
+      if (md.length + nextItem.length > 3900) {
+        truncated = true;
+        break;
+      }
+      md += nextItem;
+      itemsShown++;
+    }
+    if (truncated) {
+      md += `⚠️ _Note: Showing ${itemsShown} of ${files.length} recent files due to Telegram message length limits._`;
     }
     return md;
   } catch (err) {
