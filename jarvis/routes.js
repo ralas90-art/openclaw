@@ -8,6 +8,16 @@ const router = express.Router();
 const { authenticateMobileToken, handleMobileIntake } = require('./mobile-intake');
 const { getDailyBrief } = require('./controller');
 
+function getRedirectUri(req) {
+  if (process.env.PUBLIC_URL) {
+    return `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/jarvis/google/callback`;
+  }
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const host = req.headers.host;
+  return `${protocol}://${host}/api/jarvis/google/callback`;
+}
+
+
 // POST /api/jarvis/mobile-intake
 router.post('/mobile-intake', authenticateMobileToken, handleMobileIntake);
 
@@ -65,9 +75,7 @@ router.get('/google/connect', async (req, res) => {
   }
 
   try {
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const host = req.headers.host;
-    const redirectUri = `${protocol}://${host}/api/jarvis/google/callback`;
+    const redirectUri = getRedirectUri(req);
 
     const { google } = require('googleapis');
     const oauth2Client = new google.auth.OAuth2(
@@ -134,9 +142,7 @@ router.get('/google/callback', async (req, res) => {
   }
 
   try {
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const host = req.headers.host;
-    const redirectUri = `${protocol}://${host}/api/jarvis/google/callback`;
+    const redirectUri = getRedirectUri(req);
 
     const { google } = require('googleapis');
     const oauth2Client = new google.auth.OAuth2(
