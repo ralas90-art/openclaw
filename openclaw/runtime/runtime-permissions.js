@@ -815,10 +815,10 @@ const COMMAND_PERMISSIONS = {
   },
   jarvis_propose_action: {
     commands: ['/jarvis_propose_action'],
-    tier: 'read_only',
-    category: 'runtime_visibility',
+    tier: 'state_mutation',
+    category: 'runtime_decision',
     requiresAdmin: true,
-    mutatesState: false,
+    mutatesState: true,
     generatesOutput: false,
     publishesExternally: false,
     externalAction: false,
