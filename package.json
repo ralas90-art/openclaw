@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "build": "npm --prefix admin-ui install && npm --prefix admin-ui run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
