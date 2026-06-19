@@ -1,0 +1,584 @@
+import React, { useEffect, useState } from 'react';
+import { Sparkles, Mail, Database, CheckCircle2, XCircle, Ban, History, ShieldAlert, ArrowRight, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
+
+export default function JarvisDashboard() {
+  const [token, setToken] = useState(sessionStorage.getItem('admin_token') || '');
+  const [tokenInput, setTokenInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Data States
+  const [stats, setStats] = useState(null);
+  const [brief, setBrief] = useState(null);
+  const [priorities, setPriorities] = useState(null);
+  const [approvals, setApprovals] = useState([]);
+  const [connectors, setConnectors] = useState([]);
+  const [mobileUploads, setMobileUploads] = useState([]);
+  const [projects, setProjects] = useState([]);
+
+  // Selection States
+  const [selectedApproval, setSelectedApproval] = useState(null);
+  const [selectedPriority, setSelectedPriority] = useState(null);
+  const [activeTab, setActiveTab] = useState('brief'); // brief | priorities | approvals | connectors | mobile | projects
+  const [message, setMessage] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const cleanToken = tokenInput.trim();
+    if (!cleanToken) return;
+    sessionStorage.setItem('admin_token', cleanToken);
+    setToken(cleanToken);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('admin_token');
+    setToken('');
+    setTokenInput('');
+  };
+
+  const fetchAllData = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError('');
+    setMessage('');
+    
+    const headers = { 'Authorization': `Bearer ${token}` };
+
+    try {
+      const [statsRes, briefRes, prioritiesRes, approvalsRes, connectorsRes, mobileRes, projectsRes] = await Promise.all([
+        fetch('/api/jarvis/approval-stats', { headers }),
+        fetch('/api/jarvis/daily-brief', { headers }),
+        fetch('/api/jarvis/priorities', { headers }),
+        fetch('/api/jarvis/approvals', { headers }),
+        fetch('/api/jarvis/connectors', { headers }),
+        fetch('/api/jarvis/mobile-uploads', { headers }),
+        fetch('/api/jarvis/projects', { headers })
+      ]);
+
+      if (statsRes.status === 401 || briefRes.status === 401) {
+        handleLogout();
+        setError('Session expired or invalid token.');
+        return;
+      }
+
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (briefRes.ok) setBrief(await briefRes.json());
+      if (prioritiesRes.ok) setPriorities(await prioritiesRes.json());
+      if (approvalsRes.ok) setApprovals(await approvalsRes.json());
+      if (connectorsRes.ok) setConnectors(await connectorsRes.json());
+      if (mobileRes.ok) setMobileUploads(await mobileRes.json());
+      if (projectsRes.ok) setProjects(await projectsRes.json());
+
+    } catch (err) {
+      console.error(err);
+      setError('Connection failure loading Jarvis data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllData();
+  }, [token]);
+
+  // Approval Mutation Handlers
+  const handleApprove = async (id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const res = await fetch(`/api/jarvis/approvals/${id}/approve`, { method: 'POST', headers });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`✅ Success: ${data.message || 'Action executed'}`);
+        setSelectedApproval(null);
+        fetchAllData();
+      } else {
+        setError(data.error || 'Approval failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleReject = async (id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const res = await fetch(`/api/jarvis/approvals/${id}/reject`, { method: 'POST', headers });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`🛑 Proposal rejected.`);
+        setSelectedApproval(null);
+        fetchAllData();
+      } else {
+        setError(data.error || 'Rejection failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleCancel = async (id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const res = await fetch(`/api/jarvis/approvals/${id}/cancel`, { method: 'POST', headers });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`🚫 Proposal cancelled.`);
+        setSelectedApproval(null);
+        fetchAllData();
+      } else {
+        setError(data.error || 'Cancellation failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Priority Action Propose Handler
+  const handlePropose = async (priorityId) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const res = await fetch(`/api/jarvis/priorities/${priorityId}/propose`, { method: 'POST', headers });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`📝 Action proposed successfully! ID: ${data.proposal?.id}`);
+        setSelectedPriority(null);
+        fetchAllData();
+      } else {
+        setError(data.error || 'Proposal creation failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleFetchApprovalDetails = async (id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const res = await fetch(`/api/jarvis/approvals/${id}`, { headers });
+      if (res.ok) {
+        setSelectedApproval(await res.json());
+      }
+    } catch (err) {
+      setError('Failed to fetch approval details: ' + err.message);
+    }
+  };
+
+  // Gated Authentication Rendering
+  if (!token) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '70vh',
+      }}>
+        <form onSubmit={handleLogin} style={{
+          background: 'rgba(22, 27, 34, 0.6)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid #30363d',
+          padding: '40px',
+          borderRadius: '12px',
+          width: '100%',
+          maxWidth: '380px',
+          textAlign: 'center',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px'
+          }}>
+            <Lock size={28} color="#fff" />
+          </div>
+          <h2 style={{ margin: '0 0 10px', fontSize: '1.5rem', color: '#fff' }}>Jarvis Portal Auth</h2>
+          <p style={{ margin: '0 0 25px', color: '#8b949e', fontSize: '0.9rem' }}>Enter the admin token to view credentials & history.</p>
+          
+          {error && <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '15px' }}>{error}</div>}
+          
+          <input
+            type="password"
+            id="admin-token-input"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            placeholder="INTERNAL_ADMIN_TOKEN"
+            style={{
+              width: '100%',
+              padding: '12px',
+              boxSizing: 'border-box',
+              background: '#0d1117',
+              border: '1px solid #30363d',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '1rem',
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}
+          />
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }}>Enter Dashboard</button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', maxWidth: '1200px', margin: '0 auto' }}>
+      
+      {/* Dashboard Top Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '15px' }}>
+        <div>
+          <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.8rem', color: '#fff' }}>
+            <Sparkles color="#a78bfa" /> Jarvis Command Center
+          </h1>
+          <p style={{ margin: '5px 0 0', color: '#8b949e', fontSize: '0.9rem' }}>
+            Read-first assistant panel. Live operations require explicit authorization.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={fetchAllData} className="btn" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <RefreshCw size={14} className={loading ? 'spin-anim' : ''} /> Refresh
+          </button>
+          <button onClick={handleLogout} className="btn btn-danger">Lock Portal</button>
+        </div>
+      </div>
+
+      {/* Messaging / Alert Bar */}
+      {message && <div style={{ color: '#58a6ff', background: 'rgba(88, 166, 255, 0.1)', border: '1px solid rgba(88, 166, 255, 0.2)', padding: '12px', borderRadius: '6px', fontSize: '0.9rem' }}>{message}</div>}
+      {error && <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '12px', borderRadius: '6px', fontSize: '0.9rem' }}>{error}</div>}
+
+      {/* Stats Summary Panel */}
+      {stats && (
+        <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h3>Pending</h3>
+            <div className="value" style={{ color: '#58a6ff' }}>{stats.status_counts.pending}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h3>Executed</h3>
+            <div className="value" style={{ color: '#238636' }}>{stats.status_counts.executed}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h3>Rejected</h3>
+            <div className="value" style={{ color: '#f85149' }}>{stats.status_counts.rejected}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h3>Cancelled</h3>
+            <div className="value" style={{ color: '#8b949e' }}>{stats.status_counts.cancelled}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h3>Expired</h3>
+            <div className="value" style={{ color: '#d29922' }}>{stats.status_counts.expired}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard Sub Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid #30363d', paddingBottom: '10px' }}>
+        {[
+          { id: 'brief', label: 'Morning Brief', icon: <Mail size={16} /> },
+          { id: 'priorities', label: 'Priorities', icon: <Sparkles size={16} /> },
+          { id: 'approvals', label: 'Approvals Queue', icon: <ListTodo size={16} /> },
+          { id: 'connectors', label: 'Cloud Connectors', icon: <Database size={16} /> },
+          { id: 'mobile', label: 'Mobile Inbox', icon: <Smartphone size={16} /> },
+          { id: 'projects', label: 'Projects', icon: <History size={16} /> }
+        ].map(t => (
+          <button
+            key={t.id}
+            id={`tab-btn-${t.id}`}
+            onClick={() => setActiveTab(t.id)}
+            className="btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: activeTab === t.id ? '#30363d' : 'transparent',
+              borderColor: activeTab === t.id ? '#58a6ff' : 'transparent',
+              color: activeTab === t.id ? '#fff' : '#8b949e'
+            }}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Contents */}
+      <div className="panel" style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '6px', padding: '20px' }}>
+        
+        {/* Tab 1: Morning Brief */}
+        {activeTab === 'brief' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>🌅 Morning Brief Summary</h2>
+            {brief ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div style={{ background: '#0d1117', border: '1px solid #30363d', padding: '15px', borderRadius: '6px' }}>
+                  <h4 style={{ margin: '0 0 10px', color: '#8b949e' }}>Speech Synthesis Preview (Siri Summary)</h4>
+                  <p style={{ margin: 0, fontStyle: 'italic', fontSize: '1rem', color: '#c9d1d9', lineHeight: '1.5' }}>
+                    "{brief.siri_summary}"
+                  </p>
+                </div>
+                <div style={{ background: '#0d1117', border: '1px solid #30363d', padding: '20px', borderRadius: '6px', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.9rem', color: '#c9d1d9', overflowX: 'auto', maxHeight: '500px' }}>
+                  {brief.raw_brief_markdown}
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">No daily brief compiled yet.</div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: Priorities List */}
+        {activeTab === 'priorities' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>💡 Ranked Priority Intelligence</h2>
+            {priorities && priorities.rankedItems && priorities.rankedItems.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+                {priorities.rankedItems.map(p => (
+                  <div key={p.priority_id} id={`priority-item-${p.priority_id}`} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0d1117' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                        <span className={`badge ${p.score >= 60 ? 'danger' : p.score >= 30 ? 'warning' : 'success'}`}>Score: {p.score}</span>
+                        <span className="badge muted">{p.type}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#8b949e' }}>Project: {p.project_slug || 'system'}</span>
+                      </div>
+                      <h4 style={{ margin: '5px 0 0', color: '#fff', fontSize: '1rem' }}>{p.heading}</h4>
+                      {p.reasons && p.reasons.length > 0 && (
+                        <p style={{ margin: '5px 0 0', color: '#8b949e', fontSize: '0.85rem' }}>Tags: {p.reasons.join(', ')}</p>
+                      )}
+                    </div>
+                    <div>
+                      <button onClick={() => setSelectedPriority(p)} className="btn btn-primary">Select Action</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">No priorities registered.</div>
+            )}
+
+            {/* Selected Priority Action Proposal Modal */}
+            {selectedPriority && (
+              <div className="modal-overlay">
+                <div className="modal-content" style={{ width: '500px' }}>
+                  <h3 style={{ margin: '0 0 15px', color: '#fff' }}>Propose Action</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                    <p><strong>Heading:</strong> {selectedPriority.heading}</p>
+                    <p><strong>Type:</strong> {selectedPriority.type}</p>
+                    <p><strong>Priority ID:</strong> <code>{selectedPriority.priority_id}</code></p>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    <button onClick={() => handlePropose(selectedPriority.priority_id)} className="btn btn-primary">Confirm Proposal</button>
+                    <button onClick={() => setSelectedPriority(null)} className="btn">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: Approvals Queue */}
+        {activeTab === 'approvals' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>📥 Action Approval Requests</h2>
+            {approvals.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+                {approvals.map(app => (
+                  <div key={app.id} id={`approval-item-${app.id}`} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0d1117' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                        <span className={`badge ${app.risk_level === 'high' ? 'danger' : app.risk_level === 'medium' ? 'warning' : 'success'}`}>{app.risk_level} risk</span>
+                        <span className={`badge ${app.status === 'executed' ? 'success' : app.status === 'pending' ? 'warning' : 'muted'}`}>{app.status}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#8b949e' }}>Project: {app.project_slug || 'system'}</span>
+                      </div>
+                      <h4 style={{ margin: '5px 0 0', color: '#fff', fontSize: '1.05rem' }}>{app.requested_action}</h4>
+                      <p style={{ margin: '5px 0 0', color: '#8b949e', fontSize: '0.85rem' }}>Proposed: {new Date(app.created_at || app.proposed_at).toLocaleString()}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => handleFetchApprovalDetails(app.id)} className="btn">Details</button>
+                      {app.status === 'pending' && (
+                        <>
+                          <button onClick={() => handleApprove(app.id)} className="btn btn-primary">Approve</button>
+                          <button onClick={() => handleReject(app.id)} className="btn btn-danger">Reject</button>
+                          <button onClick={() => handleCancel(app.id)} className="btn">Cancel</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">No approval requests created.</div>
+            )}
+
+            {/* Selected Approval Details Modal (with audit trail) */}
+            {selectedApproval && (
+              <div className="modal-overlay">
+                <div className="modal-content" style={{ width: '600px', maxHeight: '85vh', overflowY: 'auto' }}>
+                  <h3 style={{ margin: '0 0 15px', color: '#fff' }}>Approval Details</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.9rem', color: '#c9d1d9', marginBottom: '20px' }}>
+                    <p><strong>ID:</strong> <code>{selectedApproval.id}</code></p>
+                    <p><strong>Action:</strong> {selectedApproval.requested_action}</p>
+                    <p><strong>Risk Level:</strong> <span className={`badge ${selectedApproval.risk_level === 'high' ? 'danger' : 'warning'}`}>{selectedApproval.risk_level.toUpperCase()}</span></p>
+                    <p><strong>Status:</strong> <code>{selectedApproval.status}</code></p>
+                    {selectedApproval.proposed_payload && (
+                      <div>
+                        <strong>Payload Preview:</strong>
+                        <pre style={{ background: '#0d1117', border: '1px solid #30363d', padding: '10px', borderRadius: '4px', overflowX: 'auto', fontSize: '0.8rem' }}>
+                          {JSON.stringify(selectedApproval.proposed_payload, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                    {selectedApproval.action_result_summary && (
+                      <p><strong>Result:</strong> {selectedApproval.action_result_summary}</p>
+                    )}
+                    {selectedApproval.execution_error_summary && (
+                      <p style={{ color: '#f85149' }}><strong>Error:</strong> {selectedApproval.execution_error_summary}</p>
+                    )}
+                    
+                    {/* Audit Trail List */}
+                    {selectedApproval.audit_events && selectedApproval.audit_events.length > 0 && (
+                      <div>
+                        <h4 style={{ margin: '15px 0 5px', color: '#fff' }}>📋 Audit Event Trail</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {selectedApproval.audit_events.map(ev => (
+                            <div key={ev.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #30363d', padding: '8px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                              <span style={{ color: '#8b949e' }}>[{new Date(ev.created_at).toLocaleTimeString()}]</span> <strong>{ev.event_type.toUpperCase()}</strong> by {ev.actor || 'system'}
+                              <div style={{ fontStyle: 'italic', color: '#8b949e', marginTop: '2px' }}>{ev.safe_summary}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    {selectedApproval.status === 'pending' && (
+                      <>
+                        <button onClick={() => { handleApprove(selectedApproval.id); }} className="btn btn-primary">Approve & Execute</button>
+                        <button onClick={() => { handleReject(selectedApproval.id); }} className="btn btn-danger">Reject</button>
+                      </>
+                    )}
+                    <button onClick={() => setSelectedApproval(null)} className="btn">Close</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: Cloud Connectors */}
+        {activeTab === 'connectors' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>🔌 Cloud Google Connectors</h2>
+            <div className="card-grid">
+              {connectors.map(c => (
+                <div key={c.connector_id} id={`connector-${c.connector_id}`} className="card" style={{ background: '#0d1117' }}>
+                  <h3>{c.name}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '15px 0' }}>
+                    <span className={`badge ${c.status === 'Active' ? 'success' : c.status === 'Revoked' ? 'danger' : 'warning'}`}>
+                      {c.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#8b949e', lineHeight: '1.6' }}>
+                    <p style={{ margin: '5px 0' }}><strong>Permissions:</strong> {c.read_permissions.join(', ')}</p>
+                    {c.last_used_at && <p style={{ margin: '5px 0' }}><strong>Last Used:</strong> {new Date(c.last_used_at).toLocaleString()}</p>}
+                  </div>
+                  <div style={{ marginTop: '20px' }}>
+                    <a
+                      href={`/api/jarvis/google/connect?connector=${c.connector_id}&token=${token}&force=true`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary"
+                      style={{ display: 'inline-block', fontSize: '0.85rem' }}
+                    >
+                      Authorize Connector
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 5: Mobile Inbox */}
+        {activeTab === 'mobile' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>📱 Mobile Upload Inbox</h2>
+            {mobileUploads.length > 0 ? (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Intake</th>
+                      <th>Type</th>
+                      <th>Content</th>
+                      <th>Created</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mobileUploads.map(upload => (
+                      <tr key={upload.id}>
+                        <td><code>{upload.intake_source}</code></td>
+                        <td><span className="badge muted">{upload.task_type}</span></td>
+                        <td>
+                          {upload.text_content ? (
+                            <div style={{ maxWidth: '350px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {upload.text_content}
+                            </div>
+                          ) : (
+                            upload.media_url && <a href={upload.media_url} target="_blank" rel="noopener noreferrer">View Media</a>
+                          )}
+                        </td>
+                        <td>{new Date(upload.created_at).toLocaleString()}</td>
+                        <td>
+                          <span className={`badge ${upload.processed ? 'success' : 'warning'}`}>
+                            {upload.processed ? 'processed' : 'unprocessed'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state">No mobile uploads recorded in the inbox.</div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 6: Projects List */}
+        {activeTab === 'projects' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>📂 Project States</h2>
+            {projects.length > 0 ? (
+              <div className="card-grid">
+                {projects.map(p => (
+                  <div key={p.slug} className="card" style={{ background: '#0d1117' }}>
+                    <h3>{p.name}</h3>
+                    <div style={{ margin: '10px 0' }}>
+                      <span className={`badge ${p.status === 'active' ? 'success' : 'muted'}`}>
+                        {p.status}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#8b949e', margin: '5px 0' }}>
+                      Slug: <code>{p.slug}</code>
+                    </p>
+                    <p style={{ fontSize: '0.85rem', color: '#8b949e', margin: '5px 0' }}>
+                      Registered: {new Date(p.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">No projects loaded.</div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}

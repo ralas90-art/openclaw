@@ -4,7 +4,8 @@ import TenantList from './pages/TenantList';
 import TenantDetail from './pages/TenantDetail';
 import Operations from './pages/Operations';
 import Onboarding from './pages/Onboarding';
-import { LayoutDashboard, Users, Activity, Settings } from 'lucide-react';
+import JarvisDashboard from './pages/JarvisDashboard';
+import { LayoutDashboard, Users, Activity, Settings, Sparkles } from 'lucide-react';
 import './App.css';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
             <Link to="/tenants"><Users size={18}/> Tenants</Link>
             <Link to="/operations"><Activity size={18}/> Operations</Link>
             <Link to="/onboarding"><Settings size={18}/> Onboarding</Link>
+            <Link to="/jarvis"><Sparkles size={18}/> Jarvis</Link>
           </nav>
         </aside>
         <main className="admin-main">
@@ -30,6 +32,7 @@ function App() {
             <Route path="/tenants/:tenantId" element={<TenantDetail />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/jarvis" element={<JarvisDashboard />} />
           </Routes>
         </main>
       </div>
@@ -38,3 +41,4 @@ function App() {
 }
 
 export default App;
+

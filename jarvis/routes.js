@@ -34,13 +34,21 @@ function getRedirectUri(req) {
   return `${protocol}://${host}/api/jarvis/google/callback`;
 }
 
-
+async function authenticateAnyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (token && token === process.env.INTERNAL_ADMIN_TOKEN) {
+    return next();
+  }
+  return authenticateMobileToken(req, res, next);
+}
 
 // POST /api/jarvis/mobile-intake
 router.post('/mobile-intake', authenticateMobileToken, handleMobileIntake);
 
 // GET /api/jarvis/daily-brief
-router.get('/daily-brief', authenticateMobileToken, async (req, res) => {
+router.get('/daily-brief', authenticateAnyToken, async (req, res) => {
   try {
     const isRefresh = req.query.refresh === 'true';
     const format = (req.query.format || 'json').trim().toLowerCase();
@@ -342,6 +350,60 @@ router.get('/approvals/:id', requireAdminToken, async (req, res) => {
   }
 });
 
+// POST /api/jarvis/approvals/:id/approve
+router.post('/approvals/:id/approve', requireAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { approveRequest, executeApprovedAction } = require('./controller');
+    await approveRequest(id, 'admin_dashboard');
+    const result = await executeApprovedAction(id, 'admin_dashboard');
+    return res.status(200).json({ success: true, message: 'Action approved and executed successfully', result });
+  } catch (err) {
+    console.error('[Approve Route Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/approvals/:id/reject
+router.post('/approvals/:id/reject', requireAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rejectApproval } = require('./controller');
+    await rejectApproval(id, 'admin_dashboard');
+    return res.status(200).json({ success: true, message: 'Action proposal rejected' });
+  } catch (err) {
+    console.error('[Reject Route Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/approvals/:id/cancel
+router.post('/approvals/:id/cancel', requireAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { cancelApproval } = require('./controller');
+    await cancelApproval(id, 'admin_dashboard');
+    return res.status(200).json({ success: true, message: 'Action proposal cancelled' });
+  } catch (err) {
+    console.error('[Cancel Route Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/priorities/:id/propose
+router.post('/priorities/:id/propose', requireAdminToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { proposeAction } = require('./controller');
+    const proposal = await proposeAction(id, 'admin_dashboard');
+    return res.status(200).json({ success: true, message: 'Action proposed successfully', proposal });
+  } catch (err) {
+    console.error('[Propose Route Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
 // GET /api/jarvis/approval-stats
 router.get('/approval-stats', requireAdminToken, async (req, res) => {
   try {
@@ -396,6 +458,54 @@ router.get('/approval-stats', requireAdminToken, async (req, res) => {
   } catch (err) {
     console.error('[Approval Stats API Error]', err.message);
     return res.status(500).json({ error: 'Internal server error fetching approval stats' });
+  }
+});
+
+// GET /api/jarvis/connectors
+router.get('/connectors', requireAdminToken, async (req, res) => {
+  try {
+    const { listConnectorsStatus } = require('./connectors-summary');
+    const connectors = await listConnectorsStatus();
+    return res.status(200).json(connectors);
+  } catch (err) {
+    console.error('[Connectors API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching connectors status' });
+  }
+});
+
+// GET /api/jarvis/projects
+router.get('/projects', requireAdminToken, async (req, res) => {
+  try {
+    const { queryDb } = require('./controller');
+    const rows = await queryDb("SELECT * FROM jarvis_projects ORDER BY created_at DESC;");
+    return res.status(200).json(rows);
+  } catch (err) {
+    console.error('[Projects API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching projects' });
+  }
+});
+
+// GET /api/jarvis/mobile-uploads
+router.get('/mobile-uploads', requireAdminToken, async (req, res) => {
+  try {
+    const { queryDb } = require('./controller');
+    const rows = await queryDb("SELECT * FROM jarvis_mobile_uploads ORDER BY created_at DESC LIMIT 50;");
+    return res.status(200).json(rows);
+  } catch (err) {
+    console.error('[Mobile Uploads API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching mobile uploads' });
+  }
+});
+
+// GET /api/jarvis/priorities
+router.get('/priorities', requireAdminToken, async (req, res) => {
+  try {
+    const { getPriorityIntelligence } = require('./intelligence');
+    const intel = await getPriorityIntelligence();
+    return res.status(200).json(intel);
+  } catch (err) {
+    console.error('[Priorities API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching priorities' });
   }
 });
 
