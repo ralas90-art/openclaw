@@ -6,10 +6,10 @@
 1. **System — Follow up on unread client message from "Bancoagrícola"** (ID: `email:19edcfcccd2aee50`)
    *Why this matters:* payment language + unread email
    *Suggested next step:* review email and decide response
-2. **System — Follow up on unread client message from Chase** (ID: `email:19edcbec87b818e0`)
-   *Why this matters:* payment language + unread email
+2. **System — Follow up on unread client message from eMoney Reselling** (ID: `email:19edd2f6d7562dc8`)
+   *Why this matters:* urgency language + unread email
    *Suggested next step:* review email and decide response
-3. **System — Follow up on unread client message from eMoney Reselling** (ID: `email:19edd2f6d7562dc8`)
+3. **System — Follow up on unread client message from OG** (ID: `email:19edd163e02a6fce`)
    *Why this matters:* urgency language + unread email
    *Suggested next step:* review email and decide response
 
@@ -24,14 +24,13 @@
 OG. (ID: `email:19edd153bbdc0c98`)
   *Why this matters:* urgency language + unread email
   *Suggested next step:* review email and decide response
-* ... and 3 more urgent unread emails.
+* ... and 1 more urgent unread emails.
 
 ### 👥 Client & Project Follow-ups
 * **[Gmail]** Unread message from `eMoney Reselling`: "LIVE NOW - Clearance AI Webinar" (ID: `email:19edd2f6d7562dc8`)
 * **[Gmail]** Unread message from `OG`: "Your USD deposit is processed" (ID: `email:19edd163e02a6fce`)
 * **[Gmail]** Unread message from `OG`: "Your Time Is Now. Welcome to 
 OG." (ID: `email:19edd153bbdc0c98`)
-* ... and 1 more pending follow-ups.
 
 ### 🗂️ Project-Related Drive Files
 * No recent project-related Drive changes.

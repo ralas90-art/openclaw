@@ -78,6 +78,20 @@ export default function JarvisDashboard() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      const cleanToken = urlToken.trim();
+      sessionStorage.setItem('admin_token', cleanToken);
+      setToken(cleanToken);
+      params.delete('token');
+      const newSearch = params.toString();
+      const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
+      window.history.replaceState({}, document.title, newPath);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchAllData();
   }, [token]);
 

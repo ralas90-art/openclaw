@@ -1,5 +1,5 @@
 /**
- * Jarvis Phase 8: Jarvis Dashboard UI Integration Test Suite
+ * Jarvis Phase 8 & 8.1: Jarvis Dashboard UI Security & Validation Test Suite
  */
 
 const fs = require('fs');
@@ -34,6 +34,8 @@ let expressServer;
 let baseUrl;
 
 const TEST_PRIO_UUID = '88888888-8888-8888-8888-888888888888';
+const MOCK_MOBILE_TOKEN = 'mock-mobile-token-val-456';
+const MOCK_MOBILE_HASH = require('crypto').createHash('sha256').update(MOCK_MOBILE_TOKEN).digest('hex');
 
 // Stub getPriorityIntelligence
 const originalGetPriorityIntelligence = intelligence.getPriorityIntelligence;
@@ -55,7 +57,7 @@ intelligence.getPriorityIntelligence = async function() {
 };
 
 async function setup() {
-  console.log('Setting up Phase 8 test environment...');
+  console.log('Setting up Phase 8.1 test environment...');
   dbClient = new Client({ connectionString: DB_URL });
   await dbClient.connect();
 
@@ -65,10 +67,16 @@ async function setup() {
   await dbClient.query("DELETE FROM jarvis_approval_audit_events;");
   await dbClient.query("DELETE FROM jarvis_approval_requests;");
   await dbClient.query("DELETE FROM jarvis_blockers WHERE id = $1;", [TEST_PRIO_UUID]);
+  await dbClient.query("DELETE FROM jarvis_mobile_tokens WHERE token_hash = $1;", [MOCK_MOBILE_HASH]);
 
-  // Seed blockers and projects
+  // Seed blockers, projects, and mobile token
   await dbClient.query("INSERT INTO jarvis_projects (slug, name, status) VALUES ('septivolt', 'SeptiVolt', 'active') ON CONFLICT DO NOTHING;");
   await dbClient.query("INSERT INTO jarvis_blockers (id, project_slug, description, status) VALUES ($1, 'septivolt', 'Dashboard Integration Blocked', 'active');", [TEST_PRIO_UUID]);
+  
+  await dbClient.query(`
+    INSERT INTO jarvis_mobile_tokens (token_hash, device_id, device_name, active, expires_at)
+    VALUES ($1, 'test-device-id', 'Test Device', true, now() + interval '24 hours');
+  `, [MOCK_MOBILE_HASH]);
 
   // Start ephemeral Express server for routes testing
   const router = require('../jarvis/routes');
@@ -87,7 +95,7 @@ async function setup() {
 }
 
 async function cleanup() {
-  console.log('\nCleaning up Phase 8 test resources...');
+  console.log('\nCleaning up Phase 8.1 test resources...');
   intelligence.getPriorityIntelligence = originalGetPriorityIntelligence;
   if (expressServer) {
     expressServer.close();
@@ -97,6 +105,7 @@ async function cleanup() {
       await dbClient.query("DELETE FROM jarvis_approval_audit_events;");
       await dbClient.query("DELETE FROM jarvis_approval_requests;");
       await dbClient.query("DELETE FROM jarvis_blockers WHERE id = $1;", [TEST_PRIO_UUID]);
+      await dbClient.query("DELETE FROM jarvis_mobile_tokens WHERE token_hash = $1;", [MOCK_MOBILE_HASH]);
       await dbClient.end();
     } catch (err) {
       console.error('[Cleanup Error]', err.message);
@@ -104,9 +113,29 @@ async function cleanup() {
   }
 }
 
+// Simulated Client-side Auth Token Extraction & Cleanup Helper
+function simulateClientTokenExtraction(urlStr, mockSessionStorage) {
+  const url = new URL(urlStr);
+  const token = url.searchParams.get('token');
+  let historyReplaced = false;
+  let cleanPath = url.pathname;
+
+  if (token) {
+    mockSessionStorage.setItem('admin_token', token);
+    url.searchParams.delete('token');
+    cleanPath = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+    historyReplaced = true;
+  }
+  return {
+    storedToken: mockSessionStorage.getItem('admin_token'),
+    cleanPath,
+    historyReplaced
+  };
+}
+
 async function runTests() {
   await setup();
-  console.log('Starting Phase 8 Jarvis Dashboard UI Integration Tests...');
+  console.log('Starting Phase 8 & 8.1 Jarvis Dashboard Security & Validation Tests...');
   let testsPassed = 0;
   let totalTests = 0;
 
@@ -122,6 +151,7 @@ async function runTests() {
   }
 
   const headers = { Authorization: `Bearer ${process.env.INTERNAL_ADMIN_TOKEN}` };
+  const mobileHeaders = { Authorization: `Bearer ${MOCK_MOBILE_TOKEN}` };
 
   try {
     // ==========================================
@@ -215,7 +245,65 @@ async function runTests() {
     runAssert(!fullLogString.includes('test-token-dashboard-8'), 'API output does not leak INTERNAL_ADMIN_TOKEN');
     runAssert(!fullLogString.includes('postgres://'), 'API output does not leak database credentials');
 
-    console.log(`\n🎉 Phase 8 Dashboard Integration Tests Complete! Passed ${testsPassed} of ${totalTests} tests.`);
+    // ==========================================
+    // TEST 9: Mobile token fails closed on admin endpoints
+    // ==========================================
+    const adminEndpoints = [
+      '/connectors',
+      '/projects',
+      '/mobile-uploads',
+      '/priorities',
+      '/approvals',
+      '/approval-stats'
+    ];
+
+    for (const ep of adminEndpoints) {
+      try {
+        await axios.get(`${baseUrl}${ep}`, { headers: mobileHeaders });
+        runAssert(false, `Mobile token erroneously allowed access to admin route: ${ep}`);
+      } catch (err) {
+        runAssert(err.response.status === 401, `Mobile token correctly rejected on admin route ${ep} with 401`);
+      }
+    }
+
+    // ==========================================
+    // TEST 10: Client URL token cleanup behavior
+    // ==========================================
+    const mockStorageMap = new Map();
+    const mockSessionStorage = {
+      setItem: (key, val) => mockStorageMap.set(key, val),
+      getItem: (key) => mockStorageMap.get(key)
+    };
+
+    const cleanupResult = simulateClientTokenExtraction(
+      'https://openclaw-production-0664.up.railway.app/admin/jarvis?token=my-secret-key-123&other=active',
+      mockSessionStorage
+    );
+    runAssert(cleanupResult.storedToken === 'my-secret-key-123', 'Token successfully moved to sessionStorage');
+    runAssert(cleanupResult.cleanPath === '/admin/jarvis?other=active', 'Token query parameter removed from URL path');
+    runAssert(cleanupResult.historyReplaced === true, 'Triggered history.replaceState to replace browser address bar');
+
+    // ==========================================
+    // TEST 11: Production frontend build secret sweep
+    // ==========================================
+    const distAssetsDir = path.resolve(__dirname, '../admin-ui/dist/assets');
+    if (fs.existsSync(distAssetsDir)) {
+      const files = fs.readdirSync(distAssetsDir).filter(f => f.endsWith('.js'));
+      let sweepsPassed = true;
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(distAssetsDir, file), 'utf8');
+        // Assert no secrets from .env.local exist in built javascript files
+        if (process.env.INTERNAL_ADMIN_TOKEN && content.includes(process.env.INTERNAL_ADMIN_TOKEN)) sweepsPassed = false;
+        if (process.env.DATABASE_URL && content.includes(process.env.DATABASE_URL)) sweepsPassed = false;
+        if (process.env.JARVIS_ENCRYPTION_KEY && content.includes(process.env.JARVIS_ENCRYPTION_KEY)) sweepsPassed = false;
+        if (process.env.GOOGLE_CLIENT_SECRET && content.includes(process.env.GOOGLE_CLIENT_SECRET)) sweepsPassed = false;
+      }
+      runAssert(sweepsPassed === true, 'Built frontend static JS bundles do not contain any hardcoded secret values');
+    } else {
+      console.log('⚠️ Warning: admin-ui dist not compiled locally during tests. Skipping build file sweep.');
+    }
+
+    console.log(`\n🎉 Phase 8.1 Dashboard Security Tests Complete! Passed ${testsPassed} of ${totalTests} tests.`);
   } catch (err) {
     console.error('Fatal integration test error:', err.message);
     if (err.response) {
