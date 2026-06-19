@@ -729,6 +729,18 @@ function getActionPreview(...args) {
 function proposeAction(...args) {
   return require('./actions').proposeAction(...args);
 }
+function approveRequest(...args) {
+  return require('./actions').approveRequest(...args);
+}
+function rejectApproval(...args) {
+  return require('./actions').rejectApproval(...args);
+}
+function cancelApproval(...args) {
+  return require('./actions').cancelApproval(...args);
+}
+function cleanupExpiredApprovals(...args) {
+  return require('./actions').cleanupExpiredApprovals(...args);
+}
 function executeApprovedAction(...args) {
   return require('./actions').executeApprovedAction(...args);
 }
@@ -748,5 +760,9 @@ module.exports = {
   savePriorityFeedback,
   getActionPreview,
   proposeAction,
+  approveRequest,
+  rejectApproval,
+  cancelApproval,
+  cleanupExpiredApprovals,
   executeApprovedAction
 };

@@ -884,6 +884,30 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'reject_approval',
     description: 'Cancel a pending approval request.'
+  },
+  jarvis_approval_history: {
+    commands: ['/jarvis_approval_history'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View history of Jarvis action approvals.'
+  },
+  jarvis_approval_stats: {
+    commands: ['/jarvis_approval_stats'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View aggregated statistics of Jarvis approvals.'
   }
 };
 
@@ -978,7 +1002,9 @@ function normalizeCommand(commandText) {
     'jarvisapproval': 'jarvis_approval',
     'jarvisapprove': 'jarvis_approve',
     'jarvisreject': 'jarvis_reject',
-    'jarviscancelapproval': 'jarvis_cancel_approval'
+    'jarviscancelapproval': 'jarvis_cancel_approval',
+    'jarvisapprovalhistory': 'jarvis_approval_history',
+    'jarvisapprovalstats': 'jarvis_approval_stats'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

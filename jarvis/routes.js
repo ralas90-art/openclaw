@@ -227,4 +227,176 @@ router.get('/google/callback', async (req, res) => {
   }
 });
 
+// 1. Internal Admin Token Guard for dashboard endpoints
+function requireAdminToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token || token !== process.env.INTERNAL_ADMIN_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+function sanitizeSecretKeywords(str) {
+  if (!str) return str;
+  return str
+    .replace(/(bearer\s+)[a-zA-Z0-9_\-\.]+/gi, '$1••••••••')
+    .replace(/(postgres:\/\/)[^@]+@/gi, '$1user:password@')
+    .replace(/(api_key\s*:\s*)['\"][a-zA-Z0-9_\-]+['\"]/gi, '$1"••••••••"')
+    .replace(/(client_secret\s*:\s*)['\"][a-zA-Z0-9_\-]+['\"]/gi, '$1"••••••••"');
+}
+
+function sanitizeApprovalForDisplay(r) {
+  if (!r) return null;
+  const clone = { ...r };
+  
+  if (clone.proposed_payload) {
+    const payloadStr = JSON.stringify(clone.proposed_payload);
+    if (payloadStr.length > 500) {
+      clone.proposed_payload = {
+        _info: "[truncated for display]",
+        action: clone.proposed_payload.action,
+        project_slug: clone.proposed_payload.project_slug,
+        truncated_payload_preview: payloadStr.substring(0, 300) + "..."
+      };
+    }
+  }
+  
+  if (clone.action_result_summary) {
+    clone.action_result_summary = sanitizeSecretKeywords(clone.action_result_summary);
+  }
+  if (clone.execution_error_summary) {
+    clone.execution_error_summary = sanitizeSecretKeywords(clone.execution_error_summary);
+  }
+  
+  return clone;
+}
+
+// GET /api/jarvis/approvals
+router.get('/approvals', requireAdminToken, async (req, res) => {
+  try {
+    const { queryDb, cleanupExpiredApprovals } = require('./controller');
+    await cleanupExpiredApprovals();
+
+    const { status, project_slug } = req.query;
+    let sql = "SELECT * FROM jarvis_approval_requests WHERE 1=1";
+    const params = [];
+    
+    if (status) {
+      const cleanStatus = status.trim().toLowerCase();
+      const validStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'expired', 'executed', 'failed'];
+      if (!validStatuses.includes(cleanStatus)) {
+        return res.status(400).json({ error: `Invalid status filter. Must be one of: ${validStatuses.join(', ')}` });
+      }
+      params.push(cleanStatus);
+      sql += ` AND status = $${params.length}`;
+    }
+    
+    if (project_slug) {
+      const cleanSlug = project_slug.trim().toLowerCase();
+      params.push(cleanSlug);
+      sql += ` AND project_slug = $${params.length}`;
+    }
+    
+    sql += " ORDER BY created_at DESC LIMIT 50;";
+    
+    const rows = await queryDb(sql, params);
+    const sanitizedRows = rows.map(r => sanitizeApprovalForDisplay(r));
+    return res.status(200).json(sanitizedRows);
+  } catch (err) {
+    console.error('[Approvals API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error listing approvals' });
+  }
+});
+
+// GET /api/jarvis/approvals/:id
+router.get('/approvals/:id', requireAdminToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: "Invalid ID format. Must be a valid UUID." });
+    }
+
+    const { queryDb, cleanupExpiredApprovals } = require('./controller');
+    await cleanupExpiredApprovals();
+
+    const rows = await queryDb("SELECT * FROM jarvis_approval_requests WHERE id = $1;", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Approval request not found" });
+    }
+    
+    const auditEvents = await queryDb(
+      "SELECT * FROM jarvis_approval_audit_events WHERE approval_id = $1 ORDER BY created_at ASC;",
+      [id]
+    );
+    
+    const sanitizedReq = sanitizeApprovalForDisplay(rows[0]);
+    return res.status(200).json({
+      ...sanitizedReq,
+      audit_events: auditEvents
+    });
+  } catch (err) {
+    console.error('[Approval Detail API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching approval details' });
+  }
+});
+
+// GET /api/jarvis/approval-stats
+router.get('/approval-stats', requireAdminToken, async (req, res) => {
+  try {
+    const { queryDb, cleanupExpiredApprovals } = require('./controller');
+    await cleanupExpiredApprovals();
+
+    const statusRows = await queryDb(
+      `SELECT status, count(*)::integer as count 
+       FROM jarvis_approval_requests 
+       GROUP BY status;`
+    );
+    
+    const stats = {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      cancelled: 0,
+      expired: 0,
+      executed: 0,
+      failed: 0
+    };
+    
+    statusRows.forEach(r => {
+      if (r.status in stats) {
+        stats[r.status] = r.count;
+      }
+    });
+    
+    const riskRows = await queryDb(
+      `SELECT risk_level, count(*)::integer as count 
+       FROM jarvis_approval_requests 
+       GROUP BY risk_level;`
+    );
+    
+    const riskBreakdown = {
+      low: 0,
+      medium: 0,
+      high: 0
+    };
+    
+    riskRows.forEach(r => {
+      const key = (r.risk_level || 'medium').toLowerCase();
+      if (key in riskBreakdown) {
+        riskBreakdown[key] = r.count;
+      }
+    });
+
+    return res.status(200).json({
+      status_counts: stats,
+      risk_breakdown: riskBreakdown
+    });
+  } catch (err) {
+    console.error('[Approval Stats API Error]', err.message);
+    return res.status(500).json({ error: 'Internal server error fetching approval stats' });
+  }
+});
+
 module.exports = router;

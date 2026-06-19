@@ -504,6 +504,13 @@ async function handleCommand(text, message) {
     const approvalId = text.substring(command.length).trim();
     return await handleJarvisCancelApproval(approvalId, message);
   }
+  if (command === '/jarvis_approval_history' || command === '/jarvisapprovalhistory') {
+    const args = text.substring(command.length).trim();
+    return await handleJarvisApprovalHistory(args, message);
+  }
+  if (command === '/jarvis_approval_stats' || command === '/jarvisapprovalstats') {
+    return await handleJarvisApprovalStats(message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -4415,30 +4422,11 @@ async function handleJarvisApprove(approvalId, message) {
     return `❌ Usage: \`/jarvis_approve <approval_id>\``;
   }
 
-  const { queryDb, executeApprovedAction } = require('../../jarvis/controller');
+  const { approveRequest, executeApprovedAction } = require('../../jarvis/controller');
   try {
-    // 1. Fetch request details to ensure pending status
-    const rows = await queryDb("SELECT status FROM jarvis_approval_requests WHERE id = $1;", [cleanId]);
-    if (rows.length === 0) {
-      return `❌ Error: Approval request "${cleanId}" not found.`;
-    }
-
-    const currentStatus = rows[0].status;
-    if (currentStatus !== 'pending') {
-      return `❌ Execution Rejected: Request status is "${currentStatus}" (Only "pending" requests can be approved).`;
-    }
-
-    // 2. Perform DB update to approved first (locking)
     const approvedBy = String(message.from?.id || 'admin');
-    await queryDb(
-      `UPDATE jarvis_approval_requests 
-       SET status = 'approved', approved_by = $1, approved_at = now(), updated_at = now() 
-       WHERE id = $2 AND status = 'pending';`,
-      [approvedBy, cleanId]
-    );
-
-    // 3. Execute approved action
-    const executionResult = await executeApprovedAction(cleanId);
+    await approveRequest(cleanId, approvedBy);
+    const executionResult = await executeApprovedAction(cleanId, approvedBy);
     return executionResult;
   } catch (err) {
     return `❌ Execution Error: ${err.message}`;
@@ -4457,17 +4445,10 @@ async function handleJarvisReject(approvalId, message) {
     return `❌ Usage: \`/jarvis_reject <approval_id>\``;
   }
 
-  const { queryDb } = require('../../jarvis/controller');
+  const { rejectApproval } = require('../../jarvis/controller');
   try {
-    const rows = await queryDb(
-      "UPDATE jarvis_approval_requests SET status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'pending' RETURNING id;",
-      [cleanId]
-    );
-
-    if (rows.length === 0) {
-      return `❌ Error: Request not found or is no longer pending.`;
-    }
-
+    const actor = String(message.from?.id || 'admin');
+    await rejectApproval(cleanId, actor);
     return `🛑 Rejected request \`${cleanId}\`. Jarvis will not execute this proposal.`;
   } catch (err) {
     return `❌ Error rejecting request: ${err.message}`;
@@ -4486,20 +4467,167 @@ async function handleJarvisCancelApproval(approvalId, message) {
     return `❌ Usage: \`/jarvis_cancel_approval <approval_id>\``;
   }
 
-  const { queryDb } = require('../../jarvis/controller');
+  const { cancelApproval } = require('../../jarvis/controller');
   try {
-    const rows = await queryDb(
-      "UPDATE jarvis_approval_requests SET status = 'cancelled', updated_at = now() WHERE id = $1 AND status = 'pending' RETURNING id;",
-      [cleanId]
-    );
-
-    if (rows.length === 0) {
-      return `❌ Error: Request not found or is no longer pending.`;
-    }
-
+    const actor = String(message.from?.id || 'admin');
+    await cancelApproval(cleanId, actor);
     return `🚫 Cancelled pending approval request \`${cleanId}\`.`;
   } catch (err) {
     return `❌ Error cancelling request: ${err.message}`;
+  }
+}
+
+async function handleJarvisApprovalHistory(args, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approval_history', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approval_history', permCheck.reason, message);
+  }
+
+  const { queryDb, cleanupExpiredApprovals } = require('../../jarvis/controller');
+  try {
+    await cleanupExpiredApprovals();
+
+    const cleanArgs = args.trim().toLowerCase();
+    let sql = "SELECT * FROM jarvis_approval_requests WHERE 1=1";
+    const params = [];
+    let filterDescription = "All Approvals";
+
+    if (cleanArgs === 'today') {
+      sql += " AND created_at >= date_trunc('day', now())";
+      filterDescription = "Proposed Today";
+    } else if (cleanArgs.startsWith('project ')) {
+      const slug = cleanArgs.substring(8).trim();
+      if (!slug) {
+        return "❌ Usage: `/jarvis_approval_history project <slug>`";
+      }
+      params.push(slug);
+      sql += ` AND project_slug = $${params.length}`;
+      filterDescription = `Project: ${slug}`;
+    } else if (cleanArgs.startsWith('status ')) {
+      const status = cleanArgs.substring(7).trim();
+      const validStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'expired', 'executed', 'failed'];
+      if (!status || !validStatuses.includes(status)) {
+        return `❌ Usage: \`/jarvis_approval_history status <${validStatuses.join('|')}>\``;
+      }
+      params.push(status);
+      sql += ` AND status = $${params.length}`;
+      filterDescription = `Status: ${status.toUpperCase()}`;
+    } else if (cleanArgs !== '') {
+      const validStatuses = ['pending', 'approved', 'rejected', 'cancelled', 'expired', 'executed', 'failed'];
+      if (validStatuses.includes(cleanArgs)) {
+        params.push(cleanArgs);
+        sql += ` AND status = $${params.length}`;
+        filterDescription = `Status: ${cleanArgs.toUpperCase()}`;
+      } else {
+        return "❌ Invalid argument. Available options:\n" +
+               "• `/jarvis_approval_history` (all)\n" +
+               "• `/jarvis_approval_history today`\n" +
+               "• `/jarvis_approval_history project <slug>`\n" +
+               "• `/jarvis_approval_history status <status>`";
+      }
+    }
+
+    sql += " ORDER BY created_at DESC LIMIT 10;";
+    const rows = await queryDb(sql, params);
+
+    if (rows.length === 0) {
+      return `📥 *Jarvis Approval History* (${filterDescription})\n\nNo matching approval requests found.`;
+    }
+
+    let out = `📥 *Jarvis Approval History* (${filterDescription})\n\n`;
+    rows.forEach((r, idx) => {
+      const timeStr = new Date(r.created_at).toLocaleString();
+      const statusEmoji = r.status === 'pending' ? '⏳' :
+                          r.status === 'approved' ? '✅' :
+                          r.status === 'executed' ? '⚡' :
+                          r.status === 'rejected' ? '🛑' :
+                          r.status === 'cancelled' ? '🚫' : '⚠️';
+      out += `${idx + 1}. *[${r.risk_level.toUpperCase()}]* ${statusEmoji} ${r.requested_action}\n` +
+             `   • ID: \`${r.id}\`\n` +
+             `   • Status: \`${r.status}\` | Project: \`${r.project_slug || 'system'}\`\n` +
+             `   • Proposed: _${timeStr}_\n\n`;
+    });
+
+    return out.trim();
+  } catch (err) {
+    return `❌ Error retrieving history: ${err.message}`;
+  }
+}
+
+async function handleJarvisApprovalStats(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approval_stats', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approval_stats', permCheck.reason, message);
+  }
+
+  const { queryDb, cleanupExpiredApprovals } = require('../../jarvis/controller');
+  try {
+    await cleanupExpiredApprovals();
+
+    const statusRows = await queryDb(
+      `SELECT status, count(*)::integer as count 
+       FROM jarvis_approval_requests 
+       GROUP BY status;`
+    );
+
+    const stats = {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      cancelled: 0,
+      expired: 0,
+      executed: 0,
+      failed: 0
+    };
+
+    let total = 0;
+    statusRows.forEach(r => {
+      if (r.status in stats) {
+        stats[r.status] = r.count;
+        total += r.count;
+      }
+    });
+
+    const riskRows = await queryDb(
+      `SELECT risk_level, count(*)::integer as count 
+       FROM jarvis_approval_requests 
+       GROUP BY risk_level;`
+    );
+
+    const riskStats = {
+      low: 0,
+      medium: 0,
+      high: 0
+    };
+
+    riskRows.forEach(r => {
+      const key = (r.risk_level || 'medium').toLowerCase();
+      if (key in riskStats) {
+        riskStats[key] = r.count;
+      }
+    });
+
+    return `📊 *Jarvis Approval Statistics*
+
+• *Total Requests:* \`${total}\`
+
+*Status Summary:*
+• ⏳ *Pending:* \`${stats.pending}\`
+• ✅ *Approved:* \`${stats.approved}\`
+• ⚡ *Executed:* \`${stats.executed}\`
+• 🛑 *Rejected:* \`${stats.rejected}\`
+• 🚫 *Cancelled:* \`${stats.cancelled}\`
+• ⏰ *Expired:* \`${stats.expired}\`
+• ❌ *Failed:* \`${stats.failed}\`
+
+*Risk Level Breakdown:*
+• *Low Risk:* \`${riskStats.low}\`
+• *Medium Risk:* \`${riskStats.medium}\`
+• *High Risk:* \`${riskStats.high}\``;
+  } catch (err) {
+    return `❌ Error retrieving statistics: ${err.message}`;
   }
 }
 
