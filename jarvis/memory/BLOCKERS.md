@@ -2,17 +2,9 @@
 
 > [!NOTE]
 > This is a read-only local export snapshot of the operational Jarvis database.
-> Generated At: 2026-06-16 23:19:26
+> Generated At: 2026-06-19 00:09:21
 
 ---
 | Date Added | Project | Description | Priority | Steps to Resolve |
 |---|---|---|---|---|
-| 2026-06-16 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-16 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-16 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-16 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-16 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-13 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-13 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-13 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
-| 2026-06-13 | `septivolt` | OAuth redirect loop on SOLAR_TRAINER_URI | high | N/A |
+| N/A | N/A | No active blockers found | N/A | N/A |

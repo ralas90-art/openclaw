@@ -716,6 +716,42 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'Get secure reconnect URL for Gmail or Google Drive connectors.'
+  },
+  jarvis_priorities: {
+    commands: ['/jarvis_priorities'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List top priorities for today.'
+  },
+  jarvis_followups: {
+    commands: ['/jarvis_followups'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List client and project follow-ups.'
+  },
+  jarvis_blockers: {
+    commands: ['/jarvis_blockers'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List active and stale blockers.'
   }
 };
 
@@ -793,7 +829,10 @@ function normalizeCommand(commandText) {
     'jarvisconnectors': 'jarvis_connectors',
     'jarvisemailsummary': 'jarvis_email_summary',
     'jarvisdriverecent': 'jarvis_drive_recent',
-    'jarvisreconnectgoogle': 'jarvis_reconnect_google'
+    'jarvisreconnectgoogle': 'jarvis_reconnect_google',
+    'jarvispriorities': 'jarvis_priorities',
+    'jarvisfollowups': 'jarvis_followups',
+    'jarvisblockers': 'jarvis_blockers'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

@@ -1,12 +1,45 @@
-# 📆 Jarvis Daily Brief - 2026-06-16
+# 📆 Jarvis Daily Brief - 2026-06-19
+
+## 🧠 Jarvis Priority Intelligence
+
+### 🏆 Top 3 Priorities for Today
+1. **System — Follow up on unread client message from "Bancoagrícola"**
+   *Why: payment language + unread email*
+   *Next action: review email and decide response*
+2. **System — Follow up on unread client message from Chase**
+   *Why: payment language + unread email*
+   *Next action: review email and decide response*
+3. **System — Follow up on unread client message from eMoney Reselling**
+   *Why: urgency language + unread email*
+   *Next action: review email and decide response*
+
+### 📬 Urgent Unread Emails
+* **From:** `eMoney Reselling` | **Subject:** LIVE NOW - Clearance AI Webinar | *Next action:* review email and decide response
+* **From:** `OG` | **Subject:** Your USD deposit is processed | *Next action:* review email and decide response
+* **From:** `OG` | **Subject:** Your Time Is Now. Welcome to 
+OG. | *Next action:* review email and decide response
+* **From:** `"Bancoagrícola"` | **Subject:** ⚡¡Haz tus transferencias más rápidas desde Banca Móvil! | *Next action:* review email and decide response
+* **From:** `Flipboard` | **Subject:** Your Thursday tech briefing | *Next action:* review email and decide response
+* **From:** `Chase` | **Subject:** You received money with Zelle® | *Next action:* review email and decide response
+
+### 👥 Client & Project Follow-ups
+* **[Gmail]** Unread message from `eMoney Reselling`: "LIVE NOW - Clearance AI Webinar"
+* **[Gmail]** Unread message from `OG`: "Your USD deposit is processed"
+* **[Gmail]** Unread message from `OG`: "Your Time Is Now. Welcome to 
+OG."
+* **[Gmail]** Unread message from `Flipboard`: "Your Thursday tech briefing"
+
+### 🗂️ Project-Related Drive Files
+* No recent project-related Drive changes.
+
+### 🛑 Stale Blockers
+* ✅ No stale blockers active.
+
+### 📥 Mobile Notes Needing Processing
+* Mobile inbox is clear.
 
 ## 🏆 Completed Work (Last 24 Hours)
-* **[septivolt]** Build simulator UI variant (Outcome: Delivered slider overlays.)
-* **[cresca-os]** Verify copywriting schema tags (Outcome: Google rich snippets verified.)
-* **[septivolt]** Build simulator UI variant (Outcome: Delivered slider overlays.)
-* **[cresca-os]** Verify copywriting schema tags (Outcome: Google rich snippets verified.)
-* **[septivolt]** Build simulator UI variant (Outcome: Delivered slider overlays.)
-* **[cresca-os]** Verify copywriting schema tags (Outcome: Google rich snippets verified.)
+* No completed tasks recorded since yesterday.
 
 ## 🗂️ Active Projects
 * **Content Creation** (Phase 1): Optimize ad variations across YouTube, TikTok, and Instagram.
@@ -17,71 +50,11 @@
 * **SeptiVolt** (Phase 2): Deliver simulator slide renderings and trainer tools.
 
 ## 🛑 Active Blockers
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
-* **[septivolt]** OAuth redirect loop on SOLAR_TRAINER_URI `[Priority: high]`
+* ✅ No active blockers or execution failures. All systems stable.
 
 ## ⚡ Next Recommended Actions
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Command:* `/run_bot content-forge...`
+* All action items clear. System is caught up.
 
 ## 🔑 Pending Approvals
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `71c6dab2-1f2c-4f84-a436-d972faa052be`)
-    Run: `/jarvis_approve 71c6dab2-1f2c-4f84-a436-d972faa052be`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `36cdfd96-d320-400b-9ffb-cb0931528b77`)
-    Run: `/jarvis_approve 36cdfd96-d320-400b-9ffb-cb0931528b77`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `6ab1ec1d-be61-43cd-b5c5-c8d039c8f796`)
-    Run: `/jarvis_approve 6ab1ec1d-be61-43cd-b5c5-c8d039c8f796`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `f00421fa-efd9-4639-8325-e717e41d7588`)
-    Run: `/jarvis_approve f00421fa-efd9-4639-8325-e717e41d7588`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `4e51acf4-4eec-4cb6-a10f-cd3843e2e595`)
-    Run: `/jarvis_approve 4e51acf4-4eec-4cb6-a10f-cd3843e2e595`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `7d86c615-4d1c-4f34-801f-84f7289fa361`)
-    Run: `/jarvis_approve 7d86c615-4d1c-4f34-801f-84f7289fa361`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `35168551-1b1c-48c0-9a5b-b1d67922aaee`)
-    Run: `/jarvis_approve 35168551-1b1c-48c0-9a5b-b1d67922aaee`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `d2030718-217a-4caa-94a8-ebb9a1e42768`)
-    Run: `/jarvis_approve d2030718-217a-4caa-94a8-ebb9a1e42768`
-* **[cresca-os]** Trigger Cresca OS production build deployment (Approval ID: `6297bb9a-c224-44d6-ac0c-4c254a2bcda7`)
-    Run: `/jarvis_approve 6297bb9a-c224-44d6-ac0c-4c254a2bcda7`
+* No pending execution approvals outstanding.
 

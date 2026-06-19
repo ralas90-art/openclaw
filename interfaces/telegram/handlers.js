@@ -447,6 +447,15 @@ async function handleCommand(text, message) {
     const args = text.substring(command.length).trim();
     return await handleJarvisReconnectGoogle(args, message);
   }
+  if (command === '/jarvis_priorities' || command === '/jarvispriorities') {
+    return await handleJarvisPriorities(message);
+  }
+  if (command === '/jarvis_followups' || command === '/jarvisfollowups') {
+    return await handleJarvisFollowups(message);
+  }
+  if (command === '/jarvis_blockers' || command === '/jarvisblockers') {
+    return await handleJarvisBlockersCmd(message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -3983,6 +3992,88 @@ async function handleJarvisDriveRecent(message) {
     return md;
   } catch (err) {
     return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisPriorities(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_priorities', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_priorities', permCheck.reason, message);
+  }
+
+  const { getPriorityIntelligence } = require('../../jarvis/intelligence');
+  try {
+    const intel = await getPriorityIntelligence();
+    if (intel.topThreePriorities.length === 0) {
+      return `🧠 *Jarvis Top Priorities for Today*\n\n✅ No urgent priorities found. All clear!`;
+    }
+    let md = `🧠 *Jarvis Top Priorities for Today*\n\n`;
+    intel.topThreePriorities.forEach((p, idx) => {
+      md += `${idx + 1}. *${p.heading}*\n   • ${p.why}\n   • ${p.nextAction}\n\n`;
+    });
+    return md;
+  } catch (err) {
+    return `❌ Error fetching priorities: ${err.message}`;
+  }
+}
+
+async function handleJarvisFollowups(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_followups', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_followups', permCheck.reason, message);
+  }
+
+  const { getPriorityIntelligence } = require('../../jarvis/intelligence');
+  try {
+    const intel = await getPriorityIntelligence();
+    if (intel.followUps.length === 0) {
+      return `👥 *Client & Project Follow-ups*\n\n✅ No follow-ups pending. All client items clear!`;
+    }
+    let md = `👥 *Client & Project Follow-ups*\n\n`;
+    intel.followUps.forEach(item => {
+      if (item.type === 'email') {
+        const fromName = (item.raw.from || '').split('<')[0].trim();
+        md += `• *[Gmail]* From \`${fromName || 'Unknown'}\`: "${item.raw.subject}"\n`;
+      } else {
+        const content = (item.raw.text_content || 'No content').substring(0, 50).trim();
+        md += `• *[Mobile Inbox]* "${content}" (ID: \`${item.raw.id}\`)\n`;
+      }
+    });
+    return md;
+  } catch (err) {
+    return `❌ Error fetching follow-ups: ${err.message}`;
+  }
+}
+
+async function handleJarvisBlockersCmd(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_blockers', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_blockers', permCheck.reason, message);
+  }
+
+  const { getPriorityIntelligence } = require('../../jarvis/intelligence');
+  try {
+    const intel = await getPriorityIntelligence();
+    const activeBlockers = intel.rankedItems.filter(item => item.type === 'blocker');
+    if (activeBlockers.length === 0) {
+      return `🛑 *Active Project Blockers*\n\n✅ No active blockers recorded. All systems stable!`;
+    }
+    let md = `🛑 *Active Project Blockers*\n\n`;
+    activeBlockers.forEach(item => {
+      const isStale = (Date.now() - new Date(item.raw.created_at).getTime() > 2 * 24 * 60 * 60 * 1000);
+      const staleLabel = isStale ? ` ⚠️ *[STALE]*` : '';
+      md += `• **[${item.project_slug || 'system'}]** ${item.raw.description}${staleLabel}\n`;
+      if (item.raw.steps_to_resolve) {
+        md += `  *Steps to resolve:* ${item.raw.steps_to_resolve}\n`;
+      }
+      md += `\n`;
+    });
+    return md;
+  } catch (err) {
+    return `❌ Error fetching blockers: ${err.message}`;
   }
 }
 

@@ -82,6 +82,88 @@ async function getDailyBrief(refresh = false) {
   // Format Daily Brief Markdown
   let md = `# 📆 Jarvis Daily Brief - ${todayStr}\n\n`;
 
+  // Fetch and format Morning Command Priority Intelligence
+  let intelSection = `## 🧠 Jarvis Priority Intelligence\n\n`;
+  try {
+    const { getPriorityIntelligence } = require('./intelligence');
+    const intel = await getPriorityIntelligence();
+
+    intelSection += `### 🏆 Top 3 Priorities for Today\n`;
+    if (intel.topThreePriorities.length === 0) {
+      intelSection += `* ✅ No urgent priorities detected. All clear!\n\n`;
+    } else {
+      intel.topThreePriorities.forEach((p, idx) => {
+        intelSection += `${idx + 1}. **${p.heading}**\n   *${p.why}*\n   *${p.nextAction}*\n`;
+      });
+      intelSection += `\n`;
+    }
+
+    intelSection += `### 📬 Urgent Unread Emails\n`;
+    if (intel.urgentEmails.length === 0) {
+      intelSection += `* No urgent unread emails detected.\n\n`;
+    } else {
+      for (const e of intel.urgentEmails) {
+        const fromName = (e.raw.from || '').split('<')[0].trim();
+        intelSection += `* **From:** \`${fromName || 'Unknown'}\` | **Subject:** ${e.raw.subject} | *Next action:* review email and decide response\n`;
+      }
+      intelSection += `\n`;
+    }
+
+    intelSection += `### 👥 Client & Project Follow-ups\n`;
+    if (intel.followUps.length === 0) {
+      intelSection += `* No follow-ups pending.\n\n`;
+    } else {
+      for (const f of intel.followUps) {
+        if (f.type === 'email') {
+          const fromName = (f.raw.from || '').split('<')[0].trim();
+          intelSection += `* **[Gmail]** Unread message from \`${fromName || 'Unknown'}\`: "${f.raw.subject}"\n`;
+        } else {
+          const content = (f.raw.text_content || 'No content').substring(0, 50).trim();
+          intelSection += `* **[Mobile Inbox]** Unprocessed note: "${content}" (ID: \`${f.raw.id}\`)\n`;
+        }
+      }
+      intelSection += `\n`;
+    }
+
+    intelSection += `### 🗂️ Project-Related Drive Files\n`;
+    const driveProjectFiles = intel.projectDriveFiles;
+    if (driveProjectFiles.length === 0) {
+      intelSection += `* No recent project-related Drive changes.\n\n`;
+    } else {
+      for (const d of driveProjectFiles) {
+        intelSection += `* **[${d.raw.name}](${d.raw.webViewLink})** (Project: \`${d.project_slug}\`)\n`;
+      }
+      intelSection += `\n`;
+    }
+
+    intelSection += `### 🛑 Stale Blockers\n`;
+    if (intel.staleBlockers.length === 0) {
+      intelSection += `* ✅ No stale blockers active.\n\n`;
+    } else {
+      for (const b of intel.staleBlockers) {
+        const days = Math.floor((Date.now() - new Date(b.raw.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        intelSection += `* **[${b.project_slug || 'system'}]** ${b.raw.description} (stale for ${days} days)\n`;
+      }
+      intelSection += `\n`;
+    }
+
+    intelSection += `### 📥 Mobile Notes Needing Processing\n`;
+    if (intel.unprocessedMobileNotes.length === 0) {
+      intelSection += `* Mobile inbox is clear.\n\n`;
+    } else {
+      for (const m of intel.unprocessedMobileNotes) {
+        const content = (m.raw.text_content || 'No content').substring(0, 50).trim();
+        intelSection += `* [${content}] (ID: \`${m.raw.id}\`)\n`;
+      }
+      intelSection += `\n`;
+    }
+  } catch (err) {
+    console.error('[JarvisController] Failed to generate Priority Intelligence:', err.message);
+    intelSection += `⚠️ *Priority Intelligence Layer failed to load:* ${err.message}\n\n`;
+  }
+
+  md += intelSection;
+
   // Section A: Completed Work
   md += `## 🏆 Completed Work (Last 24 Hours)\n`;
   if (completedTasks.length === 0 && hermesCompleted === 0) {

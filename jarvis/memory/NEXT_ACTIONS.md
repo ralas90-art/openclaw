@@ -2,42 +2,7 @@
 
 > [!NOTE]
 > This is a read-only local export snapshot of the operational Jarvis database.
-> Generated At: 2026-06-16 23:19:26
+> Generated At: 2026-06-19 00:09:21
 
 ---
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **new-era-solar**: Design GHL contact trigger sequence `[Priority: normal]`
-    *Recommended Command:* `/run_bot revenue-master-orchestrator...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
-- [ ] **septivolt**: Add dynamic sliders to simulator frame `[Priority: high]`
-    *Recommended Command:* `/run_bot content-forge...`
+No pending next actions found.
