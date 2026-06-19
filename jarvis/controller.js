@@ -93,7 +93,7 @@ async function getDailyBrief(refresh = false) {
       intelSection += `* ✅ No urgent priorities detected. All clear!\n\n`;
     } else {
       intel.topThreePriorities.forEach((p, idx) => {
-        intelSection += `${idx + 1}. **${p.heading}**\n   *${p.why}*\n   *${p.nextAction}*\n`;
+        intelSection += `${idx + 1}. **${p.heading}** (ID: \`${p.priority_id}\`)\n   *Why this matters:* ${p.reasons.join(' + ')}\n   *Suggested next step:* ${p.nextAction.replace(/^Next action: /, '')}\n`;
       });
       intelSection += `\n`;
     }
@@ -102,9 +102,13 @@ async function getDailyBrief(refresh = false) {
     if (intel.urgentEmails.length === 0) {
       intelSection += `* No urgent unread emails detected.\n\n`;
     } else {
-      for (const e of intel.urgentEmails) {
+      const displayEmails = intel.urgentEmails.slice(0, 3);
+      for (const e of displayEmails) {
         const fromName = (e.raw.from || '').split('<')[0].trim();
-        intelSection += `* **From:** \`${fromName || 'Unknown'}\` | **Subject:** ${e.raw.subject} | *Next action:* review email and decide response\n`;
+        intelSection += `* **From:** \`${fromName || 'Unknown'}\` | **Subject:** ${e.raw.subject} (ID: \`${e.priority_id}\`)\n  *Why this matters:* ${e.reasons.join(' + ')}\n  *Suggested next step:* review email and decide response\n`;
+      }
+      if (intel.urgentEmails.length > 3) {
+        intelSection += `* ... and ${intel.urgentEmails.length - 3} more urgent unread emails.\n`;
       }
       intelSection += `\n`;
     }
@@ -113,14 +117,18 @@ async function getDailyBrief(refresh = false) {
     if (intel.followUps.length === 0) {
       intelSection += `* No follow-ups pending.\n\n`;
     } else {
-      for (const f of intel.followUps) {
+      const displayFollowUps = intel.followUps.slice(0, 3);
+      for (const f of displayFollowUps) {
         if (f.type === 'email') {
           const fromName = (f.raw.from || '').split('<')[0].trim();
-          intelSection += `* **[Gmail]** Unread message from \`${fromName || 'Unknown'}\`: "${f.raw.subject}"\n`;
+          intelSection += `* **[Gmail]** Unread message from \`${fromName || 'Unknown'}\`: "${f.raw.subject}" (ID: \`${f.priority_id}\`)\n`;
         } else {
           const content = (f.raw.text_content || 'No content').substring(0, 50).trim();
-          intelSection += `* **[Mobile Inbox]** Unprocessed note: "${content}" (ID: \`${f.raw.id}\`)\n`;
+          intelSection += `* **[Mobile Inbox]** Unprocessed note: "${content}" (ID: \`${f.priority_id}\`)\n`;
         }
+      }
+      if (intel.followUps.length > 3) {
+        intelSection += `* ... and ${intel.followUps.length - 3} more pending follow-ups.\n`;
       }
       intelSection += `\n`;
     }
@@ -130,8 +138,12 @@ async function getDailyBrief(refresh = false) {
     if (driveProjectFiles.length === 0) {
       intelSection += `* No recent project-related Drive changes.\n\n`;
     } else {
-      for (const d of driveProjectFiles) {
-        intelSection += `* **[${d.raw.name}](${d.raw.webViewLink})** (Project: \`${d.project_slug}\`)\n`;
+      const displayDrive = driveProjectFiles.slice(0, 3);
+      for (const d of displayDrive) {
+        intelSection += `* **[${d.raw.name}](${d.raw.webViewLink})** (Project: \`${d.project_slug}\` | ID: \`${d.priority_id}\`)\n`;
+      }
+      if (driveProjectFiles.length > 3) {
+        intelSection += `* ... and ${driveProjectFiles.length - 3} more project-related Drive changes.\n`;
       }
       intelSection += `\n`;
     }
@@ -140,9 +152,13 @@ async function getDailyBrief(refresh = false) {
     if (intel.staleBlockers.length === 0) {
       intelSection += `* ✅ No stale blockers active.\n\n`;
     } else {
-      for (const b of intel.staleBlockers) {
+      const displayBlockers = intel.staleBlockers.slice(0, 3);
+      for (const b of displayBlockers) {
         const days = Math.floor((Date.now() - new Date(b.raw.created_at).getTime()) / (1000 * 60 * 60 * 24));
-        intelSection += `* **[${b.project_slug || 'system'}]** ${b.raw.description} (stale for ${days} days)\n`;
+        intelSection += `* **[${b.project_slug || 'system'}]** ${b.raw.description} (stale for ${days} days | ID: \`${b.priority_id}\`)\n`;
+      }
+      if (intel.staleBlockers.length > 3) {
+        intelSection += `* ... and ${intel.staleBlockers.length - 3} more stale blockers active.\n`;
       }
       intelSection += `\n`;
     }
@@ -151,9 +167,13 @@ async function getDailyBrief(refresh = false) {
     if (intel.unprocessedMobileNotes.length === 0) {
       intelSection += `* Mobile inbox is clear.\n\n`;
     } else {
-      for (const m of intel.unprocessedMobileNotes) {
+      const displayNotes = intel.unprocessedMobileNotes.slice(0, 3);
+      for (const m of displayNotes) {
         const content = (m.raw.text_content || 'No content').substring(0, 50).trim();
-        intelSection += `* [${content}] (ID: \`${m.raw.id}\`)\n`;
+        intelSection += `* [${content}] (ID: \`${m.priority_id}\`)\n`;
+      }
+      if (intel.unprocessedMobileNotes.length > 3) {
+        intelSection += `* ... and ${intel.unprocessedMobileNotes.length - 3} more mobile notes needing processing.\n`;
       }
       intelSection += `\n`;
     }
@@ -670,6 +690,39 @@ async function archiveProcessedUploads() {
   return rows.length;
 }
 
+/**
+ * 10. Save Brief Feedback (good/bad rating)
+ */
+async function saveBriefFeedback(briefDate, feedbackType) {
+  const intelligence = require('./intelligence');
+  if (typeof intelligence.ensureFeedbackTablesExist === 'function') {
+    await intelligence.ensureFeedbackTablesExist();
+  }
+  await queryDb(
+    `INSERT INTO jarvis_brief_feedback (brief_date, feedback_type)
+     VALUES ($1, $2)
+     ON CONFLICT (brief_date, feedback_type) DO NOTHING;`,
+    [briefDate, feedbackType]
+  );
+}
+
+/**
+ * 11. Save Priority Feedback (ignores, pins, notes)
+ */
+async function savePriorityFeedback(priorityId, feedbackType, userFeedback = null, score = null, reason = null, projectSlug = null) {
+  const intelligence = require('./intelligence');
+  if (typeof intelligence.ensureFeedbackTablesExist === 'function') {
+    await intelligence.ensureFeedbackTablesExist();
+  }
+  await queryDb(
+    `INSERT INTO jarvis_priority_feedback (priority_id, feedback_type, user_feedback, score, reason, project_slug)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (priority_id, feedback_type)
+     DO UPDATE SET user_feedback = EXCLUDED.user_feedback, score = EXCLUDED.score, reason = EXCLUDED.reason, project_slug = EXCLUDED.project_slug, created_at = now();`,
+    [priorityId, feedbackType, userFeedback, score, reason, projectSlug]
+  );
+}
+
 module.exports = {
   queryDb,
   getDailyBrief,
@@ -680,5 +733,7 @@ module.exports = {
   markUploadProcessed,
   processUploadToProject,
   processLatestUpload,
-  archiveProcessedUploads
+  archiveProcessedUploads,
+  saveBriefFeedback,
+  savePriorityFeedback
 };

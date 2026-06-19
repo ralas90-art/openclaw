@@ -3,31 +3,35 @@
 ## 🧠 Jarvis Priority Intelligence
 
 ### 🏆 Top 3 Priorities for Today
-1. **System — Follow up on unread client message from "Bancoagrícola"**
-   *Why: payment language + unread email*
-   *Next action: review email and decide response*
-2. **System — Follow up on unread client message from Chase**
-   *Why: payment language + unread email*
-   *Next action: review email and decide response*
-3. **System — Follow up on unread client message from eMoney Reselling**
-   *Why: urgency language + unread email*
-   *Next action: review email and decide response*
+1. **System — Follow up on unread client message from "Bancoagrícola"** (ID: `email:19edcfcccd2aee50`)
+   *Why this matters:* payment language + unread email
+   *Suggested next step:* review email and decide response
+2. **System — Follow up on unread client message from Chase** (ID: `email:19edcbec87b818e0`)
+   *Why this matters:* payment language + unread email
+   *Suggested next step:* review email and decide response
+3. **System — Follow up on unread client message from eMoney Reselling** (ID: `email:19edd2f6d7562dc8`)
+   *Why this matters:* urgency language + unread email
+   *Suggested next step:* review email and decide response
 
 ### 📬 Urgent Unread Emails
-* **From:** `eMoney Reselling` | **Subject:** LIVE NOW - Clearance AI Webinar | *Next action:* review email and decide response
-* **From:** `OG` | **Subject:** Your USD deposit is processed | *Next action:* review email and decide response
+* **From:** `eMoney Reselling` | **Subject:** LIVE NOW - Clearance AI Webinar (ID: `email:19edd2f6d7562dc8`)
+  *Why this matters:* urgency language + unread email
+  *Suggested next step:* review email and decide response
+* **From:** `OG` | **Subject:** Your USD deposit is processed (ID: `email:19edd163e02a6fce`)
+  *Why this matters:* urgency language + unread email
+  *Suggested next step:* review email and decide response
 * **From:** `OG` | **Subject:** Your Time Is Now. Welcome to 
-OG. | *Next action:* review email and decide response
-* **From:** `"Bancoagrícola"` | **Subject:** ⚡¡Haz tus transferencias más rápidas desde Banca Móvil! | *Next action:* review email and decide response
-* **From:** `Flipboard` | **Subject:** Your Thursday tech briefing | *Next action:* review email and decide response
-* **From:** `Chase` | **Subject:** You received money with Zelle® | *Next action:* review email and decide response
+OG. (ID: `email:19edd153bbdc0c98`)
+  *Why this matters:* urgency language + unread email
+  *Suggested next step:* review email and decide response
+* ... and 3 more urgent unread emails.
 
 ### 👥 Client & Project Follow-ups
-* **[Gmail]** Unread message from `eMoney Reselling`: "LIVE NOW - Clearance AI Webinar"
-* **[Gmail]** Unread message from `OG`: "Your USD deposit is processed"
+* **[Gmail]** Unread message from `eMoney Reselling`: "LIVE NOW - Clearance AI Webinar" (ID: `email:19edd2f6d7562dc8`)
+* **[Gmail]** Unread message from `OG`: "Your USD deposit is processed" (ID: `email:19edd163e02a6fce`)
 * **[Gmail]** Unread message from `OG`: "Your Time Is Now. Welcome to 
-OG."
-* **[Gmail]** Unread message from `Flipboard`: "Your Thursday tech briefing"
+OG." (ID: `email:19edd153bbdc0c98`)
+* ... and 1 more pending follow-ups.
 
 ### 🗂️ Project-Related Drive Files
 * No recent project-related Drive changes.

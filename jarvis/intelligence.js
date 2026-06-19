@@ -56,7 +56,31 @@ function matchTextToProject(text, projects) {
   return null;
 }
 
-function scoreItems(allRawItems, projects, repeatMentionsMap) {
+function generateStableId(item) {
+  if (item.raw && item.raw.id) {
+    return `${item.type}:${item.raw.id}`;
+  }
+  let content = '';
+  if (item.type === 'email') {
+    content = `${item.raw.subject || ''}-${item.raw.from || ''}`;
+  } else if (item.type === 'drive_file') {
+    content = `${item.raw.name || ''}`;
+  } else if (item.type === 'blocker') {
+    content = `${item.raw.description || ''}`;
+  } else if (item.type === 'next_action') {
+    content = `${item.raw.action || ''}`;
+  } else if (item.type === 'mobile_note') {
+    content = `${item.raw.text_content || ''}`;
+  }
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    hash = (hash << 5) - hash + content.charCodeAt(i);
+    hash |= 0;
+  }
+  return `${item.type}:hash:${Math.abs(hash)}`;
+}
+
+function scoreItems(allRawItems, projects, repeatMentionsMap, ignoredIds = new Set(), pinnedIds = new Set()) {
   const urgencyKeywords = ['urgent', 'asap', 'immediate', 'important', 'critical', 'urgente', 'importante', 'critico', 'now', 'ahora', 'inmediato', 'quick'];
   const paymentKeywords = ['invoice', 'payment', 'bill', 'receipt', 'wire', 'transaction', 'pago', 'factura', 'cobro', 'transferencia'];
   const deadlineKeywords = ['by tomorrow', 'due', 'deadline', 'fecha', 'limite', 'antes de', 'soon', 'mañana', 'hoy'];
@@ -101,6 +125,9 @@ function scoreItems(allRawItems, projects, repeatMentionsMap) {
     if (matchedProject) {
       projSlug = matchedProject.slug;
     }
+
+    // Generate stable ID for the item
+    const stableId = generateStableId(item);
 
     // Apply Scoring Rules
     // 1. Matches active project relevance (+10)
@@ -169,6 +196,17 @@ function scoreItems(allRawItems, projects, repeatMentionsMap) {
         score += ageScore;
         reasons.push(`stale blocker (${days} days)`);
       }
+      
+      // Decay rule: if stale (> 3 days) and not urgent, decay score to not recommend forever
+      if (days > 3) {
+        const isUrgent = containsKeywords(textToAnalyze, urgencyKeywords) || 
+                         containsKeywords(textToAnalyze, paymentKeywords) || 
+                         containsKeywords(textToAnalyze, deadlineKeywords);
+        if (!isUrgent) {
+          score -= 15;
+          reasons.push('stale non-urgent decay');
+        }
+      }
     } else if (item.type === 'next_action') {
       const priority = (item.raw.priority || '').toLowerCase();
       const nextActionBase = priority === 'high' || priority === 'critical' ? 15 : (priority === 'medium' ? 10 : 5);
@@ -183,6 +221,19 @@ function scoreItems(allRawItems, projects, repeatMentionsMap) {
         score += 8;
         reasons.push('from today');
       }
+    }
+
+    // 7. Feedback customizations (Ignored vs Pinned)
+    const isIgnored = ignoredIds.has(stableId) || (projSlug && ignoredIds.has(projSlug));
+    if (isIgnored) {
+      score -= 100;
+      reasons.push('ignored');
+    }
+
+    const isPinned = pinnedIds.has(stableId) || (projSlug && pinnedIds.has(projSlug));
+    if (isPinned) {
+      score += 50;
+      reasons.push('pinned');
     }
 
     // Formulate heading, why, nextAction
@@ -217,7 +268,8 @@ function scoreItems(allRawItems, projects, repeatMentionsMap) {
       why: 'Why: ' + reasons.join(' + '),
       nextAction: 'Next action: ' + nextAction,
       raw: item.raw,
-      project_slug: projSlug
+      project_slug: projSlug,
+      priority_id: stableId
     };
   });
 }
@@ -244,12 +296,52 @@ function detectStaleBlockers(scoredItems) {
   );
 }
 
+async function ensureFeedbackTablesExist() {
+  await queryDb(`
+    CREATE TABLE IF NOT EXISTS jarvis_brief_feedback (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brief_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        feedback_type TEXT NOT NULL CHECK (feedback_type IN ('good', 'bad')),
+        created_at TIMESTAMPTZ DEFAULT now(),
+        CONSTRAINT jarvis_brief_feedback_date_type_unique UNIQUE (brief_date, feedback_type)
+    );
+  `).catch(err => console.warn('[Intelligence] Failed to create jarvis_brief_feedback:', err.message));
+
+  await queryDb(`
+    CREATE TABLE IF NOT EXISTS jarvis_priority_feedback (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        priority_id TEXT NOT NULL,
+        project_slug TEXT REFERENCES jarvis_projects(slug) ON DELETE SET NULL,
+        feedback_type TEXT NOT NULL CHECK (feedback_type IN ('note', 'ignored', 'pinned')),
+        score INTEGER,
+        reason TEXT,
+        user_feedback TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        CONSTRAINT jarvis_priority_feedback_unique UNIQUE (priority_id, feedback_type)
+    );
+  `).catch(err => console.warn('[Intelligence] Failed to create jarvis_priority_feedback:', err.message));
+}
+
 async function getPriorityIntelligence() {
+  // Ensure tables exist
+  await ensureFeedbackTablesExist();
+
   // 1. Fetch data from Supabase/PG
   const projects = await queryDb("SELECT * FROM jarvis_projects WHERE status = 'active';");
   const blockers = await queryDb("SELECT * FROM jarvis_blockers WHERE status = 'active';");
   const nextActions = await queryDb("SELECT * FROM jarvis_next_actions WHERE status = 'pending';");
   const mobileInbox = await queryDb("SELECT * FROM jarvis_mobile_uploads WHERE processed = false AND archived = false;");
+
+  // Fetch feedback to extract ignores/pins
+  let feedbackList = [];
+  try {
+    feedbackList = await queryDb("SELECT * FROM jarvis_priority_feedback;");
+  } catch (err) {
+    console.warn('[Intelligence] Failed to fetch feedback list:', err.message);
+  }
+
+  const ignoredIds = new Set(feedbackList.filter(f => f.feedback_type === 'ignored').map(f => f.priority_id));
+  const pinnedIds = new Set(feedbackList.filter(f => f.feedback_type === 'pinned').map(f => f.priority_id));
 
   // 2. Fetch data from Connectors (fail-closed)
   let emails = [];
@@ -290,7 +382,7 @@ async function getPriorityIntelligence() {
   driveFiles.forEach(d => rawItems.push({ type: 'drive_file', raw: d }));
 
   // 5. Score items
-  const scoredItems = scoreItems(rawItems, projects, repeatMentionsMap);
+  const scoredItems = scoreItems(rawItems, projects, repeatMentionsMap, ignoredIds, pinnedIds);
   const rankedItems = rankBriefItems(scoredItems);
 
   // 6. Build categorized subsets
@@ -318,7 +410,9 @@ async function getPriorityIntelligence() {
     projectDriveFiles,
     staleBlockers,
     unprocessedMobileNotes,
-    rankedItems
+    rankedItems,
+    ignoredIds: Array.from(ignoredIds),
+    pinnedIds: Array.from(pinnedIds)
   };
 }
 
@@ -326,6 +420,7 @@ module.exports = {
   cleanPublicUrl,
   containsKeywords,
   matchTextToProject,
+  generateStableId,
   scoreItems,
   rankBriefItems,
   detectFollowUps,
@@ -333,3 +428,4 @@ module.exports = {
   buildTopThreePriorities,
   getPriorityIntelligence
 };
+

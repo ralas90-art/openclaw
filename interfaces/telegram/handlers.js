@@ -448,13 +448,34 @@ async function handleCommand(text, message) {
     return await handleJarvisReconnectGoogle(args, message);
   }
   if (command === '/jarvis_priorities' || command === '/jarvispriorities') {
-    return await handleJarvisPriorities(message);
+    const parts = text.trim().split(/\s+/);
+    const filter = parts[1];
+    const arg = parts.slice(2).join(' ');
+    return await handleJarvisPriorities(filter, arg, message);
   }
   if (command === '/jarvis_followups' || command === '/jarvisfollowups') {
     return await handleJarvisFollowups(message);
   }
   if (command === '/jarvis_blockers' || command === '/jarvisblockers') {
     return await handleJarvisBlockersCmd(message);
+  }
+  if (command === '/jarvis_brief_good' || command === '/jarvisbriefgood') {
+    return await handleJarvisBriefFeedback('good', message);
+  }
+  if (command === '/jarvis_brief_bad' || command === '/jarvisbriefbad') {
+    return await handleJarvisBriefFeedback('bad', message);
+  }
+  if (command === '/jarvis_priority_feedback' || command === '/jarvispriorityfeedback') {
+    const args = text.substring(command.length).trim();
+    return await handleJarvisPriorityFeedback(args, message);
+  }
+  if (command === '/jarvis_ignore_priority' || command === '/jarvisignorepriority') {
+    const args = text.substring(command.length).trim();
+    return await handleJarvisIgnorePriority(args, message);
+  }
+  if (command === '/jarvis_pin_priority' || command === '/jarvispinpriority') {
+    const args = text.substring(command.length).trim();
+    return await handleJarvisPinPriority(args, message);
   }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
@@ -3995,7 +4016,7 @@ async function handleJarvisDriveRecent(message) {
   }
 }
 
-async function handleJarvisPriorities(message) {
+async function handleJarvisPriorities(filter, arg, message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_priorities', message);
   if (!permCheck.allowed) {
@@ -4005,14 +4026,79 @@ async function handleJarvisPriorities(message) {
   const { getPriorityIntelligence } = require('../../jarvis/intelligence');
   try {
     const intel = await getPriorityIntelligence();
-    if (intel.topThreePriorities.length === 0) {
-      return `🧠 *Jarvis Top Priorities for Today*\n\n✅ No urgent priorities found. All clear!`;
+    const cleanFilter = (filter || 'today').toLowerCase().trim();
+
+    if (cleanFilter === 'today') {
+      if (intel.topThreePriorities.length === 0) {
+        return `🧠 *Jarvis Top Priorities for Today*\n\n✅ No urgent priorities found. All clear!`;
+      }
+      let md = `🧠 *Jarvis Top Priorities for Today*\n\n`;
+      intel.topThreePriorities.forEach((p, idx) => {
+        md += `${idx + 1}. *${p.heading}* (ID: \`${p.priority_id}\`)\n   • ${p.why}\n   • ${p.nextAction}\n\n`;
+      });
+      return md;
     }
-    let md = `🧠 *Jarvis Top Priorities for Today*\n\n`;
-    intel.topThreePriorities.forEach((p, idx) => {
-      md += `${idx + 1}. *${p.heading}*\n   • ${p.why}\n   • ${p.nextAction}\n\n`;
-    });
-    return md;
+
+    if (cleanFilter === 'urgent') {
+      const urgentItems = intel.rankedItems.filter(item => 
+        item.score >= 25 || 
+        (item.reasons && (
+          item.reasons.includes('urgency language') || 
+          item.reasons.includes('payment language') || 
+          item.reasons.includes('deadline language')
+        ))
+      );
+      if (urgentItems.length === 0) {
+        return `🧠 *Urgent Priorities Filter*\n\nNo urgent items found matching criteria.`;
+      }
+      let md = `🧠 *Urgent Priorities (Score >= 25 or Urgent Keywords)*\n\n`;
+      urgentItems.forEach((p, idx) => {
+        md += `${idx + 1}. *${p.heading}* (Score: \`${p.score}\` | ID: \`${p.priority_id}\`)\n   • ${p.why}\n   • ${p.nextAction}\n\n`;
+      });
+      return md;
+    }
+
+    if (cleanFilter === 'project') {
+      const cleanSlug = (arg || '').toLowerCase().trim();
+      if (!cleanSlug) {
+        return `❌ Usage: \`/jarvis_priorities project <project-slug>\``;
+      }
+      const projItems = intel.rankedItems.filter(item => 
+        item.project_slug === cleanSlug
+      );
+      if (projItems.length === 0) {
+        return `🧠 *Project Priorities Filter: \`${cleanSlug}\`*\n\nNo priorities found for project slug \`${cleanSlug}\`.`;
+      }
+      let md = `🧠 *Priorities for Project \`${cleanSlug}\`*\n\n`;
+      projItems.forEach((p, idx) => {
+        md += `${idx + 1}. *${p.heading}* (Score: \`${p.score}\` | ID: \`${p.priority_id}\`)\n   • ${p.why}\n   • ${p.nextAction}\n\n`;
+      });
+      return md;
+    }
+
+    if (cleanFilter === 'ignored') {
+      if (!intel.ignoredIds || intel.ignoredIds.length === 0) {
+        return `🧠 *Ignored Priorities*\n\nNo ignored items recorded.`;
+      }
+      let md = `🧠 *Ignored Priorities*\n\n`;
+      intel.ignoredIds.forEach((id, idx) => {
+        md += `${idx + 1}. ID: \`${id}\`\n`;
+      });
+      return md;
+    }
+
+    if (cleanFilter === 'pinned') {
+      if (!intel.pinnedIds || intel.pinnedIds.length === 0) {
+        return `🧠 *Pinned Priorities*\n\nNo pinned items/projects recorded.`;
+      }
+      let md = `🧠 *Pinned Priorities*\n\n`;
+      intel.pinnedIds.forEach((id, idx) => {
+        md += `${idx + 1}. ID: \`${id}\`\n`;
+      });
+      return md;
+    }
+
+    return `❌ Invalid filter. Supported: \`today\`, \`urgent\`, \`project <slug>\`, \`ignored\`, \`pinned\`.`;
   } catch (err) {
     return `❌ Error fetching priorities: ${err.message}`;
   }
@@ -4035,10 +4121,10 @@ async function handleJarvisFollowups(message) {
     intel.followUps.forEach(item => {
       if (item.type === 'email') {
         const fromName = (item.raw.from || '').split('<')[0].trim();
-        md += `• *[Gmail]* From \`${fromName || 'Unknown'}\`: "${item.raw.subject}"\n`;
+        md += `• *[Gmail]* From \`${fromName || 'Unknown'}\`: "${item.raw.subject}" (ID: \`${item.priority_id}\`)\n`;
       } else {
         const content = (item.raw.text_content || 'No content').substring(0, 50).trim();
-        md += `• *[Mobile Inbox]* "${content}" (ID: \`${item.raw.id}\`)\n`;
+        md += `• *[Mobile Inbox]* "${content}" (ID: \`${item.priority_id}\`)\n`;
       }
     });
     return md;
@@ -4065,7 +4151,7 @@ async function handleJarvisBlockersCmd(message) {
     activeBlockers.forEach(item => {
       const isStale = (Date.now() - new Date(item.raw.created_at).getTime() > 2 * 24 * 60 * 60 * 1000);
       const staleLabel = isStale ? ` ⚠️ *[STALE]*` : '';
-      md += `• **[${item.project_slug || 'system'}]** ${item.raw.description}${staleLabel}\n`;
+      md += `• **[${item.project_slug || 'system'}]** ${item.raw.description}${staleLabel} (ID: \`${item.priority_id}\`)\n`;
       if (item.raw.steps_to_resolve) {
         md += `  *Steps to resolve:* ${item.raw.steps_to_resolve}\n`;
       }
@@ -4074,6 +4160,89 @@ async function handleJarvisBlockersCmd(message) {
     return md;
   } catch (err) {
     return `❌ Error fetching blockers: ${err.message}`;
+  }
+}
+
+async function handleJarvisBriefFeedback(type, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_brief_good', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_brief_good', permCheck.reason, message);
+  }
+
+  const { saveBriefFeedback } = require('../../jarvis/controller');
+  const todayStr = new Date().toISOString().substring(0, 10);
+  try {
+    await saveBriefFeedback(todayStr, type);
+    return `✅ Thank you! Logged daily brief feedback as *${type.toUpperCase()}* for today (${todayStr}).`;
+  } catch (err) {
+    return `❌ Error logging brief feedback: ${err.message}`;
+  }
+}
+
+async function handleJarvisPriorityFeedback(args, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_priority_feedback', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_priority_feedback', permCheck.reason, message);
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const priorityId = parts[0];
+  const note = parts.slice(1).join(' ');
+
+  if (!priorityId || !note) {
+    return `❌ Usage: \`/jarvis_priority_feedback <priority_id> <note>\``;
+  }
+
+  const { savePriorityFeedback } = require('../../jarvis/controller');
+  try {
+    await savePriorityFeedback(priorityId, 'note', note);
+    return `✅ Logged priority note feedback for item \`${priorityId}\`:\n_"${note}"_`;
+  } catch (err) {
+    return `❌ Error logging priority feedback: ${err.message}`;
+  }
+}
+
+async function handleJarvisIgnorePriority(args, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_ignore_priority', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_ignore_priority', permCheck.reason, message);
+  }
+
+  const priorityId = args.trim();
+  if (!priorityId) {
+    return `❌ Usage: \`/jarvis_ignore_priority <priority_id>\``;
+  }
+
+  const { savePriorityFeedback } = require('../../jarvis/controller');
+  try {
+    await savePriorityFeedback(priorityId, 'ignored');
+    return `✅ Ignored item \`${priorityId}\`. It will be de-prioritized in future morning briefs.`;
+  } catch (err) {
+    return `❌ Error ignoring priority: ${err.message}`;
+  }
+}
+
+async function handleJarvisPinPriority(args, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_pin_priority', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_pin_priority', permCheck.reason, message);
+  }
+
+  const priorityId = args.trim();
+  if (!priorityId) {
+    return `❌ Usage: \`/jarvis_pin_priority <priority_id>\``;
+  }
+
+  const { savePriorityFeedback } = require('../../jarvis/controller');
+  try {
+    await savePriorityFeedback(priorityId, 'pinned');
+    return `✅ Pinned item/project \`${priorityId}\`. It will be promoted in future morning briefs.`;
+  } catch (err) {
+    return `❌ Error pinning priority: ${err.message}`;
   }
 }
 

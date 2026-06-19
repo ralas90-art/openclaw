@@ -752,6 +752,54 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'List active and stale blockers.'
+  },
+  jarvis_brief_feedback: {
+    commands: ['/jarvis_brief_good', '/jarvis_brief_bad'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Submit rating/feedback for daily briefs.'
+  },
+  jarvis_priority_feedback: {
+    commands: ['/jarvis_priority_feedback'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Submit textual feedback or notes for a priority item.'
+  },
+  jarvis_ignore_priority: {
+    commands: ['/jarvis_ignore_priority'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'De-prioritize a priority item or project.'
+  },
+  jarvis_pin_priority: {
+    commands: ['/jarvis_pin_priority'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Pin and promote a priority item or project.'
   }
 };
 
@@ -832,7 +880,14 @@ function normalizeCommand(commandText) {
     'jarvisreconnectgoogle': 'jarvis_reconnect_google',
     'jarvispriorities': 'jarvis_priorities',
     'jarvisfollowups': 'jarvis_followups',
-    'jarvisblockers': 'jarvis_blockers'
+    'jarvisblockers': 'jarvis_blockers',
+    'jarvisbriefgood': 'jarvis_brief_feedback',
+    'jarvisbriefbad': 'jarvis_brief_feedback',
+    'jarvis_brief_good': 'jarvis_brief_feedback',
+    'jarvis_brief_bad': 'jarvis_brief_feedback',
+    'jarvispriorityfeedback': 'jarvis_priority_feedback',
+    'jarvisignorepriority': 'jarvis_ignore_priority',
+    'jarvispinpriority': 'jarvis_pin_priority'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {
