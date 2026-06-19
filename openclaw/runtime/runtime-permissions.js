@@ -800,6 +800,90 @@ const COMMAND_PERMISSIONS = {
     externalAction: false,
     capability: 'read_runtime',
     description: 'Pin and promote a priority item or project.'
+  },
+  jarvis_action_preview: {
+    commands: ['/jarvis_action_preview'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Preview recommended action for a priority item.'
+  },
+  jarvis_propose_action: {
+    commands: ['/jarvis_propose_action'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Create an approval action proposal request.'
+  },
+  jarvis_approvals: {
+    commands: ['/jarvis_approvals'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'List pending action approval requests.'
+  },
+  jarvis_approval: {
+    commands: ['/jarvis_approval'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View details of a specific approval request.'
+  },
+  jarvis_approve: {
+    commands: ['/jarvis_approve'],
+    tier: 'operator',
+    category: 'runtime_decision',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: true,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'approve_publish',
+    description: 'Approve and execute a pending approval request.'
+  },
+  jarvis_reject: {
+    commands: ['/jarvis_reject'],
+    tier: 'operator',
+    category: 'runtime_decision',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'reject_approval',
+    description: 'Reject a pending approval request.'
+  },
+  jarvis_cancel_approval: {
+    commands: ['/jarvis_cancel_approval'],
+    tier: 'operator',
+    category: 'runtime_decision',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'reject_approval',
+    description: 'Cancel a pending approval request.'
   }
 };
 
@@ -887,7 +971,14 @@ function normalizeCommand(commandText) {
     'jarvis_brief_bad': 'jarvis_brief_feedback',
     'jarvispriorityfeedback': 'jarvis_priority_feedback',
     'jarvisignorepriority': 'jarvis_ignore_priority',
-    'jarvispinpriority': 'jarvis_pin_priority'
+    'jarvispinpriority': 'jarvis_pin_priority',
+    'jarvisactionpreview': 'jarvis_action_preview',
+    'jarvisproposeaction': 'jarvis_propose_action',
+    'jarvisapprovals': 'jarvis_approvals',
+    'jarvisapproval': 'jarvis_approval',
+    'jarvisapprove': 'jarvis_approve',
+    'jarvisreject': 'jarvis_reject',
+    'jarviscancelapproval': 'jarvis_cancel_approval'
   };
 
   if (COMMAND_PERMISSIONS[cleanKey]) {

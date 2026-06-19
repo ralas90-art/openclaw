@@ -723,6 +723,16 @@ async function savePriorityFeedback(priorityId, feedbackType, userFeedback = nul
   );
 }
 
+function getActionPreview(...args) {
+  return require('./actions').getActionPreview(...args);
+}
+function proposeAction(...args) {
+  return require('./actions').proposeAction(...args);
+}
+function executeApprovedAction(...args) {
+  return require('./actions').executeApprovedAction(...args);
+}
+
 module.exports = {
   queryDb,
   getDailyBrief,
@@ -735,5 +745,8 @@ module.exports = {
   processLatestUpload,
   archiveProcessedUploads,
   saveBriefFeedback,
-  savePriorityFeedback
+  savePriorityFeedback,
+  getActionPreview,
+  proposeAction,
+  executeApprovedAction
 };

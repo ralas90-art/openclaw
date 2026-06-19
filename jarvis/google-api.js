@@ -4,8 +4,15 @@
  */
 
 const { google } = require('googleapis');
-const { queryDb } = require('./controller');
 const crypto = require('crypto');
+
+let _queryDb;
+function queryDb(...args) {
+  if (!_queryDb) {
+    _queryDb = require('./controller').queryDb;
+  }
+  return _queryDb(...args);
+}
 
 /**
  * Derives a 32-byte encryption key from environment variables

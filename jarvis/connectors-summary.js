@@ -5,7 +5,13 @@
 
 const { google } = require('googleapis');
 const { getGoogleAuthClient, handleAuthFailure } = require('./google-api');
-const { queryDb } = require('./controller');
+let _queryDb;
+function queryDb(...args) {
+  if (!_queryDb) {
+    _queryDb = require('./controller').queryDb;
+  }
+  return _queryDb(...args);
+}
 
 /**
  * Seeds initial connector config records into jarvis_connectors if they do not exist

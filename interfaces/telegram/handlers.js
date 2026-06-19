@@ -477,6 +477,33 @@ async function handleCommand(text, message) {
     const args = text.substring(command.length).trim();
     return await handleJarvisPinPriority(args, message);
   }
+  if (command === '/jarvis_action_preview' || command === '/jarvisactionpreview') {
+    const priorityId = text.substring(command.length).trim();
+    return await handleJarvisActionPreview(priorityId, message);
+  }
+  if (command === '/jarvis_propose_action' || command === '/jarvisproposeaction') {
+    const priorityId = text.substring(command.length).trim();
+    return await handleJarvisProposeAction(priorityId, message);
+  }
+  if (command === '/jarvis_approvals' || command === '/jarvisapprovals') {
+    return await handleJarvisApprovals(message);
+  }
+  if (command === '/jarvis_approval' || command === '/jarvisapproval') {
+    const approvalId = text.substring(command.length).trim();
+    return await handleJarvisApprovalDetails(approvalId, message);
+  }
+  if (command === '/jarvis_approve' || command === '/jarvisapprove') {
+    const approvalId = text.substring(command.length).trim();
+    return await handleJarvisApprove(approvalId, message);
+  }
+  if (command === '/jarvis_reject' || command === '/jarvisreject') {
+    const approvalId = text.substring(command.length).trim();
+    return await handleJarvisReject(approvalId, message);
+  }
+  if (command === '/jarvis_cancel_approval' || command === '/jarviscancelapproval') {
+    const approvalId = text.substring(command.length).trim();
+    return await handleJarvisCancelApproval(approvalId, message);
+  }
   if (command === '/chatid' || command === '/id') {
     const userId = message.from?.id || 'unknown';
     const chatId = message.chat?.id || 'unknown';
@@ -4243,6 +4270,236 @@ async function handleJarvisPinPriority(args, message) {
     return `✅ Pinned item/project \`${priorityId}\`. It will be promoted in future morning briefs.`;
   } catch (err) {
     return `❌ Error pinning priority: ${err.message}`;
+  }
+}
+
+async function handleJarvisActionPreview(priorityId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_action_preview', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_action_preview', permCheck.reason, message);
+  }
+
+  const cleanId = priorityId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_action_preview <priority_id>\``;
+  }
+
+  const { getActionPreview } = require('../../jarvis/controller');
+  try {
+    const preview = await getActionPreview(cleanId);
+    if (!preview.allowed) {
+      return `❌ Proposal Unavailable: ${preview.message || 'Action cannot be proposed.'}`;
+    }
+
+    return `🔍 *Jarvis Action Preview*\n\n` +
+           `• *Priority ID:* \`${preview.priority_id}\`\n` +
+           `• *Recommended Action:* ${preview.recommended_action}\n` +
+           `• *Risk Level:* *${preview.risk_level.toUpperCase()}*\n` +
+           `• *Project:* \`${preview.project_slug}\`\n` +
+           `• *What will happen if approved:* ${preview.what_will_happen}\n` +
+           `• *What will NOT happen:* ${preview.what_will_not_happen}\n\n` +
+           `To propose this action for approval, run:\n` +
+           `\`/jarvis_propose_action ${preview.priority_id}\``;
+  } catch (err) {
+    return `❌ Error generating action preview: ${err.message}`;
+  }
+}
+
+async function handleJarvisProposeAction(priorityId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_propose_action', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_propose_action', permCheck.reason, message);
+  }
+
+  const cleanId = priorityId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_propose_action <priority_id>\``;
+  }
+
+  const { proposeAction } = require('../../jarvis/controller');
+  try {
+    const prop = await proposeAction(cleanId);
+    return `📝 *Action Proposal Created*\n\n` +
+           `• *Proposal ID:* \`${prop.id}\`\n` +
+           `• *Priority ID:* \`${prop.priority_id}\`\n` +
+           `• *Action:* ${prop.requested_action}\n` +
+           `• *Risk Level:* *${prop.risk_level.toUpperCase()}*\n` +
+           `• *Status:* \`${prop.status}\`\n` +
+           `• *Expires At:* ${prop.expires_at}\n\n` +
+           `To approve and execute this proposed action, run:\n` +
+           `\`/jarvis_approve ${prop.id}\``;
+  } catch (err) {
+    return `❌ Error proposing action: ${err.message}`;
+  }
+}
+
+async function handleJarvisApprovals(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approvals', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approvals', permCheck.reason, message);
+  }
+
+  const { queryDb } = require('../../jarvis/controller');
+  try {
+    const rows = await queryDb(
+      "SELECT id, requested_action, risk_level, status, created_at FROM jarvis_approval_requests WHERE status = 'pending' ORDER BY created_at DESC;"
+    );
+
+    if (rows.length === 0) {
+      return `📥 *Pending Action Approvals*\n\n✅ No pending action approvals outstanding. All clear!`;
+    }
+
+    let md = `📥 *Pending Action Approvals*\n\n`;
+    rows.forEach((r, idx) => {
+      md += `${idx + 1}. *[${r.risk_level.toUpperCase()}]* ${r.requested_action}\n   • ID: \`${r.id}\`\n   • Created: _${new Date(r.created_at).toISOString().substring(0, 16).replace('T', ' ')}_\n\n`;
+    });
+    return md;
+  } catch (err) {
+    return `❌ Error fetching approvals: ${err.message}`;
+  }
+}
+
+async function handleJarvisApprovalDetails(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approval', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approval', permCheck.reason, message);
+  }
+
+  const cleanId = approvalId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_approval <approval_id>\``;
+  }
+
+  const { queryDb } = require('../../jarvis/controller');
+  try {
+    const rows = await queryDb("SELECT * FROM jarvis_approval_requests WHERE id = $1;", [cleanId]);
+    if (rows.length === 0) {
+      return `❌ Error: Approval request with ID "${cleanId}" not found.`;
+    }
+
+    const prop = rows[0];
+    // Sensitive payload summarizer: clean up to avoid secret leaks
+    const payloadStr = JSON.stringify(prop.proposed_payload || {}, null, 2);
+    const safePayload = payloadStr.length > 500 ? payloadStr.substring(0, 500) + '\n... [truncated for display]' : payloadStr;
+
+    return `🛡️ *Approval Request Details*\n\n` +
+           `• *ID:* \`${prop.id}\`\n` +
+           `• *Action:* ${prop.requested_action}\n` +
+           `• *Type:* \`${prop.action_type || 'proposal'}\`\n` +
+           `• *Project:* \`${prop.project_slug || 'system'}\`\n` +
+           `• *Risk Level:* *${prop.risk_level.toUpperCase()}*\n` +
+           `• *Status:* \`${prop.status}\`\n` +
+           `• *Created At:* ${prop.created_at}\n` +
+           `• *Expires At:* ${prop.expires_at || 'Never'}\n\n` +
+           `📦 *Proposed Payload:* \n\`\`\`json\n${safePayload}\n\`\`\`\n\n` +
+           `To authorize, run: \`/jarvis_approve ${prop.id}\`\n` +
+           `To reject, run: \`/jarvis_reject ${prop.id}\``;
+  } catch (err) {
+    return `❌ Error retrieving approval request: ${err.message}`;
+  }
+}
+
+async function handleJarvisApprove(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_approve', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_approve', permCheck.reason, message);
+  }
+
+  const cleanId = approvalId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_approve <approval_id>\``;
+  }
+
+  const { queryDb, executeApprovedAction } = require('../../jarvis/controller');
+  try {
+    // 1. Fetch request details to ensure pending status
+    const rows = await queryDb("SELECT status FROM jarvis_approval_requests WHERE id = $1;", [cleanId]);
+    if (rows.length === 0) {
+      return `❌ Error: Approval request "${cleanId}" not found.`;
+    }
+
+    const currentStatus = rows[0].status;
+    if (currentStatus !== 'pending') {
+      return `❌ Execution Rejected: Request status is "${currentStatus}" (Only "pending" requests can be approved).`;
+    }
+
+    // 2. Perform DB update to approved first (locking)
+    const approvedBy = String(message.from?.id || 'admin');
+    await queryDb(
+      `UPDATE jarvis_approval_requests 
+       SET status = 'approved', approved_by = $1, approved_at = now(), updated_at = now() 
+       WHERE id = $2 AND status = 'pending';`,
+      [approvedBy, cleanId]
+    );
+
+    // 3. Execute approved action
+    const executionResult = await executeApprovedAction(cleanId);
+    return executionResult;
+  } catch (err) {
+    return `❌ Execution Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisReject(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_reject', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_reject', permCheck.reason, message);
+  }
+
+  const cleanId = approvalId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_reject <approval_id>\``;
+  }
+
+  const { queryDb } = require('../../jarvis/controller');
+  try {
+    const rows = await queryDb(
+      "UPDATE jarvis_approval_requests SET status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'pending' RETURNING id;",
+      [cleanId]
+    );
+
+    if (rows.length === 0) {
+      return `❌ Error: Request not found or is no longer pending.`;
+    }
+
+    return `🛑 Rejected request \`${cleanId}\`. Jarvis will not execute this proposal.`;
+  } catch (err) {
+    return `❌ Error rejecting request: ${err.message}`;
+  }
+}
+
+async function handleJarvisCancelApproval(approvalId, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_cancel_approval', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_cancel_approval', permCheck.reason, message);
+  }
+
+  const cleanId = approvalId.trim();
+  if (!cleanId) {
+    return `❌ Usage: \`/jarvis_cancel_approval <approval_id>\``;
+  }
+
+  const { queryDb } = require('../../jarvis/controller');
+  try {
+    const rows = await queryDb(
+      "UPDATE jarvis_approval_requests SET status = 'cancelled', updated_at = now() WHERE id = $1 AND status = 'pending' RETURNING id;",
+      [cleanId]
+    );
+
+    if (rows.length === 0) {
+      return `❌ Error: Request not found or is no longer pending.`;
+    }
+
+    return `🚫 Cancelled pending approval request \`${cleanId}\`.`;
+  } catch (err) {
+    return `❌ Error cancelling request: ${err.message}`;
   }
 }
 
