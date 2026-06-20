@@ -449,7 +449,7 @@ app.use('/api/jarvis', require('./jarvis/routes'));
 
 // Serve static React admin UI
 app.use('/admin', express.static(path.join(__dirname, 'admin-ui', 'dist')));
-app.get('/admin/*', (req, res) => {
+app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'admin-ui', 'dist', 'index.html'));
 });
 
