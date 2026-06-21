@@ -585,6 +585,7 @@ function renderDashboardShell(title, activeTab, content, token) {
           <a href="/dashboard/trace" onclick="appendToken(this)" class="nav-link ${activeTab === 'trace' ? 'active' : ''}">Trace</a>
           <a href="/dashboard/brief" onclick="appendToken(this)" class="nav-link ${activeTab === 'brief' ? 'active' : ''}">Daily Brief</a>
           <a href="/dashboard/usage" onclick="appendToken(this)" class="nav-link ${activeTab === 'usage' ? 'active' : ''}">LLM Usage</a>
+          <a href="/dashboard/prospects" onclick="appendToken(this)" class="nav-link ${activeTab === 'prospects' ? 'active' : ''}">Prospects</a>
         </div>
       </nav>
       <div class="main-container">
@@ -1893,6 +1894,85 @@ router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req
     });
     res.status(500).send(`Approval failed: ${err.message}`);
   }
+});
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// GET /dashboard/prospects
+router.get('/prospects', protectDashboard, (req, res) => {
+  const token = req.query.token;
+  const store = require('../prospects/prospect-store');
+  const prospects = store.loadProspects();
+
+  // Handle optional query/filter
+  const q = (req.query.q || '').trim().toLowerCase();
+  const filtered = q 
+    ? prospects.filter(p => p.name.toLowerCase().includes(q) || p.formattedAddress.toLowerCase().includes(q) || p.query.toLowerCase().includes(q))
+    : prospects;
+
+  let rows = '';
+  if (filtered.length > 0) {
+    for (const p of filtered) {
+      rows += `
+        <tr>
+          <td><strong>${escapeHtml(p.name)}</strong></td>
+          <td>${escapeHtml(p.formattedAddress)}</td>
+          <td>${escapeHtml(p.phoneNumber || 'N/A')}</td>
+          <td>${p.website ? `<a href="${escapeHtml(p.website)}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.website)}</a>` : 'N/A'}</td>
+          <td><span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">${p.rating || 'N/A'} (${p.userRatingCount || 0})</span></td>
+          <td><code>${escapeHtml(p.query)}</code></td>
+          <td>${new Date(p.discoveredAt).toLocaleString()}</td>
+        </tr>
+      `;
+    }
+  } else {
+    rows = `<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">No prospects found.</td></tr>`;
+  }
+
+  const content = `
+    <div class="panel">
+      <h2>Discovered Local Prospects (Cresca OS Read-Only)</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">
+        Prospects discovered via Google Places API Text Search. Automatic outreach and live CRM mutations are disabled.
+      </p>
+
+      <form method="GET" action="/dashboard/prospects" style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+        <input type="hidden" name="token" value="${escapeHtml(token || '')}">
+        <input type="text" name="q" value="${escapeHtml(req.query.q || '')}" placeholder="Search prospects..." style="flex: 1; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 0.5rem; color: white;">
+        <button type="submit" style="width: auto; padding: 0.75rem 1.5rem; background: var(--accent-purple); color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;">Search</button>
+        ${req.query.q ? `<a href="/dashboard/prospects?token=${encodeURIComponent(token || '')}" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text-secondary);">Clear</a>` : ''}
+      </form>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>Phone</th>
+              <th>Website</th>
+              <th>Rating</th>
+              <th>Query</th>
+              <th>Discovered</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  res.send(renderDashboardShell('Prospects', 'prospects', content, token));
 });
 
 module.exports = {
