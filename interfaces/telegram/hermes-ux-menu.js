@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { getPublicBaseUrl } = require('../../lib/get-public-base-url');
 
 function getStateFilePath() {
   let root = process.env.OPENCLAW_WORKSPACE_ROOT;
@@ -76,7 +77,7 @@ function handleMenuCommand(message) {
       { text: "📊 Pipeline Status", callback_data: "menu:pipeline_status" }
     ],
     [
-      { text: "🖥 Open Dashboard", url: `${process.env.PUBLIC_URL || 'http://localhost:3300'}/dashboard/cockpit` }
+      { text: "🖥 Open Dashboard", url: `${getPublicBaseUrl()}/dashboard/cockpit` }
     ]
   ];
 

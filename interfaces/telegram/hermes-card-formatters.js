@@ -7,6 +7,7 @@
 const researchStore = require('../../openclaw/research/prospect-research-store');
 const scoreStore = require('../../openclaw/research/prospect-score-store');
 const reviewStore = require('../../openclaw/prospects/prospect-outreach-review-store');
+const { getPublicBaseUrl } = require('../../lib/get-public-base-url');
 
 /**
  * Formats a prospect details card with appropriate next-action buttons.
@@ -64,7 +65,7 @@ function formatProspectCard(prospect) {
     buttons.push(actionRow);
   }
 
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   const bottomRow = [
     { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/prospects?q=${encodeURIComponent(prospect.businessName || '')}` }
   ];
@@ -121,7 +122,7 @@ function formatResearchCard(research, short = true) {
     buttons.push(actionRow);
   }
 
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
     { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/research/view?researchId=${research.researchId}` }
@@ -181,7 +182,7 @@ function formatScoreCard(score, short = true) {
     buttons.push(actionRow);
   }
 
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
     { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/research/view?researchId=${score.researchId || ''}` }
@@ -243,7 +244,7 @@ function formatOutreachCard(review, short = true) {
   ];
   buttons.push(contactRow);
 
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
     { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/outreach/view?reviewId=${reviewId}` }
@@ -288,7 +289,7 @@ function formatCockpitToday(items) {
     ],
     [
       { text: "📬 Review Drafts", callback_data: "menu:review_drafts" },
-      { text: "🖥 Cockpit Dashboard", url: `${process.env.PUBLIC_URL || 'http://localhost:3300'}/dashboard/cockpit` }
+      { text: "🖥 Cockpit Dashboard", url: `${getPublicBaseUrl()}/dashboard/cockpit` }
     ]
   ];
 
@@ -332,7 +333,7 @@ function formatCockpitTop(items) {
   if (row1.length > 0) buttons.push(row1);
   if (row2.length > 0) buttons.push(row2);
 
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   buttons.push([
     { text: "🖥 Scores Leaderboard", url: `${baseDash}/dashboard/scores` },
     { text: "🖥 Cockpit Dashboard", url: `${baseDash}/dashboard/cockpit` }

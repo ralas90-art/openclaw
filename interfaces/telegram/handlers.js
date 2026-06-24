@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const drivePublisher = require('../../openclaw/integrations/google-drive-publisher/drive-publisher');
 const runtimeExecutor = require('../../openclaw/runtime/runtime-executor');
+const { getPublicBaseUrl } = require('../../lib/get-public-base-url');
 
 // ------------------------------------------
 // Registry & Bot Routing
@@ -3459,7 +3460,7 @@ async function handleProspectLatest(message) {
     row.push({ text: `${idx + 1}️⃣`, callback_data: `act:prop_read:${p.prospectId}` });
   });
   if (row.length > 0) buttons.push(row);
-  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  const baseDash = getPublicBaseUrl();
   buttons.push([{ text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/prospects` }]);
   const response = new String(output.trim());
   response.reply_markup = { inline_keyboard: buttons };
@@ -3837,7 +3838,7 @@ async function handleOutreachDue(message) {
       row.push({ text: `${idx + 1}️⃣`, callback_data: `act:out_read:${item.reviewId}` });
     });
     if (row.length > 0) buttons.push(row);
-    const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+    const baseDash = getPublicBaseUrl();
     buttons.push([{ text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/outreach` }]);
     const response = new String(out.trim());
     response.reply_markup = { inline_keyboard: buttons };
@@ -4901,19 +4902,7 @@ async function handleJarvisReconnectGoogle(args, message) {
     return `❌ Usage: \`/jarvis_reconnect_google <gmail|google_drive> [force]\``;
   }
 
-  const rawPublicUrl = process.env.PUBLIC_URL || 'http://localhost:3000';
-  let publicUrl = 'http://localhost:3000';
-  let cleaned = rawPublicUrl.replace(/^["']|["']$/g, '').trim().replace(/\/+$/, '');
-  try {
-    const parsed = new URL(cleaned);
-    if (parsed.pathname !== '/' && parsed.pathname !== '') {
-      console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${rawPublicUrl}" because it contains a path suffix: "${parsed.pathname}". PUBLIC_URL must be the base domain only!`);
-    } else {
-      publicUrl = cleaned;
-    }
-  } catch (err) {
-    console.error(`❌ [PUBLIC_URL Check] Rejected PUBLIC_URL "${rawPublicUrl}" because it is not a valid URL: ${err.message}`);
-  }
+  const publicUrl = getPublicBaseUrl();
 
   const adminToken = process.env.INTERNAL_ADMIN_TOKEN;
   
