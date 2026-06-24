@@ -76,7 +76,7 @@ function handleMenuCommand(message) {
       { text: "📊 Pipeline Status", callback_data: "menu:pipeline_status" }
     ],
     [
-      { text: "🖥 Open Dashboard", url: "http://localhost:3300/dashboard/cockpit" }
+      { text: "🖥 Open Dashboard", url: `${process.env.PUBLIC_URL || 'http://localhost:3300'}/dashboard/cockpit` }
     ]
   ];
 

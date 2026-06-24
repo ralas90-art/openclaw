@@ -66,6 +66,66 @@ try { require('./core/queue/deadLetter'); } catch (e) { /* ignore if missing */ 
 
 // 3. Telegram Integration Initialization
 const { handleCommand } = require('./interfaces/telegram/handlers');
+
+// Centralized, robust Telegram message sender with double fallback
+async function sendTelegramMessage(botToken, chatId, reply, timeoutMs = 10000) {
+  if (!botToken || !chatId || !reply) return false;
+
+  const hasMarkup = (reply instanceof String || typeof reply === 'object') && reply.reply_markup;
+  
+  // Attempt 1: Markdown + reply_markup (if present)
+  const payload1 = hasMarkup ? {
+    chat_id: chatId,
+    text: String(reply),
+    reply_markup: reply.reply_markup,
+    parse_mode: 'Markdown'
+  } : {
+    chat_id: chatId,
+    text: String(reply),
+    parse_mode: 'Markdown'
+  };
+
+  try {
+    await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload1, { timeout: timeoutMs });
+    return true;
+  } catch (errMarkdown) {
+    console.warn(`[Telegram Webhook] Failed to send message with Markdown parsing: ${errMarkdown.message}. Retrying as plain text...`);
+    
+    // Attempt 2: Plain Text + reply_markup (if present)
+    const payload2 = hasMarkup ? {
+      chat_id: chatId,
+      text: String(reply),
+      reply_markup: reply.reply_markup
+    } : {
+      chat_id: chatId,
+      text: String(reply)
+    };
+
+    try {
+      await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload2, { timeout: timeoutMs });
+      return true;
+    } catch (errPlainMarkup) {
+      if (hasMarkup) {
+        console.warn(`[Telegram Webhook] Failed to send plain text message with reply_markup: ${errPlainMarkup.message}. Retrying as pure plain text...`);
+        
+        // Attempt 3: Pure Plain Text (no reply_markup)
+        try {
+          await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chatId,
+            text: String(reply)
+          }, { timeout: timeoutMs });
+          return true;
+        } catch (errPure) {
+          console.error(`[Telegram Webhook Error] Failed to send pure plain text message: ${errPure.message}`);
+        }
+      } else {
+        console.error(`[Telegram Webhook Error] Failed to send plain text message: ${errPlainMarkup.message}`);
+      }
+    }
+  }
+  return false;
+}
+
 app.post('/webhook/telegram', async (req, res) => {
   try {
     console.log('[Telegram Webhook] telegram_webhook_received=true');
@@ -113,22 +173,7 @@ app.post('/webhook/telegram', async (req, res) => {
 
         const chatId = callbackQuery.message?.chat?.id;
         if (reply && chatId && botToken) {
-          const payload = (reply instanceof String || typeof reply === 'object') && reply.reply_markup ? {
-            chat_id: chatId,
-            text: String(reply),
-            reply_markup: reply.reply_markup,
-            parse_mode: 'Markdown'
-          } : {
-            chat_id: chatId,
-            text: String(reply),
-            parse_mode: 'Markdown'
-          };
-
-          try {
-            await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: 10000 });
-          } catch (sendErr) {
-            console.error('[Telegram Webhook Callback Send Error]', sendErr.message);
-          }
+          await sendTelegramMessage(botToken, chatId, reply);
         }
       });
       return;
@@ -195,21 +240,7 @@ app.post('/webhook/telegram', async (req, res) => {
         setImmediate(async () => {
           const botToken = process.env.TELEGRAM_BOT_TOKEN;
           if (botToken && chatId) {
-            const payload = (sessionIntercept instanceof String || typeof sessionIntercept === 'object') && sessionIntercept.reply_markup ? {
-              chat_id: chatId,
-              text: String(sessionIntercept),
-              reply_markup: sessionIntercept.reply_markup,
-              parse_mode: 'Markdown'
-            } : {
-              chat_id: chatId,
-              text: String(sessionIntercept),
-              parse_mode: 'Markdown'
-            };
-            try {
-              await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: 10000 });
-            } catch (err) {
-              console.error('[Telegram Webhook Intercept Send Error]', err.message);
-            }
+            await sendTelegramMessage(botToken, chatId, sessionIntercept);
           }
         });
         return;
@@ -237,34 +268,7 @@ app.post('/webhook/telegram', async (req, res) => {
           if (reply && chatId) {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             if (botToken) {
-              let replySent = false;
-              const payload = (reply instanceof String || typeof reply === 'object') && reply.reply_markup ? {
-                chat_id: chatId,
-                text: String(reply),
-                reply_markup: reply.reply_markup,
-                parse_mode: 'Markdown'
-              } : {
-                chat_id: chatId,
-                text: String(reply),
-                parse_mode: 'Markdown'
-              };
-
-              try {
-                await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: SEND_TIMEOUT_MS });
-                replySent = true;
-              } catch (errMarkdown) {
-                console.warn(`[Telegram Webhook] Failed to send message with Markdown parsing: ${errMarkdown.message}. Retrying as plain text...`);
-                try {
-                  await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                    chat_id: chatId,
-                    text: String(reply)
-                  }, { timeout: SEND_TIMEOUT_MS });
-                  replySent = true;
-                } catch (errPlain) {
-                  console.error(`[Telegram Webhook Error] Failed to send plain text message: ${errPlain.message}`);
-                  console.log(`[Telegram Webhook] telegram_send_error=${errPlain.message.replace(/[\r\n]+/g, ' ')}`);
-                }
-              }
+              const replySent = await sendTelegramMessage(botToken, chatId, reply, SEND_TIMEOUT_MS);
               console.log(`[Telegram Webhook] reply_sent=${replySent}`);
             } else {
               console.warn('[Telegram Webhook Warning] TELEGRAM_BOT_TOKEN is not configured. Reply sent: false');

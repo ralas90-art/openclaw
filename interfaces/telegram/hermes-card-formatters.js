@@ -64,8 +64,9 @@ function formatProspectCard(prospect) {
     buttons.push(actionRow);
   }
 
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
   const bottomRow = [
-    { text: "🖥 Open Dashboard", url: `http://localhost:3300/dashboard/prospects?q=${encodeURIComponent(prospect.businessName || '')}` }
+    { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/prospects?q=${encodeURIComponent(prospect.businessName || '')}` }
   ];
   buttons.push(bottomRow);
 
@@ -120,9 +121,10 @@ function formatResearchCard(research, short = true) {
     buttons.push(actionRow);
   }
 
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
-    { text: "🖥 Open Dashboard", url: `http://localhost:3300/dashboard/research/view?researchId=${research.researchId}` }
+    { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/research/view?researchId=${research.researchId}` }
   ];
   buttons.push(bottomRow);
 
@@ -179,9 +181,10 @@ function formatScoreCard(score, short = true) {
     buttons.push(actionRow);
   }
 
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
-    { text: "🖥 Open Dashboard", url: `http://localhost:3300/dashboard/research/view?researchId=${score.researchId || ''}` }
+    { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/research/view?researchId=${score.researchId || ''}` }
   ];
   buttons.push(bottomRow);
 
@@ -240,9 +243,10 @@ function formatOutreachCard(review, short = true) {
   ];
   buttons.push(contactRow);
 
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
   const bottomRow = [
     { text: "📋 View Prospect", callback_data: `act:prop_read:${prospectId}` },
-    { text: "🖥 Open Dashboard", url: `http://localhost:3300/dashboard/outreach/view?reviewId=${reviewId}` }
+    { text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/outreach/view?reviewId=${reviewId}` }
   ];
   buttons.push(bottomRow);
 
@@ -284,7 +288,7 @@ function formatCockpitToday(items) {
     ],
     [
       { text: "📬 Review Drafts", callback_data: "menu:review_drafts" },
-      { text: "🖥 Cockpit Dashboard", url: "http://localhost:3300/dashboard/cockpit" }
+      { text: "🖥 Cockpit Dashboard", url: `${process.env.PUBLIC_URL || 'http://localhost:3300'}/dashboard/cockpit` }
     ]
   ];
 
@@ -328,9 +332,10 @@ function formatCockpitTop(items) {
   if (row1.length > 0) buttons.push(row1);
   if (row2.length > 0) buttons.push(row2);
 
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
   buttons.push([
-    { text: "🖥 Scores Leaderboard", url: "http://localhost:3300/dashboard/scores" },
-    { text: "🖥 Cockpit Dashboard", url: "http://localhost:3300/dashboard/cockpit" }
+    { text: "🖥 Scores Leaderboard", url: `${baseDash}/dashboard/scores` },
+    { text: "🖥 Cockpit Dashboard", url: `${baseDash}/dashboard/cockpit` }
   ]);
 
   const response = new String(out.trim());

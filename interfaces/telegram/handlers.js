@@ -3459,7 +3459,8 @@ async function handleProspectLatest(message) {
     row.push({ text: `${idx + 1}️⃣`, callback_data: `act:prop_read:${p.prospectId}` });
   });
   if (row.length > 0) buttons.push(row);
-  buttons.push([{ text: "🖥 Open Dashboard", url: "http://localhost:3300/dashboard/prospects" }]);
+  const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+  buttons.push([{ text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/prospects` }]);
   const response = new String(output.trim());
   response.reply_markup = { inline_keyboard: buttons };
   return response;
@@ -3836,7 +3837,8 @@ async function handleOutreachDue(message) {
       row.push({ text: `${idx + 1}️⃣`, callback_data: `act:out_read:${item.reviewId}` });
     });
     if (row.length > 0) buttons.push(row);
-    buttons.push([{ text: "🖥 Open Dashboard", url: "http://localhost:3300/dashboard/outreach" }]);
+    const baseDash = process.env.PUBLIC_URL || 'http://localhost:3300';
+    buttons.push([{ text: "🖥 Open Dashboard", url: `${baseDash}/dashboard/outreach` }]);
     const response = new String(out.trim());
     response.reply_markup = { inline_keyboard: buttons };
     return response;
