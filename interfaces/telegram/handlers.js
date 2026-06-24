@@ -373,6 +373,10 @@ async function handleCommand(text, message) {
 
   // 1. Registry & Help Commands
   if (command === '/help') return handleHelp();
+  if (command === '/menu') {
+    const { handleMenuCommand } = require('./hermes-ux-menu');
+    return handleMenuCommand(message);
+  }
 
   // Jarvis Personal Assistant Commands
   if (command === '/jarvis_brief' || command === '/jarvisbrief') {
@@ -705,6 +709,108 @@ async function handleCommand(text, message) {
     return await handleHermesHealth(message);
   }
 
+  // Prospect Operator Commands
+  if (command === '/prospect_status' || command === '/prospectstatus') {
+    return await handleProspectStatus(message);
+  }
+  if (command === '/prospect_search' || command === '/prospectsearch') {
+    const query = text.substring(command.length).trim();
+    return await handleProspectSearch(query, message);
+  }
+  if (command === '/prospect_latest' || command === '/prospectlatest') {
+    return await handleProspectLatest(message);
+  }
+  if (command === '/prospect_list' || command === '/prospectlist') {
+    return await handleProspectList(message);
+  }
+  if (command === '/prospect_read' || command === '/prospectread') {
+    const prospectId = text.substring(command.length).trim();
+    return await handleProspectRead(prospectId, message);
+  }
+  if (command === '/prospect_outreach' || command === '/prospectoutreach') {
+    const prospectId = text.substring(command.length).trim();
+    return await handleProspectOutreach(prospectId, message);
+  }
+  if (command === '/prospect_outreach_batch' || command === '/prospectoutreachbatch') {
+    const args = text.substring(command.length).trim();
+    return await handleProspectOutreachBatch(args, message);
+  }
+  if (command === '/outreach_status' || command === '/outreachstatus') {
+    return await handleOutreachStatus(message);
+  }
+  if (command === '/outreach_list' || command === '/outreachlist') {
+    return await handleOutreachList(message);
+  }
+  if (command === '/outreach_read' || command === '/outreachread') {
+    const idOrPid = text.substring(command.length).trim();
+    return await handleOutreachRead(idOrPid, message);
+  }
+  if (command === '/outreach_mark' || command === '/outreachmark') {
+    const args = text.substring(command.length).trim();
+    return await handleOutreachMark(args, message);
+  }
+  if (command === '/outreach_note' || command === '/outreachnote') {
+    const args = text.substring(command.length).trim();
+    return await handleOutreachNote(args, message);
+  }
+  if (command === '/outreach_today' || command === '/outreachtoday') {
+    return await handleOutreachToday(message);
+  }
+  if (command === '/outreach_due' || command === '/outreachdue') {
+    return await handleOutreachDue(message);
+  }
+  if (command === '/outreach_pipeline' || command === '/outreachpipeline') {
+    return await handleOutreachPipeline(message);
+  }
+  if (command === '/outreach_mark_contacted' || command === '/outreachmarkcontacted') {
+    const args = text.substring(command.length).trim();
+    return await handleOutreachMarkContacted(args, message);
+  }
+  if (command === '/outreach_followup' || command === '/outreachfollowup') {
+    const args = text.substring(command.length).trim();
+    return await handleOutreachFollowUp(args, message);
+  }
+  if (command === '/research_prospect' || command === '/researchprospect') {
+    const prospectId = text.substring(command.length).trim();
+    return await handleResearchProspect(prospectId, message);
+  }
+  if (command === '/research_read' || command === '/researchread') {
+    const args = text.substring(command.length).trim();
+    return await handleResearchRead(args, message);
+  }
+  if (command === '/research_latest' || command === '/researchlatest') {
+    return await handleResearchLatest(message);
+  }
+  if (command === '/research_status' || command === '/researchstatus') {
+    return await handleResearchStatus(message);
+  }
+  if (command === '/score_prospect' || command === '/scoreprospect') {
+    const prospectId = text.substring(command.length).trim();
+    return await handleScoreProspect(prospectId, message);
+  }
+  if (command === '/score_read' || command === '/scoreread') {
+    const args = text.substring(command.length).trim();
+    return await handleScoreRead(args, message);
+  }
+  if (command === '/score_latest' || command === '/scorelatest') {
+    return await handleScoreLatest(message);
+  }
+  if (command === '/score_top' || command === '/scoretop') {
+    return await handleScoreTop(message);
+  }
+  if (command === '/cockpit_today' || command === '/cockpittoday') {
+    return await handleCockpitToday(message);
+  }
+  if (command === '/cockpit_top' || command === '/cockpittop') {
+    return await handleCockpitTop(message);
+  }
+  if (command === '/cockpit_due' || command === '/cockpitdue') {
+    return await handleCockpitDue(message);
+  }
+  if (command === '/cockpit_next' || command === '/cockpitnext') {
+    return await handleCockpitNext(message);
+  }
+
   // 2. OpenClaw Bot Routing
   if (command === '/content_forge' || command === '/contentforge' || command === '/cf') {
     return await handleOpenClawBot('content-forge', parsed.workflow, parsed.fields, message);
@@ -745,7 +851,7 @@ async function handleCommand(text, message) {
 }
 
 function handleHelp() {
-  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)
+  return `OpenClaw Telegram Router\n\nAvailable Commands:\n/help - Show this message\n/menu - Show main operator dashboard menu\n/bots - List known bots\n/registry - Registry summary\n/inbox - List 5 most recent queued requests\n/inbox_latest - Show the latest request summary\n/inbox_read <filename> - Read a specific request\n/run_bot <bot_slug> <user_request> - Run approved bot workflow at runtime (also /run, /runtime_run)
 /run_publish <bot_slug> <user_request> - Run bot AND publish result to Google Drive atomically (also /rp, /run_bot_publish)
 /run_status - Inspect runtime health and config
 /run_latest - Inspect details of the latest result
@@ -790,6 +896,35 @@ function handleHelp() {
 /jarvis_connectors - List registered cloud connectors and status (also /jarvisconnectors)
 /jarvis_email_summary - Show unread important email summaries (also /jarvisemailsummary)
 /jarvis_drive_recent - Show recently modified Google Drive files (also /jarvisdriverecent)
+/prospect_status - Show prospect API configuration and status (also /prospectstatus)
+/prospect_search <query> - Search and catalog prospects locally (also /prospectsearch)
+/prospect_latest - Show the latest saved prospects (also /prospectlatest)
+/prospect_list - Show recent saved prospects (also /prospectlist)
+/prospect_read <prospectId> - Show safe details for a specific prospect (also /prospectread)
+/prospect_outreach <prospectId> - Handoff prospect to Hermes outreach generation queue (also /prospectoutreach)
+/prospect_outreach_batch <id1,id2,...> - Handoff multiple prospects to Hermes queue in batch (also /prospectoutreachbatch)
+/outreach_status - Show manual outreach review status counts (also /outreachstatus)
+/outreach_list - Show recent manual outreach review records (also /outreachlist)
+/outreach_read <reviewId or prospectId> - Show detailed manual outreach drafts (also /outreachread)
+/outreach_mark <reviewId> <status> - Update manual status for a specific outreach review (also /outreachmark)
+/outreach_note <reviewId> <note> - Update operator notes for a specific outreach review (also /outreachnote)
+/outreach_today - List reviews where manual follow-up is due today/overdue (also /outreachtoday)
+/outreach_due - List all manual reviews with follow-up scheduled (also /outreachdue)
+/outreach_pipeline - Show manual outreach pipeline counts summary (also /outreachpipeline)
+/outreach_mark_contacted <reviewId> <channel> - Log manual contact and increment count (also /outreachmarkcontacted)
+/outreach_followup <reviewId> <YYYY-MM-DD> - Log follow-up schedule and set status (also /outreachfollowup)
+/research_prospect <prospectId> - Enrich prospect details with website context (also /researchprospect)
+/research_read <researchId or prospectId> - Show detailed research findings for a prospect (also /researchread)
+/research_latest - Show the 5 most recently created research records (also /researchlatest)
+/research_status - Show research adapter registry status (also /researchstatus)
+/score_prospect <prospectId> - Offline prospect fit and channel evaluation (also /scoreprospect)
+/score_read <scoreId or prospectId> - Show detailed scoring for a prospect (also /scoreread)
+/score_latest - Show the 5 most recently created score records (also /scorelatest)
+/score_top - Show top 5 score records sorted by fitScore descending (also /scoretop)
+/cockpit_today - Show daily cockpit summary, top prospects, and follow-ups (also /cockpittoday)
+/cockpit_top - List top 10 ranked prospects in the cockpit (also /cockpittop)
+/cockpit_due - List prospects with follow-ups scheduled for today or overdue (also /cockpitdue)
+/cockpit_next - List next 5 high-priority prospects to contact (not contacted yet) (also /cockpitnext)
 ` +
 `\nGoogle Drive Commands:\n/drive_latest - Show the latest published file info\n/drive_publish_latest - Publish the latest output (skips if already published)\n/drive_publish_pending - Publish the latest UNPUBLISHED output file only\n/drive_republish_latest - Force re-upload of the latest output file\n/drive_publish_file <filename> - Publish a specific result file\n/drive_publish_campaign <campaign> - Publish a campaign folder\n\nRecommended workflows:\n  Manual:\n  1. /run_bot revenue-master-orchestrator <user_request>\n  2. /drive_publish_pending\n  3. /drive_latest\n\n  Controlled (single command):\n  /run_publish content-forge <user_request>\n  /drive_latest\n\nBot Commands & Examples:\n1. Creative (Content Forge):\n   /cf image_prompts\n   Project: SeptiVolt\n   Campaign: Batch 001\n   Runtime Execution:\n   /run_bot content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n   Controlled Run+Publish:\n   /run_publish content-forge Create 5 TikTok ad scripts for Cresca OS targeting cleaning business owners\n2. Business (Revenue Master):\n   /revenue system_design\n   Business Name: SeptiVolt\n   Business Type: SaaS\n   Runtime Execution:\n   /run_bot revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n   Controlled Run+Publish:\n   /run_publish revenue-master-orchestrator Create a GHL system plan for SeptiVolt\n3. Tech (System Master):\n   /sys build_app\n   App Name: septivolt-portal\n   Framework: Next.js\n4. Copywriting (Cresca Content/AEO):\n   /aeo optimize_page\n   Page URL: https://septivolt.com\n5. Leads (Lead Acquisition):
    /leads prospect
@@ -3207,6 +3342,831 @@ async function handleApprovalCleanupExpired(message) {
 }
 
 // ------------------------------------------
+// ------------------------------------------
+// Prospect Command Handlers
+// ------------------------------------------
+
+async function handleProspectStatus(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/prospect_status', chatId);
+  }
+
+  const enabled = process.env.GOOGLE_PLACES_PROSPECTING_ENABLED === 'true';
+  const sourceMode = enabled ? 'google_places' : 'mock';
+  const limit = process.env.GOOGLE_PLACES_DAILY_QUERY_LIMIT || '25';
+  const maxResults = process.env.GOOGLE_PLACES_MAX_RESULTS_PER_QUERY || '10';
+  const fieldProfile = process.env.GOOGLE_PLACES_FIELD_PROFILE || 'BASIC_DISCOVERY';
+
+  const intake = require('../../openclaw/prospects/google-places-prospect-intake');
+  const dailyCount = intake.getDailyQueryCount();
+
+  const store = require('../../openclaw/prospects/prospect-store');
+  const totalProspects = store.loadProspects().length;
+
+  return [
+    `🔍 *Prospect Intake Status*`,
+    ``,
+    `• *Prospecting Enabled:* \`${enabled}\``,
+    `• *Source Mode:* \`${sourceMode}\``,
+    `• *Daily Query Limit:* \`${limit}\``,
+    `• *Daily Query Count:* \`${dailyCount}/${limit}\``,
+    `• *Max Results Per Query:* \`${maxResults}\``,
+    `• *Field Profile:* \`${fieldProfile}\``,
+    `• *Total Saved Prospects:* \`${totalProspects}\``,
+    `• *Real Execution Enabled:* \`false\``
+  ].join('\n');
+}
+
+async function handleProspectSearch(query, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/prospect_search', chatId);
+  }
+
+  if (!query || !query.trim()) {
+    return `Usage: /prospect_search <query>`;
+  }
+
+  const cleanQuery = query.trim();
+  const intake = require('../../openclaw/prospects/google-places-prospect-intake');
+  const store = require('../../openclaw/prospects/prospect-store');
+
+  try {
+    const prospectsBefore = store.loadProspects().length;
+    const results = await intake.searchLocalProspects(cleanQuery);
+    const prospectsAfter = store.loadProspects().length;
+
+    const found = results.length;
+    const added = prospectsAfter - prospectsBefore;
+    const duplicates = found - added;
+
+    const limit = parseInt(process.env.GOOGLE_PLACES_DAILY_QUERY_LIMIT || '25', 10);
+    const dailyCount = intake.getDailyQueryCount();
+    const remaining = Math.max(0, limit - dailyCount);
+    const fieldProfile = process.env.GOOGLE_PLACES_FIELD_PROFILE || 'BASIC_DISCOVERY';
+
+    return [
+      `✅ *Prospect Search Completed*`,
+      ``,
+      `• *Query:* \`${cleanQuery}\``,
+      `• *Found:* \`${found}\``,
+      `• *Added:* \`${added}\``,
+      `• *Duplicates Skipped:* \`${duplicates}\``,
+      `• *Field Profile Used:* \`${fieldProfile}\``,
+      `• *Daily Quota Remaining:* \`${remaining}/${limit}\``
+    ].join('\n');
+  } catch (err) {
+    return `❌ *Prospect Search Failed*:\n${err.message}`;
+  }
+}
+
+async function handleProspectLatest(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/prospect_latest', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-store');
+  const prospects = store.loadProspects();
+
+  if (prospects.length === 0) {
+    return `ℹ️ No saved prospects found. Run /prospect_search to discover some.`;
+  }
+
+  const sorted = [...prospects].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+  const latest = sorted.slice(0, 5);
+
+  let output = `📋 *Latest Discovered Prospects (Dry-Run Only)*\n\n`;
+  latest.forEach((p, idx) => {
+    output += `${idx + 1}. *${p.businessName || p.name || 'Unknown Business'}*\n`;
+    output += `   • ID: \`${p.prospectId}\`\n`;
+    output += `   • Address: ${p.formattedAddress}\n`;
+    if (p.phoneNumber) output += `   • Phone: ${p.phoneNumber}\n`;
+    if (p.website) output += `   • Website: ${p.website}\n`;
+    output += `   • Discovered: ${new Date(p.discoveredAt).toLocaleString()}\n\n`;
+  });
+
+  const buttons = [];
+  const row = [];
+  latest.forEach((p, idx) => {
+    row.push({ text: `${idx + 1}️⃣`, callback_data: `act:prop_read:${p.prospectId}` });
+  });
+  if (row.length > 0) buttons.push(row);
+  buttons.push([{ text: "🖥 Open Dashboard", url: "http://localhost:3300/dashboard/prospects" }]);
+  const response = new String(output.trim());
+  response.reply_markup = { inline_keyboard: buttons };
+  return response;
+}
+
+async function handleProspectList(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/prospect_list', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-store');
+  const prospects = store.loadProspects();
+
+  if (prospects.length === 0) {
+    return `ℹ️ No saved prospects found. Run /prospect_search to discover some.`;
+  }
+
+  const sorted = [...prospects].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt));
+  const recent = sorted.slice(0, 10);
+
+  let output = `📋 *Recent Discovered Prospects*\n\n`;
+  recent.forEach((p, idx) => {
+    output += `${idx + 1}. *${p.businessName || p.name || 'Unknown Business'}*\n`;
+    output += `   • ID: \`${p.prospectId}\`\n`;
+    output += `   • Town/Region: ${p.town}, ${p.region}\n`;
+    output += `   • Category: \`${p.category}\`\n`;
+    output += `   • Source: \`${p.source}\` | Profile: \`${p.fieldProfile}\`\n\n`;
+  });
+
+  return output.trim();
+}
+
+async function handleProspectRead(prospectId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/prospect_read', chatId);
+  }
+
+  if (!prospectId || !prospectId.trim()) {
+    return `Usage: /prospect_read <prospectId>`;
+  }
+
+  const cleanId = prospectId.trim();
+  const store = require('../../openclaw/prospects/prospect-store');
+  const prospects = store.loadProspects();
+  const prospect = prospects.find(p => p.prospectId === cleanId);
+
+  if (!prospect) {
+    return `❌ Error: Prospect with ID \`${cleanId}\` not found.`;
+  }
+
+  const formatters = require('./hermes-card-formatters');
+  return formatters.formatProspectCard(prospect);
+}
+
+async function handleProspectOutreach(prospectId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/prospect_outreach', chatId);
+  }
+
+  if (!prospectId || !prospectId.trim()) {
+    return `Usage: /prospect_outreach <prospectId>`;
+  }
+
+  const cleanId = prospectId.trim();
+  const store = require('../../openclaw/prospects/prospect-store');
+  
+  try {
+    const researchStore = require('../../openclaw/research/prospect-research-store');
+    const hasResearch = !!researchStore.getResearchForProspect(cleanId);
+
+    const result = store.createHermesOutreachJobFromProspects([cleanId], {
+      requestedBy: chatId,
+      source: 'telegram',
+      botId: 'content-forge'
+    });
+    
+    const jobId = result.jobs[0].hermesJobId;
+    return [
+      `✅ *Hermes Outreach Job Queued*`,
+      ``,
+      `• *Prospect ID:* \`${cleanId}\``,
+      `• *Hermes Job ID:* \`${jobId}\``,
+      `• *Research Context:* ${hasResearch ? '✅ Included (Research-informed outreach)' : '❌ None (Basic prospect-only)'}`,
+      `• *Status:* \`queued\``,
+      ``,
+      `Next commands:`,
+      `• Read job: \`/hermes_read ${jobId}\``,
+      `• Dispatch manually: \`/hermes_dispatch ${jobId}\``,
+      `• Trace lifecycle: \`/hermes_trace ${jobId}\``
+    ].join('\n');
+  } catch (err) {
+    return `❌ *Outreach Handoff Failed*:\n${err.message}`;
+  }
+}
+
+async function handleProspectOutreachBatch(args, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/prospect_outreach_batch', chatId);
+  }
+
+  if (!args || !args.trim()) {
+    return `Usage: /prospect_outreach_batch <prospectId1,prospectId2,...>`;
+  }
+
+  const prospectIds = args.split(',').map(s => s.trim()).filter(Boolean);
+  if (prospectIds.length === 0) {
+    return `❌ Error: No valid prospect IDs provided.`;
+  }
+
+  const store = require('../../openclaw/prospects/prospect-store');
+  try {
+    const result = store.createHermesOutreachJobFromProspects(prospectIds, {
+      requestedBy: chatId,
+      source: 'telegram',
+      botId: 'content-forge'
+    });
+
+    const researchStore = require('../../openclaw/research/prospect-research-store');
+    let out = `✅ *Hermes Batch Outreach Jobs Queued*\n\n`;
+    out += `• *Total Prospects Handed Off:* \`${result.jobs.length}\`\n\n`;
+    result.jobs.forEach((job, idx) => {
+      const pId = job.metadata.prospectId;
+      const hasResearch = !!researchStore.getResearchForProspect(pId);
+      out += `${idx + 1}. *${job.metadata.businessName || 'Unknown'}*\n` +
+             `   • Prospect ID: \`${pId}\`\n` +
+             `   • Research Context: ${hasResearch ? '✅ Included' : '❌ None'}\n` +
+             `   • Hermes Job ID: \`/hermes_read ${job.hermesJobId}\`\n` +
+             `   • Dispatch: \`/hermes_dispatch ${job.hermesJobId}\`\n\n`;
+    });
+    return out.trim();
+  } catch (err) {
+    return `❌ *Batch Handoff Failed*:\n${err.message}`;
+  }
+}
+
+async function handleOutreachStatus(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_status', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const list = store.syncReviews();
+    const counts = {
+      not_started: 0,
+      draft_generated: 0,
+      reviewed: 0,
+      contacted_manually: 0,
+      follow_up_needed: 0,
+      not_interested: 0,
+      booked_call: 0
+    };
+
+    for (const item of list) {
+      if (item.status in counts) {
+        counts[item.status]++;
+      }
+    }
+
+    return [
+      `📊 *Outreach Review Workspace Status*`,
+      ``,
+      `• *Not Started:* \`${counts.not_started}\``,
+      `• *Draft Generated:* \`${counts.draft_generated}\``,
+      `• *Reviewed:* \`${counts.reviewed}\``,
+      `• *Contacted Manually:* \`${counts.contacted_manually}\``,
+      `• *Follow-up Needed:* \`${counts.follow_up_needed}\``,
+      `• *Not Interested:* \`${counts.not_interested}\``,
+      `• *Booked Call:* \`${counts.booked_call}\``,
+      ``,
+      `Use \`/outreach_list\` to list review records.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachList(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_list', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const list = store.syncReviews();
+    if (list.length === 0) {
+      return `ℹ️ No outreach review records found.`;
+    }
+
+    const sorted = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const recent = sorted.slice(0, 10);
+
+    let output = `📋 *Recent Outreach Review Records*\n\n`;
+    recent.forEach((r, idx) => {
+      output += `${idx + 1}. *${r.businessName}*\n`;
+      output += `   • Review ID: \`${r.reviewId}\`\n`;
+      output += `   • Status: \`${r.status}\`\n`;
+      if (r.hermesJobId) output += `   • Hermes Job ID: \`${r.hermesJobId}\`\n`;
+      output += `\n`;
+    });
+
+    return output.trim();
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachRead(idOrPid, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_read', chatId);
+  }
+
+  if (!idOrPid || !idOrPid.trim()) {
+    return `Usage: /outreach_read <reviewId or prospectId>`;
+  }
+
+  const targetId = idOrPid.trim();
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const list = store.syncReviews();
+    const record = list.find(r => r.reviewId === targetId || r.prospectId === targetId);
+
+    if (!record) {
+      return `❌ Error: Outreach review record not found for '${targetId}'.`;
+    }
+
+    const formatters = require('./hermes-card-formatters');
+    return formatters.formatOutreachCard(record, false);
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachMark(args, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/outreach_mark', chatId);
+  }
+
+  if (!args || !args.trim()) {
+    return `Usage: /outreach_mark <reviewId> <status>`;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const reviewId = parts[0];
+  const status = parts[1];
+
+  if (!reviewId || !status) {
+    return `Usage: /outreach_mark <reviewId> <status>`;
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const updated = store.updateReviewStatus(reviewId, status);
+    return `✅ *Outreach Status Updated*\n\n• *Business:* ${updated.businessName}\n• *Review ID:* \`${updated.reviewId}\`\n• *New Status:* \`${updated.status}\``;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachNote(args, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/outreach_note', chatId);
+  }
+
+  if (!args || !args.trim()) {
+    return `Usage: /outreach_note <reviewId> <note>`;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const reviewId = parts[0];
+  const note = parts.slice(1).join(' ');
+
+  if (!reviewId || !note) {
+    return `Usage: /outreach_note <reviewId> <note>`;
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const updated = store.updateReviewNotes(reviewId, note);
+    return `✅ *Outreach Operator Notes Saved*\n\n• *Business:* ${updated.businessName}\n• *Review ID:* \`${updated.reviewId}\`\n• *Notes:* _${updated.operatorNotes}_`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachToday(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_today', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const list = store.syncReviews();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const filtered = list.filter(r => r.nextFollowUpAt && r.nextFollowUpAt.substring(0, 10) <= todayStr && r.status !== 'booked_call' && r.status !== 'not_interested');
+
+    if (filtered.length === 0) {
+      return `🎉 No manual outreach follow-ups due today!`;
+    }
+
+    let out = `📅 *Outreach Follow-ups Due Today/Overdue*\n\n`;
+    filtered.forEach((r, idx) => {
+      out += `${idx + 1}. *${r.businessName}*\n` +
+             `   • Review ID: \`${r.reviewId}\`\n` +
+             `   • Status: \`${r.status}\`\n` +
+             `   • Next Follow-up: *${r.nextFollowUpAt}*\n` +
+             `   • Contacts: \`${r.manualContactCount || 0}\` (Channel: \`${r.lastManualContactChannel || 'None'}\`)\n\n`;
+    });
+    return out.trim();
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachDue(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_due', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const list = store.syncReviews();
+    const filtered = list.filter(r => r.nextFollowUpAt).sort((a, b) => a.nextFollowUpAt.localeCompare(b.nextFollowUpAt));
+
+    if (filtered.length === 0) {
+      return `ℹ️ No manual outreach follow-ups scheduled.`;
+    }
+
+    let out = `⏳ *All Scheduled Outreach Follow-ups*\n\n`;
+    filtered.forEach((r, idx) => {
+      out += `${idx + 1}. *${r.businessName}*\n` +
+             `   • Review ID: \`${r.reviewId}\`\n` +
+             `   • Status: \`${r.status}\`\n` +
+             `   • Next Follow-up: *${r.nextFollowUpAt}*\n` +
+             `   • Stage: \`Stage ${r.followUpStage || 0}\`\n\n`;
+    });
+
+    const buttons = [];
+    const row = [];
+    filtered.slice(0, 5).forEach((item, idx) => {
+      row.push({ text: `${idx + 1}️⃣`, callback_data: `act:out_read:${item.reviewId}` });
+    });
+    if (row.length > 0) buttons.push(row);
+    buttons.push([{ text: "🖥 Open Dashboard", url: "http://localhost:3300/dashboard/outreach" }]);
+    const response = new String(out.trim());
+    response.reply_markup = { inline_keyboard: buttons };
+    return response;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachPipeline(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/outreach_pipeline', chatId);
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const stats = store.getPipelineAnalytics();
+    return [
+      `📊 *Outreach Pipeline Summary*`,
+      ``,
+      `• *Total Reviews:* \`${stats.total}\``,
+      `• *Not Started:* \`${stats.not_started}\``,
+      `• *Draft Generated:* \`${stats.draft_generated}\``,
+      `• *Reviewed:* \`${stats.reviewed}\``,
+      `• *Contacted Manually:* \`${stats.contacted_manually}\``,
+      `• *Follow-up Needed:* \`${stats.follow_up_needed}\``,
+      `• *Booked Call:* \`${stats.booked_call}\``,
+      `• *Not Interested:* \`${stats.not_interested}\``,
+      `• *Due Today/Overdue:* \`${stats.due_today}\``,
+      ``,
+      `Use \`/outreach_today\` to list work for today.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachMarkContacted(args, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/outreach_mark_contacted', chatId);
+  }
+
+  if (!args || !args.trim()) {
+    return `Usage: /outreach_mark_contacted <reviewId> <channel>`;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const reviewId = parts[0];
+  const channel = parts[1];
+
+  if (!reviewId || !channel) {
+    return `Usage: /outreach_mark_contacted <reviewId> <channel>`;
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const updated = store.markReviewContacted(reviewId, channel);
+    return `✅ *Manual Contact Logged*\n\n` +
+           `• *Business:* ${updated.businessName}\n` +
+           `• *Review ID:* \`${updated.reviewId}\`\n` +
+           `• *Channel:* \`${updated.lastManualContactChannel}\`\n` +
+           `• *Total Contacts:* \`${updated.manualContactCount}\`\n` +
+           `• *Status:* \`${updated.status}\``;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleOutreachFollowUp(args, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/outreach_followup', chatId);
+  }
+
+  if (!args || !args.trim()) {
+    return `Usage: /outreach_followup <reviewId> <YYYY-MM-DD>`;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const reviewId = parts[0];
+  const nextFollowUpAt = parts[1];
+
+  if (!reviewId || !nextFollowUpAt) {
+    return `Usage: /outreach_followup <reviewId> <YYYY-MM-DD>`;
+  }
+
+  const store = require('../../openclaw/prospects/prospect-outreach-review-store');
+  try {
+    const updated = store.setReviewFollowUp(reviewId, nextFollowUpAt);
+    return `✅ *Follow-up Scheduled*\n\n` +
+           `• *Business:* ${updated.businessName}\n` +
+           `• *Review ID:* \`${updated.reviewId}\`\n` +
+           `• *Next Follow-up:* *${updated.nextFollowUpAt}*\n` +
+           `• *Follow-up Stage:* \`Stage ${updated.followUpStage}\`\n` +
+           `• *Status:* \`${updated.status}\``;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleResearchProspect(prospectId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/research_prospect', chatId);
+  }
+
+  if (!prospectId || !prospectId.trim()) {
+    return `Usage: /research_prospect <prospectId>`;
+  }
+
+  const router = require('../../openclaw/research/research-source-router');
+  try {
+    const result = await router.enrichProspect(prospectId.trim());
+    return `🔬 *Prospect Research Enrichment Complete*\n\n` +
+           `• *Business Name:* ${result.businessName}\n` +
+           `• *Research ID:* \`${result.researchId}\`\n` +
+           `• *Source:* ${result.sourceType} (${result.website})\n` +
+           `• *Confidence:* \`${result.confidence * 100}%\`\n\n` +
+           `*Website Summary:*\n` +
+           `_${result.websiteSummary}_\n\n` +
+           `*Services Detected:*\n` +
+           `${result.servicesDetected.map(s => `• ${s}`).join('\n')}\n\n` +
+           `*Lead Capture Issues:*\n` +
+           `${result.leadCaptureIssues.map(s => `• ${s}`).join('\n')}\n\n` +
+           `*Recommended Outreach Pitch Angle:*\n` +
+           `*${result.recommendedOutreachAngle}*`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleResearchRead(idOrPid, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/research_read', chatId);
+  }
+
+  if (!idOrPid || !idOrPid.trim()) {
+    return `Usage: /research_read <researchId or prospectId>`;
+  }
+
+  const store = require('../../openclaw/research/prospect-research-store');
+  const cleanId = idOrPid.trim();
+  
+  let record = store.getResearchRecord(cleanId);
+  if (!record) {
+    record = store.getResearchForProspect(cleanId);
+  }
+
+  if (!record) {
+    return `❌ No research findings found for ID: ${cleanId}`;
+  }
+
+  const formatters = require('./hermes-card-formatters');
+  return formatters.formatResearchCard(record, false);
+}
+
+async function handleResearchLatest(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/research_latest', chatId);
+  }
+
+  const store = require('../../openclaw/research/prospect-research-store');
+  const list = store.getLatestResearch(5);
+
+  if (list.length === 0) {
+    return `🔬 No research records found. Run /research_prospect <prospectId> to start enrichment.`;
+  }
+
+  let out = `🔬 *Latest Research Records*\n\n`;
+  list.forEach((r, idx) => {
+    out += `${idx + 1}. *${r.businessName}*\n` +
+           `   • Research ID: \`${r.researchId}\`\n` +
+           `   • Prospect ID: \`${r.prospectId}\`\n` +
+           `   • Source: ${r.sourceType} (${r.website})\n\n`;
+  });
+
+  return out.trim();
+}
+
+async function handleResearchStatus(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/research_status', chatId);
+  }
+
+  const router = require('../../openclaw/research/research-source-router');
+  const store = require('../../openclaw/research/prospect-research-store');
+  const totalRecords = Object.keys(store.loadResearch()).length;
+
+  const adapterStatus = Object.entries(router.ADAPTER_REGISTRY).map(([type, adapter]) => {
+    return `• *${type}:* ${adapter ? '✅ Active' : '❌ Disabled (Stub)'}`;
+  });
+
+  return `🔬 *Research Adapter Registry Status*\n\n` +
+         `• *Total Research Records:* \`${totalRecords}\`\n\n` +
+         `*Adapters Status:*\n` +
+         adapterStatus.join('\n');
+}
+
+async function handleScoreProspect(prospectId, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('generate_runtime')) {
+    return roles.formatRoleDenied('/score_prospect', chatId);
+  }
+
+  if (!prospectId || !prospectId.trim()) {
+    return `Usage: /score_prospect <prospectId>`;
+  }
+
+  const optimizer = require('../../openclaw/research/prospect-angle-optimizer');
+  try {
+    const result = optimizer.optimizeProspect(prospectId.trim());
+    return `🎯 *Prospect Evaluation & Scoring Complete*\n\n` +
+           `• *Business Name:* ${result.businessName}\n` +
+           `• *Score ID:* \`${result.scoreId}\`\n` +
+           `• *Priority:* *${result.priority.toUpperCase()}*\n\n` +
+           `*Scores:*\n` +
+           `• Fit Score: \`${result.fitScore}/100\`\n` +
+           `• Urgency: \`${result.urgencyScore}/100\`\n` +
+           `• Website Gaps: \`${result.websiteGapScore}/100\`\n` +
+           `• Follow-Up Potential: \`${result.followUpPotentialScore}/100\`\n\n` +
+           `• *Recommended Channel:* \`${result.recommendedChannel.toUpperCase()}\`\n` +
+           `• *Recommended Offer Angle:* _${result.recommendedOfferAngle}_\n\n` +
+           `*Reasoning:*\n` +
+           `_${result.reasoning}_\n\n` +
+           `*Red Flags / Warnings:* ${result.redFlags.length > 0 ? result.redFlags.map(rf => `\n- ${rf}`).join('') : 'None'}`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleScoreRead(idOrPid, message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/score_read', chatId);
+  }
+
+  if (!idOrPid || !idOrPid.trim()) {
+    return `Usage: /score_read <scoreId or prospectId>`;
+  }
+
+  const scoreStore = require('../../openclaw/research/prospect-score-store');
+  const cleanId = idOrPid.trim();
+
+  let record = scoreStore.getScoreRecord(cleanId);
+  if (!record) {
+    record = scoreStore.getScoreForProspect(cleanId);
+  }
+
+  if (!record) {
+    return `❌ No score record found for ID: ${cleanId}`;
+  }
+
+  const formatters = require('./hermes-card-formatters');
+  return formatters.formatScoreCard(record, false);
+}
+
+async function handleScoreLatest(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/score_latest', chatId);
+  }
+
+  const scoreStore = require('../../openclaw/research/prospect-score-store');
+  const list = scoreStore.getLatestScores(5);
+
+  if (list.length === 0) {
+    return `🎯 No score records found. Run /score_prospect <prospectId> to start evaluation.`;
+  }
+
+  let out = `🎯 *Latest Prospect Scores*\n\n`;
+  list.forEach((s, idx) => {
+    out += `${idx + 1}. *${s.businessName}*\n` +
+           `   • Score: \`${s.fitScore}/100\` | Priority: *${s.priority.toUpperCase()}*\n` +
+           `   • Channel: \`${s.recommendedChannel.toUpperCase()}\`\n` +
+           `   • Score ID: \`${s.scoreId}\`\n\n`;
+  });
+
+  return out.trim();
+}
+
+async function handleScoreTop(message) {
+  const roles = require('../../openclaw/runtime/runtime-roles');
+  const chatId = message.chat?.id ? String(message.chat.id).trim() : 'unknown';
+  const caps = roles.getEffectiveCapabilities(chatId);
+  if (!caps.has('read_runtime')) {
+    return roles.formatRoleDenied('/score_top', chatId);
+  }
+
+  const scoreStore = require('../../openclaw/research/prospect-score-store');
+  const list = scoreStore.getTopScores(5);
+
+  if (list.length === 0) {
+    return `🎯 No score records found. Run /score_prospect <prospectId> to start evaluation.`;
+  }
+
+  let out = `🎯 *Top Ranked Prospect Scores*\n\n`;
+  list.forEach((s, idx) => {
+    out += `${idx + 1}. *${s.businessName}*\n` +
+           `   • Score: \`${s.fitScore}/100\` | Priority: *${s.priority.toUpperCase()}*\n` +
+           `   • Channel: \`${s.recommendedChannel.toUpperCase()}\`\n` +
+           `   • Score ID: \`${s.scoreId}\`\n\n`;
+  });
+
+  return out.trim();
+}
+
 // Hermes Command Handlers
 // ------------------------------------------
 
@@ -4631,7 +5591,95 @@ async function handleJarvisApprovalStats(message) {
   }
 }
 
+async function handleCockpitToday(message) {
+  const roles = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = roles.requireCommandPermission('/cockpit_today', message);
+  if (!permCheck.allowed) {
+    return roles.formatPermissionDenied('/cockpit_today', permCheck.reason, message);
+  }
+
+  const cockpit = require('../../openclaw/prospects/prospect-priority-cockpit');
+  const items = cockpit.getCockpitData();
+  const formatters = require('./hermes-card-formatters');
+  return formatters.formatCockpitToday(items);
+}
+
+async function handleCockpitTop(message) {
+  const roles = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = roles.requireCommandPermission('/cockpit_top', message);
+  if (!permCheck.allowed) {
+    return roles.formatPermissionDenied('/cockpit_top', permCheck.reason, message);
+  }
+
+  const cockpit = require('../../openclaw/prospects/prospect-priority-cockpit');
+  const items = cockpit.getCockpitData();
+  const formatters = require('./hermes-card-formatters');
+  return formatters.formatCockpitTop(items);
+}
+
+async function handleCockpitDue(message) {
+  const roles = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = roles.requireCommandPermission('/cockpit_due', message);
+  if (!permCheck.allowed) {
+    return roles.formatPermissionDenied('/cockpit_due', permCheck.reason, message);
+  }
+
+  const cockpit = require('../../openclaw/prospects/prospect-priority-cockpit');
+  const items = cockpit.getCockpitData();
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const due = items.filter(item => item.nextFollowUpAt && item.nextFollowUpAt.substring(0, 10) <= todayStr);
+
+  if (due.length === 0) {
+    return `📅 No follow-ups due today or overdue.`;
+  }
+
+  let out = `📅 *Follow-ups Due Today or Overdue*\n\n`;
+  due.forEach((item, idx) => {
+    out += `${idx + 1}. *${item.businessName}*\n` +
+           `   • Scheduled: \`${item.nextFollowUpAt}\` (Stage: ${item.followUpStage || 0})\n` +
+           `   • Last Contact: \`${item.lastManualContactChannel || 'None'}\` (${item.manualContactCount} total)\n` +
+           `   • Prospect ID: \`${item.prospectId}\`\n\n`;
+  });
+
+  return out.trim();
+}
+
+async function handleCockpitNext(message) {
+  const roles = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = roles.requireCommandPermission('/cockpit_next', message);
+  if (!permCheck.allowed) {
+    return roles.formatPermissionDenied('/cockpit_next', permCheck.reason, message);
+  }
+
+  const cockpit = require('../../openclaw/prospects/prospect-priority-cockpit');
+  const items = cockpit.getCockpitData();
+
+  // List next 5 high-priority prospects to contact (not contacted yet)
+  const next5 = items.filter(item => item.manualContactCount === 0).slice(0, 5);
+
+  if (next5.length === 0) {
+    return `🎯 No pending high-priority prospects to contact.`;
+  }
+
+  let out = `🚀 *Next 5 Prospects to Contact*\n\n`;
+  next5.forEach((item, idx) => {
+    const fitText = item.fitScore !== null ? `${item.fitScore}/100` : 'N/A';
+    out += `${idx + 1}. *${item.businessName}*\n` +
+           `   • Priority: *${item.priority.toUpperCase()}* | Fit: \`${fitText}\`\n` +
+           `   • Recommended Channel: \`${item.recommendedChannel.toUpperCase()}\`\n` +
+           `   • Offer Angle: _${item.recommendedOfferAngle}_\n` +
+           `   • Prospect ID: \`${item.prospectId}\`\n\n`;
+  });
+
+  return out.trim();
+}
+
 module.exports = {
   handleCommand,
-  handleHermesApprove
+  handleHermesApprove,
+  handleCockpitToday,
+  handleCockpitTop,
+  handleCockpitDue,
+  handleCockpitNext
 };

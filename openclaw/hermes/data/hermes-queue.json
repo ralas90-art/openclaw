@@ -1,1 +1,702 @@
-{}
+{
+  "hm_20260622_111216_ec0bc7": {
+    "hermesJobId": "hm_20260622_111216_ec0bc7",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:12:16.450Z",
+    "updatedAt": "2026-06-22T18:12:16.450Z",
+    "metadata": {
+      "prospectId": "adca649d-3556-4203-b5d3-9323b392879f",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:12:16.450Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_111317_114069": {
+    "hermesJobId": "hm_20260622_111317_114069",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:13:17.064Z",
+    "updatedAt": "2026-06-22T18:13:17.064Z",
+    "metadata": {
+      "prospectId": "7e2415db-b40f-414b-8edc-84f4a87b7423",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:13:17.064Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_111348_7c4f34": {
+    "hermesJobId": "hm_20260622_111348_7c4f34",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:13:48.868Z",
+    "updatedAt": "2026-06-22T18:13:48.868Z",
+    "metadata": {
+      "prospectId": "f20a40fe-87ad-4f0a-95d4-fe538623904f",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:13:48.868Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_112332_decfbe": {
+    "hermesJobId": "hm_20260622_112332_decfbe",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:23:32.086Z",
+    "updatedAt": "2026-06-22T18:23:32.087Z",
+    "metadata": {
+      "prospectId": "5bec2f38-5493-4dd4-926e-95c196ccfb5d",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:23:32.087Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_113455_49bf7d": {
+    "hermesJobId": "hm_20260622_113455_49bf7d",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:34:55.454Z",
+    "updatedAt": "2026-06-22T18:34:55.454Z",
+    "metadata": {
+      "prospectId": "a9395ee7-e0d1-43b1-b682-49529ca94f23",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:34:55.454Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_115450_20fb37": {
+    "hermesJobId": "hm_20260622_115450_20fb37",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:54:50.634Z",
+    "updatedAt": "2026-06-22T18:54:50.635Z",
+    "metadata": {
+      "prospectId": "9ae437a1-43e4-4157-8095-792553a74c66",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:54:50.635Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_115915_ff6d82": {
+    "hermesJobId": "hm_20260622_115915_ff6d82",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T18:59:15.334Z",
+    "updatedAt": "2026-06-22T18:59:15.334Z",
+    "metadata": {
+      "prospectId": "af7e7def-8e9a-446a-8ef7-19c1272b2c3a",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T18:59:15.334Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_120330_c28df3": {
+    "hermesJobId": "hm_20260622_120330_c28df3",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-22T19:03:30.108Z",
+    "updatedAt": "2026-06-22T19:03:30.109Z",
+    "metadata": {
+      "prospectId": "7f32eaa7-7ba9-46ae-88c7-c6463952f1c8",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-22T19:03:30.109Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_195537_deb58d": {
+    "hermesJobId": "hm_20260622_195537_deb58d",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-23T02:55:37.022Z",
+    "updatedAt": "2026-06-23T02:55:37.022Z",
+    "metadata": {
+      "prospectId": "1a25df60-a78e-4b23-8566-8bfe87f793b7",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-23T02:55:37.022Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_195614_0f9f5a": {
+    "hermesJobId": "hm_20260622_195614_0f9f5a",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-23T02:56:14.345Z",
+    "updatedAt": "2026-06-23T02:56:14.346Z",
+    "metadata": {
+      "prospectId": "f861d8eb-e193-4f0e-863d-4d34c7a97a0b",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-23T02:56:14.346Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_200138_caf89b": {
+    "hermesJobId": "hm_20260622_200138_caf89b",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-23T03:01:38.059Z",
+    "updatedAt": "2026-06-23T03:01:38.059Z",
+    "metadata": {
+      "prospectId": "ff8ba0b8-f409-4f17-bd91-b6e41166c613",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-23T03:01:38.059Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_203310_53b27f": {
+    "hermesJobId": "hm_20260622_203310_53b27f",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-23T03:33:10.864Z",
+    "updatedAt": "2026-06-23T03:33:10.864Z",
+    "metadata": {
+      "prospectId": "83efdacc-148e-4ecd-a99f-901ffbff74f3",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-23T03:33:10.864Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260622_203355_7cec39": {
+    "hermesJobId": "hm_20260622_203355_7cec39",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-23T03:33:55.531Z",
+    "updatedAt": "2026-06-23T03:33:55.531Z",
+    "metadata": {
+      "prospectId": "f7d0a768-62d0-470d-87ba-6e09625b5ad9",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-23T03:33:55.531Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_171751_24b146": {
+    "hermesJobId": "hm_20260623_171751_24b146",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T00:17:51.283Z",
+    "updatedAt": "2026-06-24T00:17:51.283Z",
+    "metadata": {
+      "prospectId": "38ab9ac2-e90e-4037-91e5-60c5a5f585b6",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T00:17:51.283Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_172441_f19716": {
+    "hermesJobId": "hm_20260623_172441_f19716",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T00:24:41.157Z",
+    "updatedAt": "2026-06-24T00:24:41.157Z",
+    "metadata": {
+      "prospectId": "4d543df8-01d4-4e60-a232-b6f2e26f7f04",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T00:24:41.157Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_172839_38262b": {
+    "hermesJobId": "hm_20260623_172839_38262b",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T00:28:39.351Z",
+    "updatedAt": "2026-06-24T00:28:39.353Z",
+    "metadata": {
+      "prospectId": "bfdaacf3-ba75-4455-85f4-7854832f5c10",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T00:28:39.353Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_173951_493374": {
+    "hermesJobId": "hm_20260623_173951_493374",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T00:39:51.643Z",
+    "updatedAt": "2026-06-24T00:39:51.643Z",
+    "metadata": {
+      "prospectId": "d7134ace-4057-4130-aedf-adc93d8de227",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T00:39:51.643Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_193505_fc619c": {
+    "hermesJobId": "hm_20260623_193505_fc619c",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T02:35:05.349Z",
+    "updatedAt": "2026-06-24T02:35:05.350Z",
+    "metadata": {
+      "prospectId": "f28da333-cafa-44b5-b901-08886731078a",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T02:35:05.350Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_193659_427918": {
+    "hermesJobId": "hm_20260623_193659_427918",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T02:36:59.853Z",
+    "updatedAt": "2026-06-24T02:36:59.854Z",
+    "metadata": {
+      "prospectId": "b940f30d-2c3c-485b-8589-76189de9da29",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T02:36:59.854Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_202357_8a50d6": {
+    "hermesJobId": "hm_20260623_202357_8a50d6",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T03:23:57.943Z",
+    "updatedAt": "2026-06-24T03:23:57.943Z",
+    "metadata": {
+      "prospectId": "a79bb196-37e1-448b-924f-156a81f8b3f6",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T03:23:57.943Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_202936_13a380": {
+    "hermesJobId": "hm_20260623_202936_13a380",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T03:29:36.666Z",
+    "updatedAt": "2026-06-24T03:29:36.666Z",
+    "metadata": {
+      "prospectId": "025048bb-6600-4e13-b370-4186f4e41cb9",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T03:29:36.666Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_203515_70a4f2": {
+    "hermesJobId": "hm_20260623_203515_70a4f2",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T03:35:15.118Z",
+    "updatedAt": "2026-06-24T03:35:15.118Z",
+    "metadata": {
+      "prospectId": "dd1351fc-8823-4ce3-8aa0-e19bdd48e9cc",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T03:35:15.118Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_204113_5053ab": {
+    "hermesJobId": "hm_20260623_204113_5053ab",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T03:41:13.199Z",
+    "updatedAt": "2026-06-24T03:41:13.199Z",
+    "metadata": {
+      "prospectId": "abfc18e6-96be-41f9-bf0b-e0ebd620f8ee",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T03:41:13.199Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_214354_edc652": {
+    "hermesJobId": "hm_20260623_214354_edc652",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T04:43:54.485Z",
+    "updatedAt": "2026-06-24T04:43:54.485Z",
+    "metadata": {
+      "prospectId": "68201d0d-ba49-47fc-8c10-96e2d8f73473",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T04:43:54.485Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  },
+  "hm_20260623_214659_484a77": {
+    "hermesJobId": "hm_20260623_214659_484a77",
+    "runtimeJobId": null,
+    "source": "system",
+    "requestedBy": "test",
+    "botId": "content-forge",
+    "priority": "normal",
+    "status": "queued",
+    "approvalId": null,
+    "inputSummary": "Generate Cresca OS outreach drafts and a quick business audit for the following prospect:\n\nBusiness Name: Prime roofing Pros\nAddress: 100 Main St, Patchogue, NY 11772, USA\nPhone: N/A\nWebsite: N/A\nCategory: contractor\nRating: N/A (0 reviews)\nGoogle Maps Link: https://maps.google.com/?cid=mock1\n\nRequested Outputs:\n1. quick business audit\n2. likely website/funnel gaps\n3. lead response opportunities\n4. CRM/follow-up opportunities\n5. review automation opportunities\n6. first SMS draft\n7. first email draft\n8. Facebook/Instagram DM draft\n9. 3-step follow-up sequence\n10. discovery call opener\n11. simple Cresca OS offer angle",
+    "inputHash": "ce4db9bf965ec0879bacda7b5dcfa3f4d680f0cf7c05c3c6f56ae1b46b78acd5",
+    "outputPath": null,
+    "driveLink": null,
+    "errorCategory": null,
+    "safeMessage": null,
+    "createdAt": "2026-06-24T04:46:59.915Z",
+    "updatedAt": "2026-06-24T04:46:59.915Z",
+    "metadata": {
+      "prospectId": "161926e9-f863-478b-873d-db9c9f0371af",
+      "businessName": "Prime roofing Pros"
+    },
+    "events": [
+      {
+        "timestamp": "2026-06-24T04:46:59.915Z",
+        "message": "Job initialized and queued."
+      }
+    ]
+  }
+}

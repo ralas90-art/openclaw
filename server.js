@@ -84,67 +84,142 @@ app.post('/webhook/telegram', async (req, res) => {
       return res.status(401).send('Unauthorized webhook secret');
     }
 
+    // A. Handle Callback Query
+    const callbackQuery = req.body.callback_query;
+    if (callbackQuery) {
+      console.log('[Telegram Webhook] callback_query_received=true');
+      res.sendStatus(200);
+
+      setImmediate(async () => {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (botToken) {
+          try {
+            await axios.post(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+              callback_query_id: callbackQuery.id
+            }, { timeout: 5000 });
+          } catch (e) {
+            console.error('[Telegram Webhook Callback Answer Error]', e.message);
+          }
+        }
+
+        const { handleCallback } = require('./interfaces/telegram/hermes-callback-router');
+        let reply;
+        try {
+          reply = await handleCallback(callbackQuery);
+        } catch (err) {
+          console.error('[Telegram Webhook Callback Error]', err);
+          reply = `❌ Error processing callback query: ${err.message}`;
+        }
+
+        const chatId = callbackQuery.message?.chat?.id;
+        if (reply && chatId && botToken) {
+          const payload = (reply instanceof String || typeof reply === 'object') && reply.reply_markup ? {
+            chat_id: chatId,
+            text: String(reply),
+            reply_markup: reply.reply_markup,
+            parse_mode: 'Markdown'
+          } : {
+            chat_id: chatId,
+            text: String(reply),
+            parse_mode: 'Markdown'
+          };
+
+          try {
+            await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: 10000 });
+          } catch (sendErr) {
+            console.error('[Telegram Webhook Callback Send Error]', sendErr.message);
+          }
+        }
+      });
+      return;
+    }
+
     const message = req.body.message;
     if (message && message.text) {
       const isCommand = message.text.startsWith('/');
       const commandDetected = isCommand ? message.text.split('\n')[0].split(' ')[0] : 'none';
       console.log(`[Telegram Webhook] command_detected=${commandDetected}`);
 
-      if (isCommand) {
-        const userId = message.from?.id?.toString();
-        const chatId = message.chat?.id?.toString();
-        console.log(`[Telegram Webhook] telegram_user_id=${userId || 'unknown'}`);
-        console.log(`[Telegram Webhook] telegram_chat_id=${chatId || 'unknown'}`);
+      const userId = message.from?.id?.toString();
+      const chatId = message.chat?.id?.toString();
+      console.log(`[Telegram Webhook] telegram_user_id=${userId || 'unknown'}`);
+      console.log(`[Telegram Webhook] telegram_chat_id=${chatId || 'unknown'}`);
 
-        // Security 2: Verify Allowed User IDs with Fail-Closed Production Rules
-        const allowedUsersStr = process.env.TELEGRAM_ALLOWED_USER_IDS;
-        const allowedUsers = allowedUsersStr ? allowedUsersStr.split(',').map(s => s.trim()) : [];
-        const nodeEnv = process.env.NODE_ENV;
-        const unrestrictedDevMode = process.env.TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE === 'true';
+      // Security 2: Verify Allowed User IDs with Fail-Closed Production Rules
+      const allowedUsersStr = process.env.TELEGRAM_ALLOWED_USER_IDS;
+      const allowedUsers = allowedUsersStr ? allowedUsersStr.split(',').map(s => s.trim()) : [];
+      const nodeEnv = process.env.NODE_ENV;
+      const unrestrictedDevMode = process.env.TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE === 'true';
 
-        let userAuthorized = false;
+      let userAuthorized = false;
 
-        if (allowedUsers.length > 0) {
-          userAuthorized = allowedUsers.includes(userId);
+      if (allowedUsers.length > 0) {
+        userAuthorized = allowedUsers.includes(userId);
+      } else {
+        if (nodeEnv === 'production') {
+          userAuthorized = false;
+          console.error('❌ [Telegram Webhook] Production authorization failed: TELEGRAM_ALLOWED_USER_IDS is not configured.');
         } else {
-          // If empty/missing
-          if (nodeEnv === 'production') {
-            userAuthorized = false;
-            console.error('❌ [Telegram Webhook] Production authorization failed: TELEGRAM_ALLOWED_USER_IDS is not configured.');
+          if (unrestrictedDevMode) {
+            userAuthorized = true;
+            console.warn('⚠️ [Telegram Webhook] Warning: Access granted via TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE in non-production environment.');
           } else {
-            // Non-production environment
-            if (unrestrictedDevMode) {
-              userAuthorized = true;
-              console.warn('⚠️ [Telegram Webhook] Warning: Access granted via TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE in non-production environment.');
-            } else {
-              userAuthorized = false;
-              console.warn('❌ [Telegram Webhook] Access denied: Allowed users empty. Set TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE=true to allow dev testing.');
-            }
+            userAuthorized = false;
+            console.warn('❌ [Telegram Webhook] Access denied: Allowed users empty. Set TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE=true to allow dev testing.');
           }
         }
+      }
 
-        console.log(`[Telegram Webhook] user_authorized=${userAuthorized}`);
+      console.log(`[Telegram Webhook] user_authorized=${userAuthorized}`);
 
-        if (!userAuthorized) {
-          return res.status(403).send('User not authorized');
-        }
+      if (!userAuthorized) {
+        return res.status(403).send('User not authorized');
+      }
 
-        // Security 3: Verify Allowed Chat IDs (only if configured)
-        const allowedChatsStr = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
-        const allowedChats = allowedChatsStr ? allowedChatsStr.split(',').map(s => s.trim()) : [];
-        const chatAuthorized = allowedChats.length === 0 || allowedChats.includes(chatId);
+      // Security 3: Verify Allowed Chat IDs (only if configured)
+      const allowedChatsStr = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
+      const allowedChats = allowedChatsStr ? allowedChatsStr.split(',').map(s => s.trim()) : [];
+      const chatAuthorized = allowedChats.length === 0 || allowedChats.includes(chatId);
 
-        console.log(`[Telegram Webhook] chat_authorized=${chatAuthorized}`);
+      console.log(`[Telegram Webhook] chat_authorized=${chatAuthorized}`);
 
-        if (!chatAuthorized) {
-          return res.status(403).send('Chat not authorized');
-        }
+      if (!chatAuthorized) {
+        return res.status(403).send('Chat not authorized');
+      }
 
-        // ✅ ACK Telegram immediately — Telegram requires 200 within 5s or retries
-        // Command handling and sendMessage both run asynchronously after the ack
+      // B. Intercept guided workflow text inputs first!
+      const { handleSessionTextMessage } = require('./interfaces/telegram/hermes-ux-menu');
+      const sessionIntercept = await handleSessionTextMessage(message);
+      if (sessionIntercept) {
+        res.sendStatus(200);
+        setImmediate(async () => {
+          const botToken = process.env.TELEGRAM_BOT_TOKEN;
+          if (botToken && chatId) {
+            const payload = (sessionIntercept instanceof String || typeof sessionIntercept === 'object') && sessionIntercept.reply_markup ? {
+              chat_id: chatId,
+              text: String(sessionIntercept),
+              reply_markup: sessionIntercept.reply_markup,
+              parse_mode: 'Markdown'
+            } : {
+              chat_id: chatId,
+              text: String(sessionIntercept),
+              parse_mode: 'Markdown'
+            };
+            try {
+              await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: 10000 });
+            } catch (err) {
+              console.error('[Telegram Webhook Intercept Send Error]', err.message);
+            }
+          }
+        });
+        return;
+      }
+
+      // C. Normal slash command processing
+      if (isCommand) {
+        // ✅ ACK Telegram immediately
         res.sendStatus(200);
 
-        // --- Async processing (fire-and-forget, never blocks the HTTP response) ---
         setImmediate(async () => {
           const SEND_TIMEOUT_MS = 10000;
           let reply;
@@ -163,19 +238,26 @@ app.post('/webhook/telegram', async (req, res) => {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             if (botToken) {
               let replySent = false;
+              const payload = (reply instanceof String || typeof reply === 'object') && reply.reply_markup ? {
+                chat_id: chatId,
+                text: String(reply),
+                reply_markup: reply.reply_markup,
+                parse_mode: 'Markdown'
+              } : {
+                chat_id: chatId,
+                text: String(reply),
+                parse_mode: 'Markdown'
+              };
+
               try {
-                await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                  chat_id: chatId,
-                  text: reply,
-                  parse_mode: 'Markdown'
-                }, { timeout: SEND_TIMEOUT_MS });
+                await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, payload, { timeout: SEND_TIMEOUT_MS });
                 replySent = true;
               } catch (errMarkdown) {
                 console.warn(`[Telegram Webhook] Failed to send message with Markdown parsing: ${errMarkdown.message}. Retrying as plain text...`);
                 try {
                   await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                     chat_id: chatId,
-                    text: reply
+                    text: String(reply)
                   }, { timeout: SEND_TIMEOUT_MS });
                   replySent = true;
                 } catch (errPlain) {
@@ -192,13 +274,14 @@ app.post('/webhook/telegram', async (req, res) => {
             console.log('[Telegram Webhook] reply_sent=false');
           }
         }); // end setImmediate
-
-      } // end if (isCommand)
-    } // end if (message && message.text)
-
-    // For non-command messages or non-message updates, ack immediately
-    if (!res.headersSent) res.sendStatus(200);
-
+      } else {
+        // Not a command and not intercepted by active session, just ACK
+        res.sendStatus(200);
+      }
+    } else {
+      // For non-command messages or non-message updates, ack immediately
+      if (!res.headersSent) res.sendStatus(200);
+    }
   } catch (err) {
     console.error('[Telegram Error]', err.message);
     if (!res.headersSent) res.sendStatus(500);

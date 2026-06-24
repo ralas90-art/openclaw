@@ -33,6 +33,8 @@ function buildHermesDailyBrief(date, options = {}) {
     approvalSummary: buildDailyApprovalSummary(targetDate),
     usageSummary: buildDailyUsageSummary(targetDate),
     recommendedActions: buildDailyRecommendedActions(targetDate),
+    prospectingSummary: buildProspectingSummary(),
+    topProspectsToday: buildTopProspectsToday(),
     safetyConfirmation: {
       runtimeFrozen: true,
       realExecutionEnabled,
@@ -224,6 +226,79 @@ function buildDailyRecommendedActions(date) {
 }
 
 /**
+ * Aggregates prospecting metrics for the daily brief.
+ * @returns {object|null}
+ */
+function buildProspectingSummary() {
+  try {
+    const reviewStore = require('../prospects/prospect-outreach-review-store');
+    const analytics = reviewStore.getPipelineAnalytics();
+    return {
+      totalReviews: analytics.total,
+      notStarted: analytics.not_started,
+      draftGenerated: analytics.draft_generated,
+      reviewed: analytics.reviewed,
+      contactedManually: analytics.contacted_manually,
+      followUpNeeded: analytics.follow_up_needed,
+      bookedCall: analytics.booked_call,
+      notInterested: analytics.not_interested,
+      dueToday: analytics.due_today
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Builds the top prospects today summary (top scored, follow-ups due, high-priority without drafts).
+ * @returns {object|null}
+ */
+function buildTopProspectsToday() {
+  try {
+    const cockpit = require('../prospects/prospect-priority-cockpit');
+    const items = cockpit.getCockpitData();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // top 5 scored prospects
+    const topScored = items.slice(0, 5).map(item => ({
+      prospectId: item.prospectId,
+      businessName: item.businessName,
+      priority: item.priority,
+      fitScore: item.fitScore
+    }));
+
+    // follow-ups due today
+    const dueToday = items
+      .filter(item => item.nextFollowUpAt && item.nextFollowUpAt.substring(0, 10) <= todayStr)
+      .map(item => ({
+        prospectId: item.prospectId,
+        businessName: item.businessName,
+        nextFollowUpAt: item.nextFollowUpAt
+      }));
+
+    // high-priority prospects without outreach drafts
+    const highNoDraft = items
+      .filter(item => item.priority === 'high' && !item.hasOutreachDraft)
+      .map(item => ({
+        prospectId: item.prospectId,
+        businessName: item.businessName
+      }));
+
+    // booked calls count
+    const bookedCallsCount = items.filter(item => item.outreachStatus === 'booked_call').length;
+
+    return {
+      topScored,
+      dueToday,
+      highNoDraft,
+      bookedCallsCount
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Converts a structured brief JSON object into visual, clean Markdown.
  * @param {object} brief
  * @returns {string} Markdown document.
@@ -265,6 +340,54 @@ function renderDailyBriefMarkdown(brief) {
       md += `*   \`${o.hermesJobId}\`: \`${o.outputPath}\` (${link})\n`;
     });
     md += `\n`;
+  }
+
+  if (brief.prospectingSummary) {
+    const ps = brief.prospectingSummary;
+    md += `## 🎯 Prospecting Pipeline Summary\n`;
+    md += `*   **Total Prospects Cataloged:** ${ps.totalReviews}\n`;
+    md += `*   **Drafts Pending Review:** ${ps.draftGenerated}\n`;
+    md += `*   **Contacted Manually:** ${ps.contactedManually}\n`;
+    md += `*   **Follow-ups Scheduled:** ${ps.followUpNeeded}\n`;
+    md += `*   **Booked Calls:** ${ps.bookedCall}\n`;
+    md += `*   **Follow-ups Due Today:** ${ps.dueToday}\n\n`;
+  }
+
+  if (brief.topProspectsToday) {
+    const tp = brief.topProspectsToday;
+    md += `## 🎯 Top Prospects Today\n`;
+    md += `### Top 5 Scored Prospects:\n`;
+    if (tp.topScored.length === 0) {
+      md += `No scored prospects found.\n\n`;
+    } else {
+      tp.topScored.forEach((p, idx) => {
+        const scoreText = p.fitScore !== null ? ` (Fit Score: ${p.fitScore}/100)` : ' (Unscored)';
+        md += `${idx + 1}. *${p.businessName}* - ${p.priority.toUpperCase()}${scoreText}\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `### Follow-ups Due Today: ${tp.dueToday.length}\n`;
+    if (tp.dueToday.length === 0) {
+      md += `No follow-ups due today.\n\n`;
+    } else {
+      tp.dueToday.forEach(p => {
+        md += `*   *${p.businessName}* (Due: ${p.nextFollowUpAt})\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `### High-Priority Without Outreach Drafts: ${tp.highNoDraft.length}\n`;
+    if (tp.highNoDraft.length === 0) {
+      md += `All high-priority prospects have outreach drafts.\n\n`;
+    } else {
+      tp.highNoDraft.forEach(p => {
+        md += `*   *${p.businessName}*\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `### Booked Calls Count: ${tp.bookedCallsCount}\n\n`;
   }
 
   md += `## 💸 LLM Usage & Cost Summary\n`;
@@ -360,6 +483,7 @@ module.exports = {
   buildDailyApprovalSummary,
   buildDailyUsageSummary,
   buildDailyRecommendedActions,
+  buildTopProspectsToday,
   renderDailyBriefMarkdown,
   saveDailyBrief
 };
