@@ -1,3 +1,4 @@
+const { routeNaturalLanguageCommand } = require('../../jarvis/natural-language-router');
 const { supabase } = require('../../lib/supabase');
 const runtimeGovernor = require('../../core/coordination/runtimeGovernor');
 const circuitBreakerRegistry = require('../../core/failover/circuitBreakerRegistry');
@@ -369,6 +370,19 @@ async function handleInboxRead(filename) {
 
 async function handleCommand(text, message) {
   if (!text) return;
+
+  if (!text.trim().startsWith('/')) {
+    const nlResult = await routeNaturalLanguageCommand(text, message);
+    console.log(`[Telegram Handlers] nl_intent_detected=${nlResult.intent || 'unknown'}`);
+    console.log(`[Telegram Handlers] mapped_command=${nlResult.command || 'none'}`);
+    if (nlResult.type === 'reply') {
+      return nlResult.text;
+    }
+    if (nlResult.type === 'command') {
+      text = nlResult.command;
+    }
+  }
+
   const parsed = parseMultilineCommand(text);
   const command = parsed.command;
 

@@ -181,6 +181,11 @@ app.post('/webhook/telegram', async (req, res) => {
 
     const message = req.body.message;
     if (message && message.text) {
+      console.log('[Telegram Webhook] update_received=true');
+      const tmpChatId = message.chat?.id?.toString();
+      console.log('[Telegram Webhook] chat_id_present=' + !!tmpChatId);
+      const tmpIsCommand = message.text.startsWith('/');
+      console.log('[Telegram Webhook] text_starts_with_slash=' + tmpIsCommand);
       const isCommand = message.text.startsWith('/');
       const commandDetected = isCommand ? message.text.split('\n')[0].split(' ')[0] : 'none';
       console.log(`[Telegram Webhook] command_detected=${commandDetected}`);
@@ -236,18 +241,22 @@ app.post('/webhook/telegram', async (req, res) => {
       const { handleSessionTextMessage } = require('./interfaces/telegram/hermes-ux-menu');
       const sessionIntercept = await handleSessionTextMessage(message);
       if (sessionIntercept) {
+        console.log('[Telegram Webhook] route_selected=menu_session');
         res.sendStatus(200);
         setImmediate(async () => {
           const botToken = process.env.TELEGRAM_BOT_TOKEN;
           if (botToken && chatId) {
-            await sendTelegramMessage(botToken, chatId, sessionIntercept);
+            console.log('[Telegram Webhook] telegram_send_attempted=true');
+            const replySent = await sendTelegramMessage(botToken, chatId, sessionIntercept);
+            console.log('[Telegram Webhook] telegram_send_success=' + !!replySent);
           }
         });
         return;
       }
 
       // C. Normal slash command processing
-      if (isCommand) {
+      if (message.text) {
+        console.log('[Telegram Webhook] route_selected=' + (message.text.startsWith('/') ? 'slash_command' : 'nl_router'));
         // ✅ ACK Telegram immediately
         res.sendStatus(200);
 
@@ -264,11 +273,14 @@ app.post('/webhook/telegram', async (req, res) => {
           }
 
           console.log(`[Telegram Webhook] handler_result_status=${handlerResultStatus}`);
+          console.log('[Telegram Webhook] response_generated=' + !!reply);
 
           if (reply && chatId) {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
             if (botToken) {
+              console.log('[Telegram Webhook] telegram_send_attempted=true');
               const replySent = await sendTelegramMessage(botToken, chatId, reply, SEND_TIMEOUT_MS);
+              console.log('[Telegram Webhook] telegram_send_success=' + !!replySent);
               console.log(`[Telegram Webhook] reply_sent=${replySent}`);
             } else {
               console.warn('[Telegram Webhook Warning] TELEGRAM_BOT_TOKEN is not configured. Reply sent: false');
