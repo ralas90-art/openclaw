@@ -431,6 +431,38 @@ async function handleCommand(text, message) {
   if (command === '/jarvis_archive_processed' || command === '/jarvisarchiveprocessed') {
     return await handleJarvisArchiveProcessed(message);
   }
+  if (command === '/jarvis_session_start' || command === '/jarvissessionstart') {
+    const parts = text.trim().split(/\s+/);
+    const slug = parts[1];
+    const textContent = text.substring(command.length + (slug ? slug.length + 1 : 0)).trim();
+    return await handleJarvisSessionStart(slug, textContent, message);
+  }
+  if (command === '/jarvis_session_update' || command === '/jarvissessionupdate') {
+    const parts = text.trim().split(/\s+/);
+    const slug = parts[1];
+    const summary = text.substring(command.length + (slug ? slug.length + 1 : 0)).trim();
+    return await handleJarvisSessionUpdate(slug, summary, message);
+  }
+  if (command === '/jarvis_session_done' || command === '/jarvissessiondone') {
+    const parts = text.trim().split(/\s+/);
+    const slug = parts[1];
+    const summary = text.substring(command.length + (slug ? slug.length + 1 : 0)).trim();
+    return await handleJarvisSessionDone(slug, summary, message);
+  }
+  if (command === '/jarvis_session_status' || command === '/jarvissessionstatus') {
+    return await handleJarvisSessionStatus(message);
+  }
+  if (command === '/jarvis_session_latest' || command === '/jarvissessionlatest') {
+    return await handleJarvisSessionLatest(message);
+  }
+  if (command === '/jarvis_session_project' || command === '/jarvissessionproject') {
+    const parts = text.trim().split(/\s+/);
+    const slug = parts[1];
+    return await handleJarvisSessionProject(slug, message);
+  }
+  if (command === '/jarvis_ingest_handoff' || command === '/jarvisingesthandoff') {
+    return await handleJarvisIngestHandoff(message);
+  }
   if (command === '/jarvis_folders' || command === '/jarvisfolders') {
     const parts = text.trim().split(/\s+/);
     const filter = parts[1];
@@ -5678,6 +5710,142 @@ async function handleCockpitNext(message) {
   });
 
   return out.trim();
+}
+
+async function handleJarvisSessionStart(slug, textContent, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_start', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_start', permCheck.reason, message);
+  }
+  if (!slug) {
+    return '❌ Error: Please specify a project slug. Example: `/jarvis_session_start septivolt`';
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const session = await workSessions.startWorkSession(slug, 'telegram', textContent);
+    return `🚀 *Work Session Started*\n\n• *Project:* \`${session.project_slug}\`\n• *Status:* \`${session.status}\`\n• *Started At:* ${new Date(session.started_at).toLocaleString()}`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisSessionUpdate(slug, summary, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_update', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_update', permCheck.reason, message);
+  }
+  if (!slug || !summary) {
+    return '❌ Error: Please specify project slug and update summary. Example: `/jarvis_session_update septivolt Added new tests`';
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const session = await workSessions.updateWorkSession(slug, summary, 'telegram');
+    return `📝 *Work Session Updated*\n\n• *Project:* \`${session.project_slug}\`\n• *Status:* \`${session.status}\`\n• *Summary:* \n${session.summary}`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisSessionDone(slug, summary, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_done', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_done', permCheck.reason, message);
+  }
+  if (!slug) {
+    return '❌ Error: Please specify a project slug. Example: `/jarvis_session_done septivolt`';
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const session = await workSessions.doneWorkSession(slug, summary, 'telegram');
+    return `🏁 *Work Session Completed*\n\n• *Project:* \`${session.project_slug}\`\n• *Status:* \`${session.status}\`\n• *Ended At:* ${new Date(session.ended_at).toLocaleString()}\n• *Final Summary:* \n${session.summary}`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisSessionStatus(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_status', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_status', permCheck.reason, message);
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const session = await workSessions.getActiveSession();
+    if (!session) {
+      return '💤 *No Active Work Session*\n\nUse `/jarvis_session_start <project_slug>` to start one.';
+    }
+    return `🧠 *Active Work Session*\n\n• *Project:* \`${session.project_slug}\`\n• *Status:* \`${session.status}\`\n• *Started At:* ${new Date(session.started_at).toLocaleString()}\n• *Summary:* \n${session.summary}`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisSessionLatest(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_latest', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_latest', permCheck.reason, message);
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const sessions = await workSessions.listWorkSessions(5);
+    if (sessions.length === 0) {
+      return '📂 *No Work Sessions Found*';
+    }
+    let md = '📂 *Latest Work Sessions*:\n\n';
+    for (const s of sessions) {
+      const date = new Date(s.created_at).toLocaleString();
+      md += `• *[${s.project_slug.toUpperCase()}]* \`${s.status}\` at ${date}\n  *Summary:* ${s.summary || 'none'}\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisSessionProject(slug, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_session_project', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_session_project', permCheck.reason, message);
+  }
+  if (!slug) {
+    return '❌ Error: Please specify a project slug. Example: `/jarvis_session_project septivolt`';
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const sessions = await workSessions.getProjectSessions(slug);
+    if (sessions.length === 0) {
+      return `📂 *No Sessions Found for Project: ${slug}*`;
+    }
+    let md = `📂 *Sessions for Project: ${slug.toUpperCase()}*:\n\n`;
+    for (const s of sessions) {
+      const date = new Date(s.created_at).toLocaleString();
+      md += `• *Status:* \`${s.status}\` at ${date}\n  *Summary:* ${s.summary || 'none'}\n\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisIngestHandoff(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_ingest_handoff', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_ingest_handoff', permCheck.reason, message);
+  }
+  const workSessions = require('../../jarvis/work-sessions');
+  try {
+    const session = await workSessions.ingestHandoffFile();
+    return `📥 *Handoff Ingested Successfully*\n\n• *Project:* \`${session.project_slug}\`\n• *Status:* \`${session.status}\`\n• *Files Changed:* \n${session.changed_files_summary || 'none'}\n• *Blockers:* \n${session.blockers || 'none'}\n• *Next Actions:* \n${session.next_actions || 'none'}`;
+  } catch (err) {
+    return `❌ Ingest Error: ${err.message}`;
+  }
 }
 
 module.exports = {

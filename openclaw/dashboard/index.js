@@ -346,7 +346,9 @@ function renderLoginPage() {
         function login() {
           const t = document.getElementById('token').value.trim();
           if (t) {
-            window.location.href = window.location.pathname + '?token=' + encodeURIComponent(t);
+            const params = new URLSearchParams(window.location.search);
+            params.set('token', t);
+            window.location.href = window.location.pathname + '?' + params.toString();
           }
         }
         // Try reading token from query or URL if passed
@@ -409,6 +411,7 @@ function renderDashboardShell(title, activeTab, content, token) {
     { id: 'trace', href: '/dashboard/trace', label: 'Trace', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>` },
     { id: 'brief', href: '/dashboard/brief', label: 'Daily Brief', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
     { id: 'usage', href: '/dashboard/usage', label: 'LLM Usage', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>` },
+    { id: 'playbook', href: '/dashboard/playbook', label: 'Playbook', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5V3.5A2.5 2.5 0 0 1 6.5 1M20 1v21H6.5"/></svg>` },
   ];
 
   let navLinksHtml = '';
@@ -3134,6 +3137,183 @@ router.get('/cockpit', protectDashboard, (req, res) => {
   `;
 
   res.send(renderDashboardShell('Prospecting Cockpit', 'cockpit', content, token));
+});
+
+// GET /dashboard/playbook - Operator Playbook
+router.get('/playbook', protectDashboard, (req, res) => {
+  const token = req.query.token;
+  const root = process.env.OPENCLAW_WORKSPACE_ROOT || path.join(__dirname, '../..');
+  const playbookPath = path.resolve(root, 'openclaw', 'ops', 'OPS1_DAILY_OPERATOR_PLAYBOOK.md');
+  let rawContent = '';
+  try {
+    rawContent = fs.readFileSync(playbookPath, 'utf8');
+  } catch (err) {
+    rawContent = `### ⚠️ Playbook File Missing\nCould not load playbook from ${playbookPath}: ${err.message}`;
+  }
+
+  // Simple Markdown to HTML parser
+  function parseMarkdownToHtml(md) {
+    if (!md) return '';
+    
+    // First, escape all raw HTML tags and characters to prevent script injection
+    let html = md
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // Convert [text](url) links safely, rendering file:// links as plain text
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+      const lowerUrl = url.toLowerCase().trim();
+      if (lowerUrl.startsWith('file:') || lowerUrl.includes('file://')) {
+        // Render file paths as plain text, not links
+        return `${text} (${url})`;
+      }
+      if (lowerUrl.startsWith('javascript:') || lowerUrl.startsWith('data:')) {
+        return text; // Strip dangerous scripting
+      }
+      return `<a href="${url}" onclick="if(this.href.startsWith('/')) appendToken(this)" style="color: var(--accent-blue); text-decoration: underline;">${text}</a>`;
+    });
+
+    // 1. GFM Alerts (> [!WARNING] etc)
+    html = html.replace(/^&gt;\s*\[!(WARNING|IMPORTANT|NOTE|TIP|CAUTION)\]\r?\n([\s\S]*?)(?=\r?\n\r?\n|\r?\n&gt;|\r?\n[^&gt;]|$)/gm, (match, type, content) => {
+      const cleanContent = content.replace(/^&gt;\s?/gm, '').trim();
+      let title = type;
+      let icon = '⚠️';
+      let border = 'rgba(245, 158, 11, 0.4)';
+      let bg = 'rgba(245, 158, 11, 0.05)';
+      if (type === 'IMPORTANT') {
+        icon = '🚨';
+        border = 'rgba(16, 185, 129, 0.4)';
+        bg = 'rgba(16, 185, 129, 0.05)';
+      } else if (type === 'NOTE') {
+        icon = 'ℹ️';
+        border = 'rgba(59, 130, 246, 0.4)';
+        bg = 'rgba(59, 130, 246, 0.05)';
+      } else if (type === 'TIP') {
+        icon = '💡';
+        border = 'rgba(139, 92, 246, 0.4)';
+        bg = 'rgba(139, 92, 246, 0.05)';
+      } else if (type === 'CAUTION') {
+        icon = '🛑';
+        border = 'rgba(239, 68, 68, 0.4)';
+        bg = 'rgba(239, 68, 68, 0.05)';
+      }
+      return `
+        <div style="border-left: 4px solid ${border}; background: ${bg}; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0 0.5rem 0.5rem 0; display: flex; align-items: start; gap: 1rem;">
+          <div style="font-size: 1.5rem;">${icon}</div>
+          <div>
+            <h4 style="margin: 0; text-transform: uppercase; font-weight: bold; font-size: 0.85rem; letter-spacing: 0.05em; color: white;">${title}</h4>
+            <p style="margin: 0.25rem 0 0 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">${cleanContent}</p>
+          </div>
+        </div>
+      `;
+    });
+
+    // 2. Flowchart representation for mermaid
+    html = html.replace(/```mermaid([\s\S]*?)```/g, () => {
+      return `
+        <div style="display: flex; flex-direction: column; gap: 1rem; margin: 1.5rem 0; padding: 1.5rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 0.5rem;">
+          <h4 style="margin: 0 0 1rem 0; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">🔄 Workflow Pipeline Flowchart</h4>
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: center;">
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">1. Morning Check</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">2. Discovery</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">3. Research & Score</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">4. Draft Gen</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600; border-color: var(--accent-blue); color: var(--accent-blue);">5. Manual Contact</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">6. Track Outcome</div>
+            <span style="color: var(--text-secondary); font-weight: bold;">&rarr;</span>
+            <div style="flex: 1; min-width: 120px; padding: 0.75rem; background: #161131; border: 1px solid var(--border); border-radius: 0.5rem; text-align: center; font-size: 0.85rem; font-weight: 600;">7. Review Log</div>
+          </div>
+        </div>
+      `;
+    });
+
+    // 3. Code Blocks
+    html = html.replace(/```(.*?)\r?\n([\s\S]*?)```/g, (match, lang, code) => {
+      return `<pre style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; font-family: monospace; font-size: 0.85rem; color: #cbd5e1; overflow-x: auto; margin: 1rem 0;"><code>${code.trim()}</code></pre>`;
+    });
+
+    // 4. Inline Code
+    html = html.replace(/`([^`\n]+)`/g, '<code style="background: rgba(255,255,255,0.06); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.9em; color: var(--accent-blue);">$1</code>');
+
+    // 5. Headings
+    html = html.replace(/^# (.*$)/gm, '<h1 style="font-size: 1.8rem; font-weight: 700; color: white; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-top: 2rem; margin-bottom: 1rem;">$1</h1>');
+    html = html.replace(/^## (.*$)/gm, '<h2 style="font-size: 1.4rem; font-weight: 600; color: #38bdf8; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-top: 1.8rem; margin-bottom: 0.8rem;">$1</h2>');
+    html = html.replace(/^### (.*$)/gm, '<h3 style="font-size: 1.15rem; font-weight: 600; color: white; margin-top: 1.5rem; margin-bottom: 0.6rem;">$1</h3>');
+
+    // 6. Bold & Italic
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong style="color: white; font-weight: 600;">$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em style="color: var(--text-secondary);">$1</em>');
+
+    // 7. Unordered Lists
+    const lines = html.split('\n');
+    let inList = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(/^[\t ]*\* (.*$)/);
+      if (match) {
+        let content = match[1];
+        if (!inList) {
+          lines[i] = '<ul style="margin: 0.5rem 0 1rem 0; padding-left: 1.5rem; line-height: 1.6;">\n<li style="margin-bottom: 0.35rem; color: var(--text-primary);">' + content + '</li>';
+          inList = true;
+        } else {
+          lines[i] = '<li style="margin-bottom: 0.35rem; color: var(--text-primary);">' + content + '</li>';
+        }
+      } else {
+        if (inList) {
+          lines[i] = '</ul>\n' + line;
+          inList = false;
+        }
+      }
+    }
+    html = lines.join('\n');
+
+    // 8. Paragraphs
+    html = html.split(/\r?\n\r?\n/).map(p => {
+      const trimmed = p.trim();
+      if (!trimmed) return '';
+      if (trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<li') || trimmed.startsWith('<div') || trimmed.startsWith('<pre') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<table')) {
+        return trimmed;
+      }
+      return `<p style="margin: 0.8rem 0; line-height: 1.6; color: var(--text-primary); font-size: 0.95rem;">${trimmed}</p>`;
+    }).join('\n');
+
+    return html;
+  }
+
+  const formattedHtml = parseMarkdownToHtml(rawContent);
+
+  const content = `
+    <div class="panel" style="margin-bottom: 2rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+        <div>
+          <h2 style="margin: 0; font-size: 1.8rem; background: linear-gradient(135deg, #22D3EE 0%, #0284C7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            📋 Daily Operator Playbook
+          </h2>
+          <p style="color: var(--text-secondary); margin: 0.25rem 0 0 0; font-size: 0.9rem;">
+            Step-by-step guidelines for finding, scoring, and manually contacting B2B prospects.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <span style="font-size: 0.85rem; color: var(--text-secondary); font-family: monospace;">openclaw/ops/OPS1_LIVE_USAGE_METRICS_TEMPLATE.md</span>
+          <a href="/dashboard/cockpit" onclick="appendToken(this)" class="btn btn-primary" style="height: 40px; display: inline-flex; align-items: center;">Go to Cockpit</a>
+        </div>
+      </div>
+
+      <div class="playbook-content" style="max-width: 900px; margin: 0 auto; color: var(--text-primary);">
+        ${formattedHtml}
+      </div>
+    </div>
+  `;
+
+  res.send(renderDashboardShell('Daily Operator Playbook', 'playbook', content, token));
 });
 
 module.exports = {

@@ -15,12 +15,15 @@ export default function JarvisDashboard() {
   const [connectors, setConnectors] = useState([]);
   const [mobileUploads, setMobileUploads] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [workSessions, setWorkSessions] = useState([]);
 
   // Selection States
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [selectedPriority, setSelectedPriority] = useState(null);
   const [activeTab, setActiveTab] = useState('brief'); // brief | priorities | approvals | connectors | mobile | projects
   const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState('');
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -45,14 +48,15 @@ export default function JarvisDashboard() {
     const headers = { 'Authorization': `Bearer ${token}` };
 
     try {
-      const [statsRes, briefRes, prioritiesRes, approvalsRes, connectorsRes, mobileRes, projectsRes] = await Promise.all([
+      const [statsRes, briefRes, prioritiesRes, approvalsRes, connectorsRes, mobileRes, projectsRes, sessionsRes] = await Promise.all([
         fetch('/api/jarvis/approval-stats', { headers }),
         fetch('/api/jarvis/daily-brief', { headers }),
         fetch('/api/jarvis/priorities', { headers }),
         fetch('/api/jarvis/approvals', { headers }),
         fetch('/api/jarvis/connectors', { headers }),
         fetch('/api/jarvis/mobile-uploads', { headers }),
-        fetch('/api/jarvis/projects', { headers })
+        fetch('/api/jarvis/projects', { headers }),
+        fetch('/api/jarvis/work-sessions', { headers })
       ]);
 
       if (statsRes.status === 401 || briefRes.status === 401) {
@@ -68,6 +72,7 @@ export default function JarvisDashboard() {
       if (connectorsRes.ok) setConnectors(await connectorsRes.json());
       if (mobileRes.ok) setMobileUploads(await mobileRes.json());
       if (projectsRes.ok) setProjects(await projectsRes.json());
+      if (sessionsRes.ok) setWorkSessions(await sessionsRes.json());
 
     } catch (err) {
       console.error(err);
@@ -98,6 +103,8 @@ export default function JarvisDashboard() {
   // Approval Mutation Handlers
   const handleApprove = async (id) => {
     const headers = { 'Authorization': `Bearer ${token}` };
+    setSubmitting(true);
+    setModalError('');
     try {
       const res = await fetch(`/api/jarvis/approvals/${id}/approve`, { method: 'POST', headers });
       const data = await res.json();
@@ -106,15 +113,19 @@ export default function JarvisDashboard() {
         setSelectedApproval(null);
         fetchAllData();
       } else {
-        setError(data.error || 'Approval failed');
+        setModalError(data.error || 'Approval failed');
       }
     } catch (err) {
-      setError(err.message);
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleReject = async (id) => {
     const headers = { 'Authorization': `Bearer ${token}` };
+    setSubmitting(true);
+    setModalError('');
     try {
       const res = await fetch(`/api/jarvis/approvals/${id}/reject`, { method: 'POST', headers });
       const data = await res.json();
@@ -123,15 +134,19 @@ export default function JarvisDashboard() {
         setSelectedApproval(null);
         fetchAllData();
       } else {
-        setError(data.error || 'Rejection failed');
+        setModalError(data.error || 'Rejection failed');
       }
     } catch (err) {
-      setError(err.message);
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleCancel = async (id) => {
     const headers = { 'Authorization': `Bearer ${token}` };
+    setSubmitting(true);
+    setModalError('');
     try {
       const res = await fetch(`/api/jarvis/approvals/${id}/cancel`, { method: 'POST', headers });
       const data = await res.json();
@@ -140,16 +155,20 @@ export default function JarvisDashboard() {
         setSelectedApproval(null);
         fetchAllData();
       } else {
-        setError(data.error || 'Cancellation failed');
+        setModalError(data.error || 'Cancellation failed');
       }
     } catch (err) {
-      setError(err.message);
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   // Priority Action Propose Handler
   const handlePropose = async (priorityId) => {
     const headers = { 'Authorization': `Bearer ${token}` };
+    setSubmitting(true);
+    setModalError('');
     try {
       const res = await fetch(`/api/jarvis/priorities/${priorityId}/propose`, { method: 'POST', headers });
       const data = await res.json();
@@ -158,15 +177,18 @@ export default function JarvisDashboard() {
         setSelectedPriority(null);
         fetchAllData();
       } else {
-        setError(data.error || 'Proposal creation failed');
+        setModalError(data.error || 'Proposal creation failed');
       }
     } catch (err) {
-      setError(err.message);
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleFetchApprovalDetails = async (id) => {
     const headers = { 'Authorization': `Bearer ${token}` };
+    setModalError('');
     try {
       const res = await fetch(`/api/jarvis/approvals/${id}`, { headers });
       if (res.ok) {
@@ -298,7 +320,8 @@ export default function JarvisDashboard() {
           { id: 'approvals', label: 'Approvals Queue', icon: <ListTodo size={16} /> },
           { id: 'connectors', label: 'Cloud Connectors', icon: <Database size={16} /> },
           { id: 'mobile', label: 'Mobile Inbox', icon: <Smartphone size={16} /> },
-          { id: 'projects', label: 'Projects', icon: <History size={16} /> }
+          { id: 'projects', label: 'Projects', icon: <History size={16} /> },
+          { id: 'sessions', label: 'Work Sessions', icon: <History size={16} /> }
         ].map(t => (
           <button
             key={t.id}
@@ -378,14 +401,33 @@ export default function JarvisDashboard() {
               <div className="modal-overlay">
                 <div className="modal-content" style={{ width: '500px' }}>
                   <h3 style={{ margin: '0 0 15px', color: '#fff' }}>Propose Action</h3>
+                  
+                  {modalError && (
+                    <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '15px' }}>
+                      ⚠️ {modalError}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                     <p><strong>Heading:</strong> {selectedPriority.heading}</p>
                     <p><strong>Type:</strong> {selectedPriority.type}</p>
                     <p><strong>Priority ID:</strong> <code>{selectedPriority.priority_id}</code></p>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                    <button onClick={() => handlePropose(selectedPriority.priority_id)} className="btn btn-primary">Confirm Proposal</button>
-                    <button onClick={() => setSelectedPriority(null)} className="btn">Cancel</button>
+                    <button 
+                      onClick={() => handlePropose(selectedPriority.priority_id)} 
+                      className="btn btn-primary"
+                      disabled={submitting}
+                    >
+                      {submitting ? 'Proposing...' : 'Confirm Proposal'}
+                    </button>
+                    <button 
+                      onClick={() => { setSelectedPriority(null); setModalError(''); }} 
+                      className="btn"
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               </div>
@@ -467,14 +509,38 @@ export default function JarvisDashboard() {
                       </div>
                     )}
                   </div>
+                  {modalError && (
+                    <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '15px', width: '100%', boxSizing: 'border-box' }}>
+                      ⚠️ {modalError}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                     {selectedApproval.status === 'pending' && (
                       <>
-                        <button onClick={() => { handleApprove(selectedApproval.id); }} className="btn btn-primary">Approve & Execute</button>
-                        <button onClick={() => { handleReject(selectedApproval.id); }} className="btn btn-danger">Reject</button>
+                        <button 
+                          onClick={() => { handleApprove(selectedApproval.id); }} 
+                          className="btn btn-primary"
+                          disabled={submitting}
+                        >
+                          {submitting ? 'Executing...' : 'Approve & Execute'}
+                        </button>
+                        <button 
+                          onClick={() => { handleReject(selectedApproval.id); }} 
+                          className="btn btn-danger"
+                          disabled={submitting}
+                        >
+                          Reject
+                        </button>
                       </>
                     )}
-                    <button onClick={() => setSelectedApproval(null)} className="btn">Close</button>
+                    <button 
+                      onClick={() => { setSelectedApproval(null); setModalError(''); }} 
+                      className="btn"
+                      disabled={submitting}
+                    >
+                      Close
+                    </button>
                   </div>
                 </div>
               </div>
@@ -528,6 +594,8 @@ export default function JarvisDashboard() {
                       <th>Intake</th>
                       <th>Type</th>
                       <th>Content</th>
+                      <th>Caption</th>
+                      <th>Lang</th>
                       <th>Created</th>
                       <th>Status</th>
                     </tr>
@@ -546,6 +614,8 @@ export default function JarvisDashboard() {
                             upload.media_url && <a href={upload.media_url} target="_blank" rel="noopener noreferrer">View Media</a>
                           )}
                         </td>
+                        <td>{upload.caption || '-'}</td>
+                        <td><code>{upload.language || '-'}</code></td>
                         <td>{new Date(upload.created_at).toLocaleString()}</td>
                         <td>
                           <span className={`badge ${upload.processed ? 'success' : 'warning'}`}>
@@ -588,6 +658,93 @@ export default function JarvisDashboard() {
               </div>
             ) : (
               <div className="empty-state">No projects loaded.</div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 7: Work Sessions */}
+        {activeTab === 'sessions' && (
+          <div>
+            <h2 style={{ color: '#fff', fontSize: '1.2rem', margin: '0 0 15px' }}>🧠 Current Project Context & Work Sessions</h2>
+            
+            {/* Active Session Card */}
+            <div style={{ background: '#0d1117', border: '1px solid #30363d', padding: '20px', borderRadius: '6px', marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 15px', color: '#58a6ff', fontSize: '1.1rem' }}>Active Work Context</h3>
+              {workSessions.find(s => s.status === 'active' || s.status === 'updated') ? (() => {
+                const active = workSessions.find(s => s.status === 'active' || s.status === 'updated');
+                return (
+                  <div>
+                    <p style={{ margin: '5px 0' }}><strong>Active Project:</strong> <span className="badge success">{active.project_slug.toUpperCase()}</span></p>
+                    <p style={{ margin: '5px 0' }}><strong>Status:</strong> <code>{active.status}</code></p>
+                    <p style={{ margin: '5px 0' }}><strong>Started At:</strong> {new Date(active.started_at).toLocaleString()}</p>
+                    <p style={{ margin: '10px 0 5px' }}><strong>Summary:</strong></p>
+                    <pre style={{ background: '#161b22', padding: '10px', borderRadius: '4px', border: '1px solid #30363d', whiteSpace: 'pre-wrap', color: '#c9d1d9', fontSize: '0.85rem' }}>{active.summary || 'No summary'}</pre>
+                    {active.blockers && <p style={{ margin: '5px 0', color: '#f85149' }}><strong>Blocker:</strong> {active.blockers}</p>}
+                    {active.next_actions && <p style={{ margin: '5px 0', color: '#58a6ff' }}><strong>Next Action:</strong> {active.next_actions}</p>}
+                  </div>
+                );
+              })() : (
+                <p style={{ color: '#8b949e', margin: 0 }}>No active work session currently.</p>
+              )}
+            </div>
+
+            {/* Consolidated Open Blockers & Next Actions */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div style={{ background: '#0d1117', border: '1px solid #30363d', padding: '20px', borderRadius: '6px' }}>
+                <h3 style={{ margin: '0 0 15px', color: '#f85149', fontSize: '1.1rem' }}>Open Blockers</h3>
+                {workSessions.filter(s => s.blockers && s.blockers.trim() !== '' && s.blockers !== 'None').length > 0 ? (
+                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    {workSessions.filter(s => s.blockers && s.blockers.trim() !== '' && s.blockers !== 'None').map(s => (
+                      <li key={s.id} style={{ margin: '8px 0', color: '#c9d1d9' }}>
+                        <strong>[{s.project_slug.toUpperCase()}]:</strong> {s.blockers}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: '#8b949e', margin: 0 }}>No active session blockers.</p>
+                )}
+              </div>
+              <div style={{ background: '#0d1117', border: '1px solid #30363d', padding: '20px', borderRadius: '6px' }}>
+                <h3 style={{ margin: '0 0 15px', color: '#58a6ff', fontSize: '1.1rem' }}>Next Actions</h3>
+                {workSessions.filter(s => s.next_actions && s.next_actions.trim() !== '' && s.next_actions !== 'None').length > 0 ? (
+                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    {workSessions.filter(s => s.next_actions && s.next_actions.trim() !== '' && s.next_actions !== 'None').map(s => (
+                      <li key={s.id} style={{ margin: '8px 0', color: '#c9d1d9' }}>
+                        <strong>[{s.project_slug.toUpperCase()}]:</strong> {s.next_actions}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: '#8b949e', margin: 0 }}>No pending session actions.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Sessions History List */}
+            <h3 style={{ margin: '20px 0 10px', color: '#fff', fontSize: '1.1rem' }}>History of Antigravity Work Sessions</h3>
+            {workSessions.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {workSessions.map(session => (
+                  <div key={session.id} className="card" style={{ background: '#0d1117' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className="badge success">{session.project_slug.toUpperCase()}</span>
+                        <span className={`badge ${session.status === 'completed' ? 'muted' : 'warning'}`}>{session.status}</span>
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: '#8b949e' }}>Source: {session.source} | Started: {new Date(session.started_at || session.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p style={{ margin: '5px 0', color: '#c9d1d9', fontSize: '0.9rem' }}>{session.summary || 'No summary'}</p>
+                    {session.changed_files_summary && (
+                      <p style={{ margin: '5px 0 0', color: '#8b949e', fontSize: '0.8rem' }}><strong>Changed Files:</strong> {session.changed_files_summary}</p>
+                    )}
+                    {session.tests_run_summary && (
+                      <p style={{ margin: '2px 0 0', color: '#8b949e', fontSize: '0.8rem' }}><strong>Tests:</strong> {session.tests_run_summary}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">No work sessions recorded.</div>
             )}
           </div>
         )}

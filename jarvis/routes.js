@@ -509,4 +509,88 @@ router.get('/priorities', requireAdminToken, async (req, res) => {
   }
 });
 
+const workSessions = require('./work-sessions');
+
+// GET /api/jarvis/work-sessions
+router.get('/work-sessions', requireAdminToken, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '10', 10);
+    const sessions = await workSessions.listWorkSessions(limit);
+    return res.status(200).json(sessions);
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/jarvis/work-sessions/latest
+router.get('/work-sessions/latest', requireAdminToken, async (req, res) => {
+  try {
+    const session = await workSessions.getActiveSession();
+    return res.status(200).json(session || { message: 'No active session' });
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/jarvis/work-sessions/project/:project_slug
+router.get('/work-sessions/project/:project_slug', requireAdminToken, async (req, res) => {
+  try {
+    const slug = req.params.project_slug;
+    const sessions = await workSessions.getProjectSessions(slug);
+    return res.status(200).json(sessions);
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/work-sessions/start
+router.post('/work-sessions/start', requireAdminToken, async (req, res) => {
+  try {
+    const { project_slug, source, text_content } = req.body;
+    const session = await workSessions.startWorkSession(project_slug, source || 'dashboard', text_content);
+    return res.status(201).json(session);
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/work-sessions/update
+router.post('/work-sessions/update', requireAdminToken, async (req, res) => {
+  try {
+    const { project_slug, summary, source } = req.body;
+    const session = await workSessions.updateWorkSession(project_slug, summary, source || 'dashboard');
+    return res.status(200).json(session);
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/work-sessions/done
+router.post('/work-sessions/done', requireAdminToken, async (req, res) => {
+  try {
+    const { project_slug, summary, source } = req.body;
+    const session = await workSessions.doneWorkSession(project_slug, summary, source || 'dashboard');
+    return res.status(200).json(session);
+  } catch (err) {
+    console.error('[WorkSessions API Error]', err.message);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/jarvis/handoff/ingest
+router.post('/handoff/ingest', requireAdminToken, async (req, res) => {
+  try {
+    const session = await workSessions.ingestHandoffFile();
+    return res.status(200).json({ success: true, message: 'Handoff file ingested successfully', session });
+  } catch (err) {
+    console.error('[Handoff Ingest API Error]', err.message);
+    return res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

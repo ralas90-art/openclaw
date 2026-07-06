@@ -171,7 +171,10 @@ async function authenticateMobileToken(req, res, next) {
  */
 async function handleMobileIntake(req, res) {
   try {
-    const allowedFields = ['intake_source', 'task_type', 'project_slug', 'text_content', 'media_url', 'notes'];
+    const { ensureWorkSessionsTableExists } = require('./work-sessions');
+    await ensureWorkSessionsTableExists();
+
+    const allowedFields = ['intake_source', 'task_type', 'project_slug', 'text_content', 'media_url', 'notes', 'caption', 'language'];
     const payload = {};
     
     // Strip unknown fields
@@ -181,16 +184,16 @@ async function handleMobileIntake(req, res) {
       }
     }
     
-    const { intake_source, task_type, project_slug, text_content, media_url, notes } = payload;
+    const { intake_source, task_type, project_slug, text_content, media_url, notes, caption, language } = payload;
     
     // 1. Validate intake_source
-    const allowedSources = ['shortcut', 'sharesheet', 'siri'];
+    const allowedSources = ['shortcut', 'sharesheet', 'siri', 'ios_shortcut', 'telegram', 'dashboard'];
     if (!intake_source || !allowedSources.includes(intake_source)) {
       return res.status(400).json({ error: `Bad Request: Invalid intake_source. Must be one of: ${allowedSources.join(', ')}` });
     }
     
     // 2. Validate task_type
-    const allowedTaskTypes = ['text', 'screenshot', 'photo'];
+    const allowedTaskTypes = ['text', 'screenshot', 'photo', 'link', 'project_update', 'work_session_update'];
     if (!task_type || !allowedTaskTypes.includes(task_type)) {
       return res.status(400).json({ error: `Bad Request: Invalid task_type. Must be one of: ${allowedTaskTypes.join(', ')}` });
     }
@@ -235,16 +238,18 @@ async function handleMobileIntake(req, res) {
     
     // 6. Insert upload record (processed explicitly set to false)
     const rows = await queryDb(
-      `INSERT INTO jarvis_mobile_uploads (intake_source, task_type, project_slug, text_content, media_url, notes, processed)
-       VALUES ($1, $2, $3, $4, $5, $6, false)
-       RETURNING id, intake_source, task_type, project_slug, text_content, media_url, notes, processed, created_at`,
+      `INSERT INTO jarvis_mobile_uploads (intake_source, task_type, project_slug, text_content, media_url, notes, processed, caption, language)
+       VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8)
+       RETURNING id, intake_source, task_type, project_slug, text_content, media_url, notes, processed, caption, language, created_at`,
       [
         intake_source,
         task_type,
         cleanSlug,
         text_content ? text_content.trim() : null,
         media_url ? media_url.trim() : null,
-        notes ? notes.trim() : null
+        notes ? notes.trim() : null,
+        caption ? caption.trim() : null,
+        language ? language.trim().toLowerCase() : null
       ]
     );
     

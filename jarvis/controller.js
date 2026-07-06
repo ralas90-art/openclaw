@@ -184,6 +184,35 @@ async function getDailyBrief(refresh = false) {
 
   md += intelSection;
 
+  // Section: Current Work Context
+  let workContextSection = `## 🧠 Current Work Context\n`;
+  try {
+    const workSessions = require('./work-sessions');
+    const activeSession = await workSessions.getActiveSession();
+    if (activeSession) {
+      workContextSection += `- Active project: ${activeSession.project_slug.toUpperCase()}\n`;
+      workContextSection += `- Last update: ${activeSession.summary || 'No update summary'}\n`;
+      workContextSection += `- Blocker: ${activeSession.blockers || 'No active blockers recorded'}\n`;
+      workContextSection += `- Next action: ${activeSession.next_actions || 'No pending next actions recorded'}\n`;
+    } else {
+      const latestSessions = await workSessions.listWorkSessions(1);
+      if (latestSessions.length > 0) {
+        const latest = latestSessions[0];
+        workContextSection += `- Latest project: ${latest.project_slug.toUpperCase()}\n`;
+        workContextSection += `- Last update: ${latest.summary || 'No update summary'}\n`;
+        workContextSection += `- Blocker: ${latest.blockers || 'No active blockers recorded'}\n`;
+        workContextSection += `- Next action: ${latest.next_actions || 'No pending next actions recorded'}\n`;
+      } else {
+        workContextSection += `- No active work session.\n`;
+      }
+    }
+  } catch (err) {
+    console.error('[JarvisController] Failed to query work session context for brief:', err.message);
+    workContextSection += `- Error querying active work context: ${err.message}\n`;
+  }
+  workContextSection += `\n`;
+  md += workContextSection;
+
   // Section A: Completed Work
   md += `## 🏆 Completed Work (Last 24 Hours)\n`;
   if (completedTasks.length === 0 && hermesCompleted === 0) {

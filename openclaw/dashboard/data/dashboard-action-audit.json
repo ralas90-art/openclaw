@@ -440,5 +440,70 @@
     "metadata": {
       "denialReason": "missing_dashboard_token"
     }
+  },
+  {
+    "actionId": "act_20260624045805_034614",
+    "actionType": "access",
+    "hermesJobId": null,
+    "approvalId": null,
+    "actor": "ip_hash_eff8e7ca506627fe",
+    "timestamp": "2026-06-24T04:58:05.716Z",
+    "resultStatus": "denied",
+    "safeMessage": "missing_dashboard_token",
+    "metadata": {
+      "denialReason": "missing_dashboard_token"
+    }
+  },
+  {
+    "actionId": "act_20260624050138_b97c9c",
+    "actionType": "access",
+    "hermesJobId": null,
+    "approvalId": null,
+    "actor": "ip_hash_eff8e7ca506627fe",
+    "timestamp": "2026-06-24T05:01:38.617Z",
+    "resultStatus": "denied",
+    "safeMessage": "missing_dashboard_token",
+    "metadata": {
+      "denialReason": "missing_dashboard_token"
+    }
+  },
+  {
+    "actionId": "act_20260624114938_d7a85d",
+    "actionType": "access",
+    "hermesJobId": null,
+    "approvalId": null,
+    "actor": "ip_hash_eff8e7ca506627fe",
+    "timestamp": "2026-06-24T11:49:38.024Z",
+    "resultStatus": "denied",
+    "safeMessage": "missing_dashboard_token",
+    "metadata": {
+      "denialReason": "missing_dashboard_token"
+    }
+  },
+  {
+    "actionId": "act_20260624115414_e865fb",
+    "actionType": "access",
+    "hermesJobId": null,
+    "approvalId": null,
+    "actor": "ip_hash_eff8e7ca506627fe",
+    "timestamp": "2026-06-24T11:54:14.381Z",
+    "resultStatus": "denied",
+    "safeMessage": "missing_dashboard_token",
+    "metadata": {
+      "denialReason": "missing_dashboard_token"
+    }
+  },
+  {
+    "actionId": "act_20260624122742_511294",
+    "actionType": "access",
+    "hermesJobId": null,
+    "approvalId": null,
+    "actor": "ip_hash_eff8e7ca506627fe",
+    "timestamp": "2026-06-24T12:27:42.772Z",
+    "resultStatus": "denied",
+    "safeMessage": "missing_dashboard_token",
+    "metadata": {
+      "denialReason": "missing_dashboard_token"
+    }
   }
 ]
