@@ -299,8 +299,7 @@ router.get('/google/callback', async (req, res) => {
       return res.status(400).send(
         `<h1>Missing Refresh Token</h1>` +
         `<p>Google did not return a refresh token. This happens if you have already authorized this application.</p>` +
-        `<p>Please return to Telegram and reconnect using the <strong>force</strong> option, or click: </p>` +
-        `<p><a href="/api/jarvis/google/connect?connector=${connectorId}&token=${process.env.INTERNAL_ADMIN_TOKEN}&force=true">Force Consent & Reconnect</a></p>`
+        `<p>Please return to Telegram and reconnect using the <strong>force</strong> option (e.g. <code>/jarvis_reconnect_google ${connectorId} force</code>).</p>`
       );
     }
 
@@ -333,122 +332,6 @@ router.get('/google/callback', async (req, res) => {
 });
 
 const crypto = require('crypto');
-
-// Single-use Ticket & Session Store
-const ticketStore = new Map(); // ticket -> { expiresAt, createdBy }
-const sessionStore = new Map(); // sessionToken -> { expiresAt, createdBy }
-
-// Prune expired tickets/sessions periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [t, data] of ticketStore.entries()) {
-    if (now > data.expiresAt) ticketStore.delete(t);
-  }
-  for (const [s, data] of sessionStore.entries()) {
-    if (now > data.expiresAt) sessionStore.delete(s);
-  }
-}, 60000);
-
-function parseCookies(req) {
-  const list = {};
-  const rc = req.headers.cookie;
-  if (rc) {
-    rc.split(';').forEach(cookie => {
-      const parts = cookie.split('=');
-      list[parts.shift().trim()] = decodeURIComponent(parts.join('='));
-    });
-  }
-  return list;
-}
-
-function issueTicket(createdBy = 'admin') {
-  const ticket = crypto.randomBytes(24).toString('hex');
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
-  ticketStore.set(ticket, { expiresAt, createdBy });
-  return { ticket, expiresAt };
-}
-
-function exchangeTicket(ticket) {
-  if (!ticket || !ticketStore.has(ticket)) {
-    return { error: 'Invalid or expired auth ticket', status: 401 };
-  }
-  const ticketData = ticketStore.get(ticket);
-  ticketStore.delete(ticket); // Single-use guarantee!
-
-  if (Date.now() > ticketData.expiresAt) {
-    return { error: 'Auth ticket has expired', status: 401 };
-  }
-
-  const sessionToken = crypto.randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-  sessionStore.set(sessionToken, { expiresAt, createdBy: ticketData.createdBy });
-
-  return { sessionToken, expiresAt };
-}
-
-function isValidSession(token) {
-  if (!token) return false;
-  if (process.env.INTERNAL_ADMIN_TOKEN && token === process.env.INTERNAL_ADMIN_TOKEN) {
-    return true;
-  }
-  if (sessionStore.has(token)) {
-    const s = sessionStore.get(token);
-    if (Date.now() < s.expiresAt) {
-      return true;
-    } else {
-      sessionStore.delete(token);
-    }
-  }
-  return false;
-}
-
-// POST /api/jarvis/auth/exchange-ticket
-router.post('/auth/exchange-ticket', async (req, res) => {
-  const { ticket } = req.body || {};
-  const result = exchangeTicket(ticket);
-  if (result.error) {
-    return res.status(result.status).json({ error: result.error });
-  }
-
-  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-  res.setHeader(
-    'Set-Cookie',
-    `jarvis_session=${result.sessionToken}; Path=/; HttpOnly; ${isSecure ? 'Secure;' : ''} SameSite=Lax; Max-Age=86400`
-  );
-
-  return res.status(200).json({
-    success: true,
-    token: result.sessionToken,
-    expires_in: 86400
-  });
-});
-
-// 1. Internal Admin Token Guard for dashboard endpoints
-function requireAdminToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  const headerToken = authHeader && authHeader.split(' ')[1];
-  const queryToken = req.query.token;
-  const cookies = parseCookies(req);
-  const cookieToken = cookies.jarvis_session;
-
-  const token = headerToken || queryToken || cookieToken;
-
-  if (isValidSession(token)) {
-    return next();
-  }
-  return res.status(401).json({ error: "Unauthorized" });
-}
-
-// POST /api/jarvis/auth/issue-ticket
-router.post('/auth/issue-ticket', requireAdminToken, async (req, res) => {
-  const { ticket, expiresAt } = issueTicket('admin');
-  return res.status(200).json({
-    success: true,
-    ticket,
-    expires_at: new Date(expiresAt).toISOString(),
-    expires_in: 300
-  });
-});
 
 function sanitizeSecretKeywords(str) {
   if (!str) return str;
@@ -486,7 +369,7 @@ function sanitizeApprovalForDisplay(r) {
 }
 
 // GET /api/jarvis/approvals
-router.get('/approvals', requireAdminToken, async (req, res) => {
+router.get('/approvals', authenticateAdminSession, async (req, res) => {
   try {
     const { queryDb, cleanupExpiredApprovals } = require('./controller');
     await cleanupExpiredApprovals();
@@ -523,7 +406,7 @@ router.get('/approvals', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/approvals/:id
-router.get('/approvals/:id', requireAdminToken, async (req, res) => {
+router.get('/approvals/:id', authenticateAdminSession, async (req, res) => {
   try {
     const { id } = req.params;
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -555,7 +438,7 @@ router.get('/approvals/:id', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/approvals/:id/approve
-router.post('/approvals/:id/approve', requireAdminToken, async (req, res) => {
+router.post('/approvals/:id/approve', authenticateAdminSession, async (req, res) => {
   const { id } = req.params;
   try {
     const { approveRequest, executeApprovedAction } = require('./controller');
@@ -569,7 +452,7 @@ router.post('/approvals/:id/approve', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/approvals/:id/reject
-router.post('/approvals/:id/reject', requireAdminToken, async (req, res) => {
+router.post('/approvals/:id/reject', authenticateAdminSession, async (req, res) => {
   const { id } = req.params;
   try {
     const { rejectApproval } = require('./controller');
@@ -582,7 +465,7 @@ router.post('/approvals/:id/reject', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/approvals/:id/cancel
-router.post('/approvals/:id/cancel', requireAdminToken, async (req, res) => {
+router.post('/approvals/:id/cancel', authenticateAdminSession, async (req, res) => {
   const { id } = req.params;
   try {
     const { cancelApproval } = require('./controller');
@@ -595,7 +478,7 @@ router.post('/approvals/:id/cancel', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/priorities/:id/propose
-router.post('/priorities/:id/propose', requireAdminToken, async (req, res) => {
+router.post('/priorities/:id/propose', authenticateAdminSession, async (req, res) => {
   const { id } = req.params;
   try {
     const { proposeAction } = require('./controller');
@@ -609,7 +492,7 @@ router.post('/priorities/:id/propose', requireAdminToken, async (req, res) => {
 
 
 // GET /api/jarvis/approval-stats
-router.get('/approval-stats', requireAdminToken, async (req, res) => {
+router.get('/approval-stats', authenticateAdminSession, async (req, res) => {
   try {
     const { queryDb, cleanupExpiredApprovals } = require('./controller');
     await cleanupExpiredApprovals();
@@ -666,7 +549,7 @@ router.get('/approval-stats', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/connectors
-router.get('/connectors', requireAdminToken, async (req, res) => {
+router.get('/connectors', authenticateAdminSession, async (req, res) => {
   try {
     const { listConnectorsStatus } = require('./connectors-summary');
     const connectors = await listConnectorsStatus();
@@ -678,7 +561,7 @@ router.get('/connectors', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/projects
-router.get('/projects', requireAdminToken, async (req, res) => {
+router.get('/projects', authenticateAdminSession, async (req, res) => {
   try {
     const { queryDb } = require('./controller');
     const rows = await queryDb("SELECT * FROM jarvis_projects ORDER BY created_at DESC;");
@@ -690,7 +573,7 @@ router.get('/projects', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/mobile-uploads
-router.get('/mobile-uploads', requireAdminToken, async (req, res) => {
+router.get('/mobile-uploads', authenticateAdminSession, async (req, res) => {
   try {
     const { queryDb } = require('./controller');
     const rows = await queryDb("SELECT * FROM jarvis_mobile_uploads ORDER BY created_at DESC LIMIT 50;");
@@ -702,7 +585,7 @@ router.get('/mobile-uploads', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/priorities
-router.get('/priorities', requireAdminToken, async (req, res) => {
+router.get('/priorities', authenticateAdminSession, async (req, res) => {
   try {
     const { getPriorityIntelligence } = require('./intelligence');
     const intel = await getPriorityIntelligence();
@@ -716,7 +599,7 @@ router.get('/priorities', requireAdminToken, async (req, res) => {
 const workSessions = require('./work-sessions');
 
 // GET /api/jarvis/work-sessions
-router.get('/work-sessions', requireAdminToken, async (req, res) => {
+router.get('/work-sessions', authenticateAdminSession, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit || '10', 10);
     const sessions = await workSessions.listWorkSessions(limit);
@@ -728,7 +611,7 @@ router.get('/work-sessions', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/work-sessions/latest
-router.get('/work-sessions/latest', requireAdminToken, async (req, res) => {
+router.get('/work-sessions/latest', authenticateAdminSession, async (req, res) => {
   try {
     const session = await workSessions.getActiveSession();
     return res.status(200).json(session || { message: 'No active session' });
@@ -739,7 +622,7 @@ router.get('/work-sessions/latest', requireAdminToken, async (req, res) => {
 });
 
 // GET /api/jarvis/work-sessions/project/:project_slug
-router.get('/work-sessions/project/:project_slug', requireAdminToken, async (req, res) => {
+router.get('/work-sessions/project/:project_slug', authenticateAdminSession, async (req, res) => {
   try {
     const slug = req.params.project_slug;
     const sessions = await workSessions.getProjectSessions(slug);
@@ -751,7 +634,7 @@ router.get('/work-sessions/project/:project_slug', requireAdminToken, async (req
 });
 
 // POST /api/jarvis/work-sessions/start
-router.post('/work-sessions/start', requireAdminToken, async (req, res) => {
+router.post('/work-sessions/start', authenticateAdminSession, async (req, res) => {
   try {
     const { project_slug, source, text_content } = req.body;
     const session = await workSessions.startWorkSession(project_slug, source || 'dashboard', text_content);
@@ -763,7 +646,7 @@ router.post('/work-sessions/start', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/work-sessions/update
-router.post('/work-sessions/update', requireAdminToken, async (req, res) => {
+router.post('/work-sessions/update', authenticateAdminSession, async (req, res) => {
   try {
     const { project_slug, summary, source } = req.body;
     const session = await workSessions.updateWorkSession(project_slug, summary, source || 'dashboard');
@@ -775,7 +658,7 @@ router.post('/work-sessions/update', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/work-sessions/done
-router.post('/work-sessions/done', requireAdminToken, async (req, res) => {
+router.post('/work-sessions/done', authenticateAdminSession, async (req, res) => {
   try {
     const { project_slug, summary, source } = req.body;
     const session = await workSessions.doneWorkSession(project_slug, summary, source || 'dashboard');
@@ -787,7 +670,7 @@ router.post('/work-sessions/done', requireAdminToken, async (req, res) => {
 });
 
 // POST /api/jarvis/handoff/ingest
-router.post('/handoff/ingest', requireAdminToken, async (req, res) => {
+router.post('/handoff/ingest', authenticateAdminSession, async (req, res) => {
   try {
     const session = await workSessions.ingestHandoffFile();
     return res.status(200).json({ success: true, message: 'Handoff file ingested successfully', session });

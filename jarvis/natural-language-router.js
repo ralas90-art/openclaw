@@ -103,26 +103,8 @@ function sanitizeLogText(text) {
 
 // 4. DB Init and Audit Logging
 async function ensureAuditTableExists() {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS jarvis_natural_language_logs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      original_text_sanitized TEXT NOT NULL,
-      original_text_hash VARCHAR(64) NOT NULL,
-      detected_language VARCHAR(50) NOT NULL,
-      interpreted_intent VARCHAR(100) NOT NULL,
-      mapped_command VARCHAR(255) NOT NULL,
-      confidence DECIMAL(5,2) NOT NULL,
-      risk_tier VARCHAR(50) NOT NULL,
-      executed_boolean BOOLEAN NOT NULL DEFAULT false,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      source_chat_id VARCHAR(100)
-    );
-  `;
-  try {
-    await queryDb(sql);
-  } catch (err) {
-    console.error('[NaturalLanguageRouter] Error ensuring audit table exists:', err.message);
-  }
+  // Migrations run at boot via jarvis/migrations.js
+  return true;
 }
 
 async function logNaturalLanguageRequest(sanitizedText, hash, lang, intentStr, mappedCommand, riskTier, executed, chatId) {

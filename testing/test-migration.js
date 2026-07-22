@@ -1,8 +1,11 @@
 /**
- * Database Migration & Work Session Constraint Test Suite
+ * Database Migration & Work Session Constraint Test Suite (Isolated & Mandatory)
  * Verifies idempotent database migration execution, pool stability, and real concurrent active work session duplicate rejection.
+ * Enforces TEST_DATABASE_URL and unique test project slug isolation.
  * Exits non-zero on failure.
  */
+
+require('dotenv').config();
 
 const { runMigrations } = require('../jarvis/migrations');
 const { startWorkSession, doneWorkSession } = require('../jarvis/work-sessions');
@@ -16,12 +19,16 @@ function assert(condition, message) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting Migration & Real Concurrency DB Hardening Tests...\n');
+  console.log('🧪 Starting Isolated DB Migration & Real Concurrency Tests...\n');
 
-  if (!process.env.DATABASE_URL) {
-    console.log('⚠️ SKIPPED: DATABASE_URL not configured. Skipping live DB migration tests.');
-    process.exit(0);
+  const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  if (!testDbUrl) {
+    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL (or DATABASE_URL) is missing. Mandatory DB tests cannot run. Release blocked.');
+    process.exit(1);
   }
+
+  // Set DATABASE_URL to test DB for connection pool
+  process.env.DATABASE_URL = testDbUrl;
 
   // Test 1: Idempotent Migrations
   try {
@@ -34,12 +41,15 @@ async function runTests() {
     process.exit(1);
   }
 
-  // Test 3: Real Concurrent Inserts using Promise.allSettled with valid project slug
-  const testSlug = 'cresca-os';
+  // Test 3: Real Concurrent Inserts using unique test project slug
+  const testSlug = `test-proj-${Date.now()}`;
+  console.log(`- Registering dynamic isolated test project: '${testSlug}'...`);
 
   try {
-    // Clean up any active session for test project first
-    await queryDb("UPDATE jarvis_work_sessions SET status = 'completed' WHERE project_slug = $1 AND status IN ('active', 'updated');", [testSlug]);
+    await queryDb(
+      "INSERT INTO jarvis_projects (slug, name, status) VALUES ($1, $2, 'active') ON CONFLICT (slug) DO NOTHING;",
+      [testSlug, `Test Project ${Date.now()}`]
+    );
 
     console.log(`- Testing real concurrent session creation for project: '${testSlug}'...`);
     const results = await Promise.allSettled([
@@ -58,9 +68,11 @@ async function runTests() {
     );
     console.log('✅ Test 3: Real concurrent session constraint (`ux_ws_one_active`) passed.');
 
-    // Clean up test session
+    // Clean up test sessions & test project
     await doneWorkSession(testSlug, 'Concurrent test cleanup', 'testing');
-    console.log('✅ Test 4: Session cleanup completed.');
+    await queryDb("DELETE FROM jarvis_work_sessions WHERE project_slug = $1;", [testSlug]);
+    await queryDb("DELETE FROM jarvis_projects WHERE slug = $1;", [testSlug]);
+    console.log('✅ Test 4: Isolated test project & session data cleaned up cleanly.');
   } catch (err) {
     console.error('❌ Concurrency test failed:', err.message);
     process.exit(1);

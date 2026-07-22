@@ -5,18 +5,17 @@
 
 const { Pool } = require('pg');
 
-const DB_URL = process.env.DATABASE_URL;
-
 let pool = null;
 
 function getPool() {
-  if (!pool && DB_URL) {
-    const isLocalhost = DB_URL.includes('localhost') || DB_URL.includes('127.0.0.1');
+  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  if (!pool && dbUrl) {
+    const isLocalhost = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
     pool = new Pool({
-      connectionString: DB_URL,
+      connectionString: dbUrl,
       max: parseInt(process.env.PG_POOL_MAX || '10', 10),
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
       ssl: isLocalhost ? false : { rejectUnauthorized: false }
     });
 
@@ -31,7 +30,7 @@ function getPool() {
  * Shared queryDb interface used by all Jarvis modules.
  */
 async function queryDb(sqlText, params = []) {
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('[JarvisDB] DATABASE_URL missing in production environment.');
     }

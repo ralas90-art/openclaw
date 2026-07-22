@@ -584,7 +584,7 @@ async function bootServer() {
     process.exit(1);
   }
 
-  return app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN & Session Tickets`);
     console.log(`📊 Admin UI available at /admin`);
@@ -610,6 +610,28 @@ async function bootServer() {
       }
     }
   });
+
+  const { closePool } = require('./jarvis/db');
+  const shutdown = async (signal) => {
+    console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+    if (server) {
+      server.close(() => {
+        console.log('✅ HTTP server closed.');
+      });
+    }
+    try {
+      await closePool();
+      console.log('✅ Database connection pool closed.');
+    } catch (err) {
+      console.error('⚠️ Error closing database pool:', err.message);
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  return server;
 }
 
 if (require.main === module) {

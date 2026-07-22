@@ -13,54 +13,7 @@ const { queryDb } = require('./db');
 async function seedInitialConnectors() {
   console.log('[ConnectorsSummary] Seeding initial connector definitions...');
   try {
-    // Ensure core tables exist first
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_connectors (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          connector_id TEXT UNIQUE NOT NULL,
-          name TEXT NOT NULL,
-          enabled BOOLEAN DEFAULT true,
-          read_permissions JSONB DEFAULT '[]',
-          write_permissions JSONB DEFAULT '[]',
-          write_gated BOOLEAN DEFAULT true,
-          created_at TIMESTAMPTZ DEFAULT now(),
-          updated_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_connector_tokens (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          connector_id TEXT UNIQUE REFERENCES jarvis_connectors(connector_id) ON DELETE CASCADE,
-          access_token TEXT,
-          refresh_token TEXT,
-          token_type TEXT DEFAULT 'Bearer',
-          expires_at TIMESTAMPTZ,
-          client_id TEXT,
-          client_secret TEXT,
-          updated_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_connector_sync_logs (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          connector_id TEXT REFERENCES jarvis_connectors(connector_id) ON DELETE CASCADE,
-          sync_status TEXT NOT NULL,
-          records_synced INTEGER DEFAULT 0,
-          error_message TEXT,
-          started_at TIMESTAMPTZ DEFAULT now(),
-          ended_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-
-    // Ensure safety columns exist in jarvis_connector_tokens
-    await queryDb(`
-      ALTER TABLE jarvis_connector_tokens 
-      ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS last_sync_status TEXT DEFAULT 'unknown',
-      ADD COLUMN IF NOT EXISTS rotation_status TEXT DEFAULT 'active';
-    `);
+    // Core tables and columns are created on boot by jarvis/migrations.js
 
     await queryDb(`
       INSERT INTO jarvis_connectors (connector_id, name, enabled, read_permissions, write_permissions, write_gated)

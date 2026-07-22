@@ -14,33 +14,8 @@ const { queryDb } = require('./controller');
  * Ensures required local folders and indexing tables exist in database
  */
 async function ensureTablesExist() {
-  try {
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_local_folders (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          folder_path TEXT UNIQUE NOT NULL,
-          access_level INTEGER DEFAULT 0,
-          approved BOOLEAN DEFAULT false,
-          created_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_local_file_index (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          folder_id UUID REFERENCES jarvis_local_folders(id) ON DELETE CASCADE,
-          file_path TEXT UNIQUE NOT NULL,
-          file_name TEXT NOT NULL,
-          size_bytes BIGINT,
-          extension TEXT,
-          last_modified TIMESTAMPTZ,
-          file_hash TEXT,
-          metadata JSONB DEFAULT '{}',
-          created_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
-  } catch (err) {
-    console.warn('[LocalInventory] ensureTablesExist warning:', err.message);
-  }
+  // Schema and migrations are initialized on server boot by jarvis/migrations.js
+  return true;
 }
 
 /**

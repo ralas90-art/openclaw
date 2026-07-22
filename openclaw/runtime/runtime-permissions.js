@@ -789,6 +789,18 @@ const COMMAND_PERMISSIONS = {
     capability: 'read_runtime',
     description: 'List recently modified files from Google Drive.'
   },
+  jarvis_dashboard: {
+    commands: ['/jarvis_dashboard'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Get secure single-use ticket link for Jarvis Web Dashboard.'
+  },
   jarvis_reconnect_google: {
     commands: ['/jarvis_reconnect_google'],
     tier: 'read_only',
@@ -1425,6 +1437,7 @@ function normalizeCommand(commandText) {
     'jarvisemailsummary': 'jarvis_email_summary',
     'jarvisdriverecent': 'jarvis_drive_recent',
     'jarvisreconnectgoogle': 'jarvis_reconnect_google',
+    'jarvisdashboard': 'jarvis_dashboard',
     'jarvispriorities': 'jarvis_priorities',
     'jarvisfollowups': 'jarvis_followups',
     'jarvisblockers': 'jarvis_blockers',

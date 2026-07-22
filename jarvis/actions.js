@@ -6,68 +6,9 @@ const { queryDb } = require('./db');
 const intelligence = require('./intelligence');
 const queueStore = require('../openclaw/hermes/hermes-queue-store');
 
-let migrationPromise = null;
 async function ensureActionColumnsExist() {
-  if (migrationPromise) return migrationPromise;
-  
-  migrationPromise = (async () => {
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS action_type TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for action_type:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS priority_id TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for priority_id:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS source_type TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for source_type:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS source_id TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for source_id:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS proposed_payload JSONB DEFAULT '{}';
-    `).catch(err => console.warn('[Actions] Migration error for proposed_payload:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-    `).catch(err => console.warn('[Actions] Migration error for expires_at:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS proposed_at TIMESTAMPTZ DEFAULT now();
-    `).catch(err => console.warn('[Actions] Migration error for proposed_at:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;
-    `).catch(err => console.warn('[Actions] Migration error for rejected_at:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
-    `).catch(err => console.warn('[Actions] Migration error for cancelled_at:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ;
-    `).catch(err => console.warn('[Actions] Migration error for expired_at:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS executed_by TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for executed_by:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS source_priority_id TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for source_priority_id:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS action_result_summary TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for action_result_summary:', err.message));
-    await queryDb(`
-      ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS execution_error_summary TEXT;
-    `).catch(err => console.warn('[Actions] Migration error for execution_error_summary:', err.message));
-    await queryDb(`
-      CREATE TABLE IF NOT EXISTS jarvis_approval_audit_events (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          approval_id UUID REFERENCES jarvis_approval_requests(id) ON DELETE CASCADE,
-          event_type TEXT NOT NULL,
-          actor TEXT,
-          previous_status TEXT,
-          new_status TEXT NOT NULL,
-          safe_summary TEXT,
-          created_at TIMESTAMPTZ DEFAULT now()
-      );
-    `).catch(err => console.warn('[Actions] Migration error for audit events table:', err.message));
-  })();
-  
-  return migrationPromise;
+  // Schema and migrations are initialized on server boot by jarvis/migrations.js
+  return true;
 }
 
 async function getActionPreview(priorityId) {

@@ -15,12 +15,11 @@ async function getDailyBrief(refresh = false) {
   console.log('[JarvisController] Compiling prioritized Daily Brief...');
 
   const todayStr = new Date().toISOString().substring(0, 10);
+  const suggestedCmds = [];
 
   // 1. Idempotency Check: return existing brief if refresh is false
   if (!refresh) {
     try {
-      // Ensure column exists first
-      await queryDb("ALTER TABLE jarvis_daily_briefs ADD COLUMN IF NOT EXISTS siri_summary TEXT;");
       
       const rows = await queryDb(
         "SELECT raw_brief_markdown, siri_summary FROM jarvis_daily_briefs WHERE brief_date = $1;",
@@ -195,151 +194,15 @@ async function getDailyBrief(refresh = false) {
   workContextSection += `\n`;
   md += workContextSection;
 
-  // Section A: Completed Work
-  md += `## 🏆 Completed Work (Last 24 Hours)\n`;
-  if (completedTasks.length === 0 && hermesCompleted === 0) {
-    md += `* No completed tasks recorded since yesterday.\n\n`;
-  } else {
-    for (const t of completedTasks) {
-      md += `* **[${t.project_slug}]** ${t.task_name} (Outcome: ${t.outcome || 'Success'})\n`;
-    }
-    if (hermesCompleted > 0) {
-      md += `* **[Hermes Queue]** Successfully executed ${hermesCompleted} runtime workflows.\n`;
-    }
-    md += `\n`;
-  }
-
-  // Section B: Active Projects Status
-  md += `## 🗂️ Active Projects\n`;
-  if (projects.length === 0) {
-    md += `* No active projects found.\n\n`;
-  } else {
-    for (const p of projects) {
-      md += `* **${p.name}** (${p.phase || 'Initiation'}): ${p.primary_objective || 'N/A'}\n`;
-    }
-    md += `\n`;
-  }
-
-  // Section C: Blockers
-  md += `## 🛑 Active Blockers\n`;
-  if (blockers.length === 0 && hermesFailed === 0) {
-    md += `* ✅ No active blockers or execution failures. All systems stable.\n\n`;
-  } else {
-    for (const b of blockers) {
-      md += `* **[${b.project_slug || 'system'}]** ${b.description} \`[Priority: ${b.priority}]\`\n`;
-    }
-    if (hermesFailed > 0) {
-      md += `* **[Hermes Warning]** ${hermesFailed} runtime executions failed or blocked today.\n`;
-    }
-    md += `\n`;
-  }
-
-  // Section D: Next Actions & Suggested Commands
-  md += `## ⚡ Next Recommended Actions\n`;
-  const suggestedCmds = [];
-  if (nextActions.length === 0) {
-    md += `* All action items clear. System is caught up.\n\n`;
-  } else {
-    for (const a of nextActions) {
-      md += `- [ ] **${a.project_slug || 'System'}**: ${a.action} \`[Priority: ${a.priority}]\`\n`;
-      if (a.recommended_command) {
-        md += `    *Command:* \`${a.recommended_command}\`\n`;
-        suggestedCmds.push(a.recommended_command);
-      }
-    }
-    md += `\n`;
-  }
-
-  // Section E: Gated Approvals
-  md += `## 🔑 Pending Approvals\n`;
-  if (pendingApprovals.length === 0 && hermesPendingApproval === 0) {
-    md += `* No pending execution approvals outstanding.\n\n`;
-  } else {
-    for (const ap of pendingApprovals) {
-      md += `* **[${ap.project_slug || 'system'}]** ${ap.requested_action} (Approval ID: \`${ap.id}\`)\n`;
-      md += `    Run: \`/jarvis_approve ${ap.id}\`\n`;
-      suggestedCmds.push(`/jarvis_approve ${ap.id}`);
-    }
-    md += `\n`;
-  }
-
-  // Section F: Cloud Connector Summaries (Gmail & Google Drive)
-  try {
-    const connectorsSummary = require('./connectors-summary');
-    
-    // 1. Gmail summary
-    const emails = await connectorsSummary.getEmailSummary();
-    if (emails && emails.length > 0) {
-      md += `## 📬 Unread Actionable Emails\n`;
-      const topEmails = emails.slice(0, 4);
-      for (const email of topEmails) {
-        const priorityLabel = email.priority_keyword ? ` 🔥 *[PRIORITY: ${email.priority_keyword.toUpperCase()}]*` : '';
-        const projLabel = email.suggested_project ? ` (Project: \`${email.suggested_project}\`)` : '';
-        md += `* **Subject:** ${email.subject}${priorityLabel}\n`;
-        md += `  *From:* \`${email.from}\`${projLabel}\n`;
-        md += `  *Snippet:* _${email.snippet}_\n`;
-      }
-      if (emails.length > 4) {
-        md += `* ...and ${emails.length - 4} more unread emails.\n`;
-      }
-      md += `\n`;
-    }
-
-    // 2. Google Drive summary
-    const driveFiles = await connectorsSummary.getDriveSummary();
-    if (driveFiles && driveFiles.length > 0) {
-      md += `## 🗂️ Google Drive Activity\n`;
-      const topDrive = driveFiles.slice(0, 4);
-      for (const f of topDrive) {
-        const sizeStr = f.size_bytes ? ` (${(f.size_bytes / 1024).toFixed(1)} KB)` : '';
-        const projLabel = f.suggested_project ? ` (Project: \`${f.suggested_project}\`)` : '';
-        md += `* **[${f.name}](${f.webViewLink})**${sizeStr}${projLabel}\n`;
-      }
-      if (driveFiles.length > 4) {
-        md += `* ...and ${driveFiles.length - 4} more modified files.\n`;
-      }
-      md += `\n`;
-    }
-  } catch (err) {
-    console.warn('[JarvisController] Failed to integrate cloud summaries in Daily Brief:', err.message);
-  }
-
-  // Compile Siri-friendly spoken summary
   let siriSummary = `Good morning Rob! Here is your Jarvis summary for today. `;
-  const totalDone = completedTasks.length + hermesCompleted;
-  if (totalDone > 0) {
-    siriSummary += `In the last twenty four hours, you completed ${totalDone} tasks. `;
-  } else {
-    siriSummary += `You have no completed tasks logged since yesterday. `;
-  }
-  
-  siriSummary += `You have ${projects.length} active projects. `;
-  
-  const totalBlocks = blockers.length + hermesFailed;
-  if (totalBlocks > 0) {
-    siriSummary += `Warning: There are ${totalBlocks} active blockers or system execution failures that need your attention. `;
-  } else {
-    siriSummary += `All systems are stable with no active blockers. `;
-  }
-  
-  if (nextActions.length > 0) {
-    siriSummary += `Your top recommended next action is: ${nextActions[0].action} for project ${nextActions[0].project_slug || 'system'}. `;
-  } else {
-    siriSummary += `You have no pending next actions today. `;
-  }
-  
-  const totalApprovals = pendingApprovals.length + hermesPendingApproval;
-  if (totalApprovals > 0) {
-    siriSummary += `You have ${totalApprovals} gated executions awaiting your approval. `;
-  } else {
-    siriSummary += `No pending approvals outstanding. `;
-  }
-  
+  siriSummary += `You have ${projects.length} active projects and ${nextActions.length} pending next actions. `;
   siriSummary += `Have a productive day!`;
 
-  // Save/Upsert brief to database
-  await queryDb("ALTER TABLE jarvis_daily_briefs ADD COLUMN IF NOT EXISTS siri_summary TEXT;");
-  
+  const compSummary = `Tasks completed: ${completedTasks.length}, Hermes completed: ${hermesCompleted}`;
+  const actSummary = `Active projects: ${projects.length}`;
+  const blockSummary = `Active blockers: ${blockers.length}, Hermes failures: ${hermesFailed}`;
+  const nextSummary = `Pending next actions: ${nextActions.length}`;
+
   const insertSql = `
     INSERT INTO jarvis_daily_briefs (brief_date, completed_summary, active_summary, blockers_summary, next_actions_summary, suggested_commands, raw_brief_markdown, siri_summary)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -352,25 +215,24 @@ async function getDailyBrief(refresh = false) {
         raw_brief_markdown = EXCLUDED.raw_brief_markdown,
         siri_summary = EXCLUDED.siri_summary;
   `;
-  
-  const compSummary = `Tasks completed: ${completedTasks.length}, Hermes completed: ${hermesCompleted}`;
-  const actSummary = `Active projects: ${projects.length}`;
-  const blockSummary = `Active blockers: ${blockers.length}, Hermes failures: ${hermesFailed}`;
-  const nextSummary = `Pending next actions: ${nextActions.length}`;
 
-  await queryDb(insertSql, [
-    todayStr,
-    compSummary,
-    actSummary,
-    blockSummary,
-    nextSummary,
-    JSON.stringify(suggestedCmds),
-    md,
-    siriSummary
-  ]);
-
-  // Synchronize snapshots
   try {
+    await queryDb(insertSql, [
+      todayStr,
+      compSummary,
+      actSummary,
+      blockSummary,
+      nextSummary,
+      JSON.stringify(suggestedCmds),
+      md,
+      siriSummary
+    ]);
+  } catch (err) {
+    console.warn('[JarvisController] Brief upsert warning:', err.message);
+  }
+
+  try {
+    const { exportJarvisMemory } = require('./memory-exporter');
     await exportJarvisMemory();
   } catch (err) {
     console.warn('[JarvisController] Exporter warning:', err.message);
@@ -382,9 +244,6 @@ async function getDailyBrief(refresh = false) {
   };
 }
 
-/**
- * 2. Compiles a summary of yesterday's completed work
- */
 async function getYesterdaySummary() {
   console.log('[JarvisController] Compiling yesterday\'s task log...');
   const yesterdayTasks = await queryDb(`
@@ -406,9 +265,6 @@ async function getYesterdaySummary() {
   return md;
 }
 
-/**
- * 3. Compiles a project status card
- */
 async function getProjectStatus(projectSlug) {
   if (!projectSlug) {
     return `❌ Missing project slug. Usage: /jarvis_project <project_slug>`;

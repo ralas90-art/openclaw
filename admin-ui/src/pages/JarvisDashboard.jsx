@@ -273,7 +273,7 @@ export default function JarvisDashboard() {
             <Lock size={28} color="#fff" />
           </div>
           <h2 style={{ margin: '0 0 10px', fontSize: '1.5rem', color: '#fff' }}>Jarvis Portal Auth</h2>
-          <p style={{ margin: '0 0 25px', color: '#8b949e', fontSize: '0.9rem' }}>Enter the admin token to view credentials & history.</p>
+          <p style={{ margin: '0 0 25px', color: '#8b949e', fontSize: '0.9rem' }}>Access the Jarvis Dashboard using a single-use ticket or session token.</p>
           
           {error && <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '15px' }}>{error}</div>}
           
@@ -282,7 +282,7 @@ export default function JarvisDashboard() {
             id="admin-token-input"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="INTERNAL_ADMIN_TOKEN"
+            placeholder="Session Token or Ticket"
             style={{
               width: '100%',
               padding: '12px',

@@ -365,16 +365,16 @@ async function handleInboxRead(filename) {
 }
 
 // ------------------------------------------
-// Core Handlers
-// ------------------------------------------
-
-async function handleCommand(text, message) {
-  if (!text) return;
+async function dispatchCommand(text, message) {
+  if (!text || typeof text !== 'string') {
+    return { ok: false, text: '❌ Invalid command input.' };
+  }
 
   let pendingLogId = null;
+  let textToExecute = text.trim();
 
-  if (!text.trim().startsWith('/')) {
-    const nlResult = await routeNaturalLanguageCommand(text, message);
+  if (!textToExecute.startsWith('/')) {
+    const nlResult = await routeNaturalLanguageCommand(textToExecute, message);
     console.log(`[Telegram Handlers] nl_intent_detected=${nlResult.intent || 'unknown'}`);
     console.log(`[Telegram Handlers] mapped_command=${nlResult.command || 'none'}`);
     
@@ -383,11 +383,63 @@ async function handleCommand(text, message) {
     }
 
     if (nlResult.type === 'reply') {
-      if (pendingLogId) {
+      const isOk = !nlResult.text.includes('🤔 No entendí') && !nlResult.text.includes('⚠️ *Acción Bloqueada*') && !nlResult.text.includes('⚠️ *Protected Action*');
+      if (isOk && pendingLogId) {
         await markNaturalLanguageLogExecuted(pendingLogId).catch(err =>
           console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
         );
       }
+      return { ok: isOk, text: nlResult.text, logId: pendingLogId };
+    }
+
+    if (nlResult.type === 'command') {
+      textToExecute = nlResult.command;
+    }
+  }
+
+  try {
+    const output = await handleCommand(textToExecute, message);
+    const isUnknown = !output || typeof output !== 'string' || output.includes('Unknown command') || output.includes('🤔 No entendí');
+    const isDenied = output && (output.includes('🚫 Permission Denied') || output.includes('Acción Bloqueada') || output.includes('Protected Action') || output.startsWith('❌'));
+    
+    const ok = !isUnknown && !isDenied;
+
+    if (ok && pendingLogId) {
+      await markNaturalLanguageLogExecuted(pendingLogId).catch(err =>
+        console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
+      );
+    }
+
+    return { ok, text: output || 'Unknown command', logId: pendingLogId };
+  } catch (err) {
+    console.error('[Dispatch Error]', err.message);
+    return { ok: false, text: `❌ Execution error: ${err.message}`, logId: pendingLogId };
+  }
+}
+
+async function handleJarvisDashboard(message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_dashboard', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_dashboard', permCheck.reason, message);
+  }
+
+  const { createAuthTicket } = require('../../jarvis/auth-tickets');
+  const ticket = await createAuthTicket('dashboard_access', { user_id: message ? (message.chat?.id || message.from?.id) : 'unknown' }, 300);
+  const publicUrl = getPublicBaseUrl();
+  const dashboardUrl = `${publicUrl}/admin/jarvis?ticket=${ticket}`;
+  return `📊 *Jarvis Dashboard Access*\n\nHere is your single-use dashboard access link (valid for 5 minutes):\n${dashboardUrl}\n\n⚠️ *Security Note*: This link can only be used once. Token exchange happens automatically on load.`;
+}
+
+async function handleCommand(text, message) {
+  if (!text) return;
+
+  if (!text.trim().startsWith('/')) {
+    const nlResult = await routeNaturalLanguageCommand(text, message);
+    console.log(`[Telegram Handlers] nl_intent_detected=${nlResult.intent || 'unknown'}`);
+    console.log(`[Telegram Handlers] mapped_command=${nlResult.command || 'none'}`);
+    
+    if (nlResult.type === 'reply') {
       return nlResult.text;
     }
     if (nlResult.type === 'command') {
@@ -398,19 +450,14 @@ async function handleCommand(text, message) {
   const parsed = parseMultilineCommand(text);
   const command = parsed.command;
 
-  let output = null;
-
   // 1. Registry & Help Commands
-  if (command === '/help') output = handleHelp();
-  else if (command === '/menu') {
+  if (command === '/help') return handleHelp();
+  if (command === '/menu') {
     const { handleMenuCommand } = require('./hermes-ux-menu');
-    output = handleMenuCommand(message);
-  } else if (command === '/jarvis_dashboard' || command === '/jarvisdashboard') {
-    const { createAuthTicket } = require('../../jarvis/auth-tickets');
-    const ticket = await createAuthTicket('dashboard_access', { user_id: message ? message.chat.id : 'unknown' }, 300);
-    const publicUrl = getPublicBaseUrl();
-    const dashboardUrl = `${publicUrl}/admin/jarvis?ticket=${ticket}`;
-    output = `📊 *Jarvis Dashboard Access*\n\nHere is your single-use dashboard access link (valid for 5 minutes):\n${dashboardUrl}\n\n⚠️ *Security Note*: This link can only be used once. Token exchange happens automatically on load.`;
+    return handleMenuCommand(message);
+  }
+  if (command === '/jarvis_dashboard' || command === '/jarvisdashboard') {
+    return await handleJarvisDashboard(message);
   }
 
   // Jarvis Personal Assistant Commands
@@ -4968,17 +5015,13 @@ async function handleJarvisReconnectGoogle(args, message) {
     return `❌ Usage: \`/jarvis_reconnect_google <gmail|google_drive> [force]\``;
   }
 
+  const { createAuthTicket } = require('../../jarvis/auth-tickets');
+  const ticket = await createAuthTicket('google_oauth_connect', { connector: connectorId }, 300);
+
   const publicUrl = getPublicBaseUrl();
-
-  const adminToken = process.env.INTERNAL_ADMIN_TOKEN;
+  const url = `${publicUrl}/api/jarvis/google/connect?ticket=${ticket}${force ? '&force=true' : ''}`;
   
-  if (!adminToken) {
-    return `❌ Error: INTERNAL_ADMIN_TOKEN is not configured on the server.`;
-  }
-
-  const url = `${publicUrl}/api/jarvis/google/connect?connector=${connectorId}&token=${adminToken}${force ? '&force=true' : ''}`;
-  
-  return `🔗 *Google Connector Authentication*\n\nClick the link below to authorize Jarvis access to your ${connectorId === 'gmail' ? 'Gmail (Read-Only)' : 'Google Drive (Metadata Read-Only)'}:\n\n[Connect to Google](${url})\n\n_Note: This link contains a sensitive administrative token. Do not share it._`;
+  return `🔗 *Google Connector Authentication*\n\nClick the link below to authorize Jarvis access to your ${connectorId === 'gmail' ? 'Gmail (Read-Only)' : 'Google Drive (Metadata Read-Only)'} (valid for 5 minutes):\n\n[Connect to Google](${url})\n\n_Note: This link uses a single-use authorization ticket and can only be clicked once._`;
 }
 
 async function handleJarvisEmailSummary(message) {
@@ -5870,6 +5913,7 @@ async function handleJarvisIngestHandoff(message) {
 
 module.exports = {
   handleCommand,
+  dispatchCommand,
   handleHermesApprove,
   handleCockpitToday,
   handleCockpitTop,
