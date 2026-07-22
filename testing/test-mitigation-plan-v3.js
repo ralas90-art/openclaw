@@ -3,10 +3,12 @@
  * Verifies Sanitization, Natural Language Router, DB Pooling/Migrations, and Auth Ticket Exchange
  */
 
+require('dotenv').config();
 const assert = require('assert');
 const { sanitizeSecrets, sanitizeError, sanitizeText } = require('../jarvis/sanitizer');
 const { routeNaturalLanguageCommand, detectLanguage, markNaturalLanguageLogExecuted } = require('../jarvis/natural-language-router');
-const { queryDb, runSchemaMigrations, getPool } = require('../jarvis/db');
+const { queryDb } = require('../jarvis/db');
+const { runMigrations } = require('../jarvis/migrations');
 
 async function runTests() {
   console.log('🧪 Starting Jarvis Security Mitigation Plan v3 Regression Test Suite...\n');
@@ -54,29 +56,28 @@ async function runTests() {
   if (briefRes.logId) {
     await markNaturalLanguageLogExecuted(briefRes.logId);
     console.log('   Logged natural language command execution state updated successfully.');
-  } else {
-    console.log('   (Offline mode: Audit DB insertion gracefully skipped)');
   }
 
   console.log('✅ Test 4 Passed: Natural Language Matching & Safety Gates verified.');
 
   // Test 5: Database Connection Pool & Schema Migrations
   console.log('\n--- Test 5: DB Connection Pool & Schema Migrations ---');
-  const pool = getPool();
-  if (process.env.DATABASE_URL) {
-    assert(pool, 'DB pool instance should exist when DATABASE_URL is set');
-  } else {
-    assert.strictEqual(pool, null, 'Pool should be null when DATABASE_URL is missing');
-    console.log('   (Offline mode: Connection pool gracefully bypassed when DATABASE_URL is absent)');
+  const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  if (!testDbUrl) {
+    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL (or DATABASE_URL) is missing. Release blocked.');
+    process.exit(1);
   }
+  process.env.DATABASE_URL = testDbUrl;
 
   try {
-    await runSchemaMigrations();
-    console.log('   runSchemaMigrations executed gracefully.');
+    const migrationSuccess = await runMigrations();
+    assert(migrationSuccess === true, 'runMigrations must return true on success');
+    console.log('   runMigrations executed successfully without errors.');
   } catch (err) {
-    console.log('   (DB offline or skipped during isolated test):', err.message);
+    console.error('❌ Migration failure detected during test 5:', err.message);
+    process.exit(1);
   }
-  console.log('✅ Test 5 Passed: DB Pooling & Migration helper verified.');
+  console.log('✅ Test 5 Passed: Authoritative DB Schema Migrations verified.');
 
   console.log('\n🎉 ALL REGRESSION TESTS PASSED SUCCESSFULLY!');
 }

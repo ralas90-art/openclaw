@@ -150,7 +150,9 @@ async function runTests() {
     }
   }
 
-  const headers = { Authorization: `Bearer ${process.env.INTERNAL_ADMIN_TOKEN}` };
+  const { createSessionToken } = require('../jarvis/auth-tickets');
+  const adminSessionToken = await createSessionToken({ user: 'test_admin' }, 3600);
+  const headers = { Authorization: `Bearer ${adminSessionToken}` };
   const mobileHeaders = { Authorization: `Bearer ${MOCK_MOBILE_TOKEN}` };
 
   try {

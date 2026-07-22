@@ -32,7 +32,9 @@ function getRedirectUri(req) {
   const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const host = req.headers.host;
   return `${protocol}://${host}/api/jarvis/google/callback`;
-}const {
+}
+
+const {
   safeTimingEqual,
   checkTicketRateLimit,
   createAuthTicket,
@@ -41,7 +43,7 @@ function getRedirectUri(req) {
   validateSessionToken
 } = require('./auth-tickets');
 
-// Middleware to authenticate either admin token or active session token
+// Middleware to authenticate ONLY active derived session tokens (srv_sess_...)
 async function authenticateAdminSession(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
@@ -50,8 +52,8 @@ async function authenticateAdminSession(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized: missing bearer token' });
   }
 
-  if (process.env.INTERNAL_ADMIN_TOKEN && safeTimingEqual(token, process.env.INTERNAL_ADMIN_TOKEN)) {
-    return next();
+  if (!token.startsWith('srv_sess_')) {
+    return res.status(401).json({ error: 'Unauthorized: master token access forbidden on dashboard routes. Derived session token required.' });
   }
 
   const sessionResult = await validateSessionToken(token);
@@ -67,10 +69,7 @@ async function authenticateAnyToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
   
-  if (token) {
-    if (process.env.INTERNAL_ADMIN_TOKEN && safeTimingEqual(token, process.env.INTERNAL_ADMIN_TOKEN)) {
-      return next();
-    }
+  if (token && token.startsWith('srv_sess_')) {
     const sessionResult = await validateSessionToken(token);
     if (sessionResult.valid) {
       req.sessionMetadata = sessionResult.metadata;

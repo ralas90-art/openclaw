@@ -9,7 +9,7 @@ export default function TenantList() {
     const fetchTenants = async () => {
       try {
         const res = await fetch('/api/admin/tenants', {
-          headers: { 'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN }
+          headers: { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') }
         });
         if (res.ok) {
           setTenants(await res.json());

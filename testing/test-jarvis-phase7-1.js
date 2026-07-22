@@ -248,8 +248,10 @@ async function runTests() {
       runAssert(err.response.status === 401, 'Endpoint returns 401 on incorrect token');
     }
 
-    // Access with correct token
-    const headers = { Authorization: `Bearer ${process.env.INTERNAL_ADMIN_TOKEN}` };
+    // Access with correct session token
+    const { createSessionToken } = require('../jarvis/auth-tickets');
+    const adminSessionToken = await createSessionToken({ user: 'test_admin' }, 3600);
+    const headers = { Authorization: `Bearer ${adminSessionToken}` };
     const resList = await axios.get(`${baseUrl}/approvals`, { headers });
     runAssert(resList.status === 200, 'Listing endpoint returns 200 on authorized header');
     runAssert(Array.isArray(resList.data), 'Returns JSON array of approvals');

@@ -304,8 +304,8 @@ app.post('/webhook/telegram', async (req, res) => {
   }
 });
 
-// 1. Internal Admin Token Guard
-function requireAdminToken(req, res, next) {
+// 1. Internal Admin Token Guard for /api/admin routes
+function requireInternalAdminAuthToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
   
@@ -320,7 +320,7 @@ function requireAdminToken(req, res, next) {
 // ==========================================
 
 const apiRouter = express.Router();
-apiRouter.use(requireAdminToken);
+apiRouter.use(requireInternalAdminAuthToken);
 
 apiRouter.get('/runtime/status', async (req, res) => {
   let dbStatus = 'Offline';
@@ -566,7 +566,7 @@ app.get('/', (req, res) => {
   res.json({ message: "Cresca OS Runtime API" });
 });
 
-const { runSchemaMigrations } = require('./jarvis/db');
+const { runMigrations } = require('./jarvis/migrations');
 
 async function bootServer() {
   try {
@@ -578,7 +578,7 @@ async function bootServer() {
         throw new Error('JARVIS_ENCRYPTION_KEY is missing in production.');
       }
     }
-    await runSchemaMigrations();
+    await runMigrations();
   } catch (err) {
     console.error('❌ [Server Boot] Critical failure during startup migrations/config checks:', err.message);
     process.exit(1);
@@ -615,13 +615,13 @@ async function bootServer() {
   const shutdown = async (signal) => {
     console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
     if (server) {
-      server.close(() => {
+      await new Promise((resolve) => server.close(() => {
         console.log('✅ HTTP server closed.');
-      });
+        resolve();
+      }));
     }
     try {
       await closePool();
-      console.log('✅ Database connection pool closed.');
     } catch (err) {
       console.error('⚠️ Error closing database pool:', err.message);
     }

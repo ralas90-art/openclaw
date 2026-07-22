@@ -18,7 +18,7 @@ export default function Onboarding() {
       const res = await fetch('/api/admin/tenants', {
         method: 'POST',
         headers: { 
-          'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN,
+          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(form)

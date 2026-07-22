@@ -9,7 +9,7 @@ export default function Operations() {
 
   const fetchData = async () => {
     try {
-      const headers = { 'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN };
+      const headers = { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') };
       const [fRes, dRes] = await Promise.all([
         fetch('/api/admin/operations/failed-syncs', { headers }),
         fetch('/api/admin/operations/deadletters', { headers })
@@ -33,7 +33,7 @@ export default function Operations() {
       const res = await fetch('/api/admin/replay', {
         method: 'POST',
         headers: { 
-          'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN,
+          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ event_id: replayEventId, reason: replayReason, confirm: true })

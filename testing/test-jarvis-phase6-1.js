@@ -36,23 +36,14 @@ async function setup() {
     console.error('Error: DATABASE_URL is not set.');
     process.exit(1);
   }
+  const { runMigrations } = require('../jarvis/migrations');
+  await runMigrations();
   client = new Client({ connectionString: DB_URL });
   await client.connect();
 
-  // Clear existing feedback data to ensure isolated testing
-  await client.query("DROP TABLE IF EXISTS jarvis_brief_feedback CASCADE;");
-  await client.query("DROP TABLE IF EXISTS jarvis_priority_feedback CASCADE;");
-
-  // Call the intelligence helper to recreate them cleanly
-  const intelligence = require('../jarvis/intelligence');
-  if (typeof intelligence.getPriorityIntelligence === 'function') {
-    // Calling this will trigger ensureFeedbackTablesExist
-    try {
-      await getPriorityIntelligence();
-    } catch (err) {
-      // It is okay if connectors timeout, we just want the tables created
-    }
-  }
+  // Clean tables via authoritative migration engine
+  await client.query("DELETE FROM jarvis_brief_feedback;");
+  await client.query("DELETE FROM jarvis_priority_feedback;");
 }
 
 async function cleanup() {

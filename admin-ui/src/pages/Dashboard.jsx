@@ -9,7 +9,7 @@ export default function Dashboard() {
     // In a real app, use an Axios instance with the interceptor setting INTERNAL_ADMIN_TOKEN
     const fetchDashboard = async () => {
       try {
-        const headers = { 'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN };
+        const headers = { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') };
         const [statusRes, incidentsRes] = await Promise.all([
           fetch('/api/admin/runtime/status', { headers }),
           fetch('/api/admin/incidents', { headers })

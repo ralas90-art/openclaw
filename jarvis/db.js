@@ -78,14 +78,6 @@ async function withTransaction(callback) {
 }
 
 /**
- * Delegate to single authoritative migration engine in jarvis/migrations.js
- */
-async function runSchemaMigrations() {
-  const { runMigrations } = require('./migrations');
-  return runMigrations();
-}
-
-/**
  * Graceful connection pool shutdown
  */
 async function closePool() {
@@ -96,18 +88,8 @@ async function closePool() {
   }
 }
 
-// Graceful process shutdown listeners
-process.on('SIGINT', async () => {
-  await closePool();
-});
-process.on('SIGTERM', async () => {
-  await closePool();
-});
-
 module.exports = {
   queryDb,
   withTransaction,
-  runSchemaMigrations,
-  closePool,
-  getPool,
+  closePool
 };

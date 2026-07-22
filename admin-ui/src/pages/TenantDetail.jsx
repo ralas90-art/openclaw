@@ -11,7 +11,7 @@ export default function TenantDetail() {
     const fetchTenant = async () => {
       try {
         const res = await fetch(`/api/admin/tenants/${tenantId}`, {
-          headers: { 'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN }
+          headers: { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') }
         });
         if (res.ok) {
           setData(await res.json());
@@ -31,7 +31,7 @@ export default function TenantDetail() {
       const res = await fetch(`/api/admin/tenants/${tenantId}/test-sync`, {
         method: 'POST',
         headers: { 
-          'Authorization': 'Bearer ' + import.meta.env.VITE_INTERNAL_ADMIN_TOKEN,
+          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
           'Content-Type': 'application/json'
         }
       });

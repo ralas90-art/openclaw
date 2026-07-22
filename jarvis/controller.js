@@ -353,14 +353,6 @@ async function getMobileInbox(filter) {
   const cleanFilter = filter ? filter.trim().toLowerCase() : null;
   console.log(`[JarvisController] Querying mobile inbox with filter: ${cleanFilter || 'default (unprocessed)'}...`);
   
-  // Ensure archived columns exist
-  try {
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;");
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;");
-  } catch (err) {
-    console.warn('[JarvisController] Dynamic archiving migration warning:', err.message);
-  }
-  
   let sqlText = "SELECT * FROM jarvis_mobile_uploads ";
   let params = [];
   
@@ -543,14 +535,6 @@ async function processLatestUpload(projectSlug) {
 async function archiveProcessedUploads() {
   console.log('[JarvisController] Archiving processed mobile uploads...');
   
-  // Ensure archived columns exist
-  try {
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;");
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;");
-  } catch (err) {
-    console.warn('[JarvisController] Dynamic archiving migration warning:', err.message);
-  }
-
   const rows = await queryDb(
     "UPDATE jarvis_mobile_uploads SET archived = true, archived_at = NOW() WHERE processed = true AND archived = false RETURNING id;"
   );

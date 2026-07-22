@@ -125,6 +125,20 @@ async function runTests() {
     const queryRes = await fetch(`${baseUrl}/projects?token=some_token_here`);
     assert(queryRes.status === 401, `Query parameter ?token=... must be rejected with 401. Got ${queryRes.status}`);
     console.log('  - Raw query token parameter ?token=... rejected with 401.');
+
+    // E. Raw master admin token on dashboard route /projects is rejected with 401
+    const masterRes = await fetch(`${baseUrl}/projects`, {
+      headers: { 'Authorization': 'Bearer admin-test-token-123' }
+    });
+    assert(masterRes.status === 401, `Raw master admin token on dashboard route must be rejected with 401. Got ${masterRes.status}`);
+    console.log('  - Raw master admin token on dashboard route /projects rejected with 401.');
+
+    // F. Mobile token on dashboard route /projects is rejected with 401 (token-role isolation)
+    const mobileRes = await fetch(`${baseUrl}/projects`, {
+      headers: { 'Authorization': 'Bearer mobile_test_token' }
+    });
+    assert(mobileRes.status === 401, `Mobile token on admin dashboard route must be rejected with 401. Got ${mobileRes.status}`);
+    console.log('  - Mobile token on admin dashboard route /projects rejected with 401.');
   } finally {
     server.close();
   }
