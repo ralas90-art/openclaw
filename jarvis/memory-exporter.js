@@ -8,6 +8,26 @@ const path = require('path');
 const { queryDb } = require('./db');
 const MEMORY_DIR = path.resolve(__dirname, 'memory');
 
+function ensureMemoryDir() {
+  if (!fs.existsSync(MEMORY_DIR)) {
+    fs.mkdirSync(MEMORY_DIR, { recursive: true });
+  }
+}
+
+function getHeaderBlock(title) {
+  const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  return [
+    `# ${title}`,
+    ``,
+    `> [!NOTE]`,
+    `> This is a read-only local export snapshot of the operational Jarvis database.`,
+    `> Generated At: ${timestamp}`,
+    ``,
+    `---`,
+    ``
+  ].join('\n');
+}
+
 /**
  * Exporter: Projects
  */

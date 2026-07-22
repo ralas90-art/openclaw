@@ -2,13 +2,7 @@
  * Jarvis Action Proposal & Execution Layer (Phase 7)
  */
 
-let _queryDb;
-function queryDb(...args) {
-  if (!_queryDb) {
-    _queryDb = require('./controller').queryDb;
-  }
-  return _queryDb(...args);
-}
+const { queryDb } = require('./db');
 const intelligence = require('./intelligence');
 const queueStore = require('../openclaw/hermes/hermes-queue-store');
 

@@ -235,16 +235,123 @@ router.get('/google/callback', async (req, res) => {
   }
 });
 
+const crypto = require('crypto');
+
+// Single-use Ticket & Session Store
+const ticketStore = new Map(); // ticket -> { expiresAt, createdBy }
+const sessionStore = new Map(); // sessionToken -> { expiresAt, createdBy }
+
+// Prune expired tickets/sessions periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [t, data] of ticketStore.entries()) {
+    if (now > data.expiresAt) ticketStore.delete(t);
+  }
+  for (const [s, data] of sessionStore.entries()) {
+    if (now > data.expiresAt) sessionStore.delete(s);
+  }
+}, 60000);
+
+function parseCookies(req) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      list[parts.shift().trim()] = decodeURIComponent(parts.join('='));
+    });
+  }
+  return list;
+}
+
+function issueTicket(createdBy = 'admin') {
+  const ticket = crypto.randomBytes(24).toString('hex');
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+  ticketStore.set(ticket, { expiresAt, createdBy });
+  return { ticket, expiresAt };
+}
+
+function exchangeTicket(ticket) {
+  if (!ticket || !ticketStore.has(ticket)) {
+    return { error: 'Invalid or expired auth ticket', status: 401 };
+  }
+  const ticketData = ticketStore.get(ticket);
+  ticketStore.delete(ticket); // Single-use guarantee!
+
+  if (Date.now() > ticketData.expiresAt) {
+    return { error: 'Auth ticket has expired', status: 401 };
+  }
+
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  sessionStore.set(sessionToken, { expiresAt, createdBy: ticketData.createdBy });
+
+  return { sessionToken, expiresAt };
+}
+
+function isValidSession(token) {
+  if (!token) return false;
+  if (process.env.INTERNAL_ADMIN_TOKEN && token === process.env.INTERNAL_ADMIN_TOKEN) {
+    return true;
+  }
+  if (sessionStore.has(token)) {
+    const s = sessionStore.get(token);
+    if (Date.now() < s.expiresAt) {
+      return true;
+    } else {
+      sessionStore.delete(token);
+    }
+  }
+  return false;
+}
+
+// POST /api/jarvis/auth/exchange-ticket
+router.post('/auth/exchange-ticket', async (req, res) => {
+  const { ticket } = req.body || {};
+  const result = exchangeTicket(ticket);
+  if (result.error) {
+    return res.status(result.status).json({ error: result.error });
+  }
+
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader(
+    'Set-Cookie',
+    `jarvis_session=${result.sessionToken}; Path=/; HttpOnly; ${isSecure ? 'Secure;' : ''} SameSite=Lax; Max-Age=86400`
+  );
+
+  return res.status(200).json({
+    success: true,
+    token: result.sessionToken,
+    expires_in: 86400
+  });
+});
+
 // 1. Internal Admin Token Guard for dashboard endpoints
 function requireAdminToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token || token !== process.env.INTERNAL_ADMIN_TOKEN) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const headerToken = authHeader && authHeader.split(' ')[1];
+  const queryToken = req.query.token;
+  const cookies = parseCookies(req);
+  const cookieToken = cookies.jarvis_session;
+
+  const token = headerToken || queryToken || cookieToken;
+
+  if (isValidSession(token)) {
+    return next();
   }
-  next();
+  return res.status(401).json({ error: "Unauthorized" });
 }
+
+// POST /api/jarvis/auth/issue-ticket
+router.post('/auth/issue-ticket', requireAdminToken, async (req, res) => {
+  const { ticket, expiresAt } = issueTicket('admin');
+  return res.status(200).json({
+    success: true,
+    ticket,
+    expires_at: new Date(expiresAt).toISOString(),
+    expires_in: 300
+  });
+});
 
 function sanitizeSecretKeywords(str) {
   if (!str) return str;

@@ -1,18 +1,16 @@
-const { queryDb } = require('./db');
+const { queryDb, runSchemaMigrations } = require('./db');
 const { sanitizeSecrets } = require('./sanitizer');
-const { runMigrations } = require('./migrations');
 const fs = require('fs');
 const path = require('path');
 
 // 1. Ensure Table Schema and Migrations
 async function ensureWorkSessionsTableExists() {
   try {
-    await runMigrations();
+    await runSchemaMigrations();
   } catch (err) {
     console.error('[WorkSessions] Error executing migrations:', err.message);
   }
 }
-
 
 // 2. State Mutation protection and Sanitization
 function sanitizeHandoffContent(content) {
@@ -24,7 +22,7 @@ function sanitizeHandoffContent(content) {
 async function ingestHandoffFile() {
   await ensureWorkSessionsTableExists();
   
-  const handoffPath = path.join('c:\\Users\\12132\\.gemini\\antigravity\\playground\\primal-astro', 'docs\\JARVIS_HANDOFF.md');
+  const handoffPath = path.resolve(__dirname, '../docs/JARVIS_HANDOFF.md');
   if (!fs.existsSync(handoffPath)) {
     throw new Error('docs/JARVIS_HANDOFF.md not found in the workspace.');
   }
@@ -167,7 +165,7 @@ async function startWorkSession(projectSlug, source = 'telegram', textContent = 
     );
     return rows[0];
   } catch (err) {
-    if (err.message && (err.message.includes('unique') || err.message.includes('idx_active_work_session'))) {
+    if (err.message && (err.message.includes('unique') || err.message.includes('idx_active_work_session') || err.message.includes('ux_ws_one_active'))) {
       throw new Error(`A work session is already active for project: ${cleanSlug}`);
     }
     throw err;

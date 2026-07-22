@@ -1,10 +1,4 @@
 /**
- * Re-exports the root sanitizer module for modules inside jarvis/
+ * Forwards to canonical root sanitizer module
  */
-const sanitizer = require('../sanitizer');
-
-module.exports = {
-  ...sanitizer,
-  sanitizeSecrets: sanitizer.sanitizeText,
-  sanitizeLogText: sanitizer.sanitizeText,
-};
+module.exports = require('../sanitizer');

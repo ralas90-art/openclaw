@@ -566,29 +566,42 @@ app.get('/', (req, res) => {
   res.json({ message: "Cresca OS Runtime API" });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN`);
-  console.log(`📊 Admin UI available at /admin`);
+const { runSchemaMigrations } = require('./jarvis/db');
 
-  // Telegram Bot Startup Checks
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  const allowedUsers = process.env.TELEGRAM_ALLOWED_USER_IDS;
-  const nodeEnv = process.env.NODE_ENV;
+async function bootServer() {
+  try {
+    await runSchemaMigrations();
+  } catch (err) {
+    console.error('❌ [Server Boot] Failed schema migrations:', err.message);
+    process.exit(1);
+  }
 
-  console.log('🤖 Checking Telegram bot configuration...');
-  if (!botToken) {
-    console.warn('⚠️ [Telegram Config Warning] TELEGRAM_BOT_TOKEN is missing. Bot replies will fail.');
-  }
-  if (!webhookSecret) {
-    console.warn('⚠️ [Telegram Config Warning] TELEGRAM_WEBHOOK_SECRET is missing. Webhook signature check will be bypassed.');
-  }
-  if (!allowedUsers) {
-    if (nodeEnv === 'production') {
-      console.error('❌ [Telegram Config Error] TELEGRAM_ALLOWED_USER_IDS is not configured. Telegram commands are DISABLED in production (fail-closed).');
-    } else {
-      console.warn('⚠️ [Telegram Config Warning] TELEGRAM_ALLOWED_USER_IDS is empty. Bot running in unprotected dev mode unless restricted dev mode is configured.');
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN`);
+    console.log(`📊 Admin UI available at /admin`);
+
+    // Telegram Bot Startup Checks
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const allowedUsers = process.env.TELEGRAM_ALLOWED_USER_IDS;
+    const nodeEnv = process.env.NODE_ENV;
+
+    console.log('🤖 Checking Telegram bot configuration...');
+    if (!botToken) {
+      console.warn('⚠️ [Telegram Config Warning] TELEGRAM_BOT_TOKEN is missing. Bot replies will fail.');
     }
-  }
-});
+    if (!webhookSecret) {
+      console.warn('⚠️ [Telegram Config Warning] TELEGRAM_WEBHOOK_SECRET is missing. Webhook signature check will be bypassed.');
+    }
+    if (!allowedUsers) {
+      if (nodeEnv === 'production') {
+        console.error('❌ [Telegram Config Error] TELEGRAM_ALLOWED_USER_IDS is not configured. Telegram commands are DISABLED in production (fail-closed).');
+      } else {
+        console.warn('⚠️ [Telegram Config Warning] TELEGRAM_ALLOWED_USER_IDS is empty. Bot running in unprotected dev mode unless restricted dev mode is configured.');
+      }
+    }
+  });
+}
+
+bootServer();

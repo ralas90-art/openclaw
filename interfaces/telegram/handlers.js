@@ -1,4 +1,4 @@
-const { routeNaturalLanguageCommand } = require('../../jarvis/natural-language-router');
+const { routeNaturalLanguageCommand, markNaturalLanguageLogExecuted } = require('../../jarvis/natural-language-router');
 const { supabase } = require('../../lib/supabase');
 const runtimeGovernor = require('../../core/coordination/runtimeGovernor');
 const circuitBreakerRegistry = require('../../core/failover/circuitBreakerRegistry');
@@ -380,6 +380,11 @@ async function handleCommand(text, message) {
     }
     if (nlResult.type === 'command') {
       text = nlResult.command;
+      if (nlResult.logId) {
+        markNaturalLanguageLogExecuted(nlResult.logId).catch(err =>
+          console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
+        );
+      }
     }
   }
 

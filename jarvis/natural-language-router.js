@@ -68,17 +68,27 @@ const INTENT_ALIASES = [
   { intent: 'current_work_context', aliases: ['what changed in antigravity today', 'what did antigravity change today', 'qué cambió en antigravity hoy', 'que cambio en antigravity hoy', 'qué cambió hoy en antigravity', 'que cambio hoy en antigravity', 'qué changed en antigravity today', 'qué changed today en antigravity', 'que changed en antigravity today', 'que changed today en antigravity', 'what did i work on today', 'qué trabajé hoy', 'que trabaje hoy'], mapped_command: '/jarvis_session_latest', risk_tier: 'read_only' }
 ];
 
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function findIntent(text) {
   const normalizedText = removeAccents(text).trim();
-  
+  let bestMatch = null;
+  let longestLength = 0;
+
   for (const item of INTENT_ALIASES) {
     for (const alias of item.aliases) {
-      if (normalizedText.includes(removeAccents(alias))) {
-        return item;
+      const normAlias = removeAccents(alias);
+      if (normalizedText.includes(normAlias)) {
+        if (normAlias.length > longestLength) {
+          longestLength = normAlias.length;
+          bestMatch = item;
+        }
       }
     }
   }
-  return null;
+  return bestMatch;
 }
 
 // 3. Sanitization
@@ -117,13 +127,28 @@ async function ensureAuditTableExists() {
 
 async function logNaturalLanguageRequest(sanitizedText, hash, lang, intentStr, mappedCommand, riskTier, executed, chatId) {
   try {
-    await queryDb(`
+    const rows = await queryDb(`
       INSERT INTO jarvis_natural_language_logs 
       (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, executed_boolean, source_chat_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id
     `, [sanitizedText, hash, lang, intentStr, mappedCommand, 1.0, riskTier, executed, chatId]);
+    return rows.length > 0 ? rows[0].id : null;
   } catch (err) {
     console.error('[NaturalLanguageRouter] Error inserting audit log:', err.message);
+    return null;
+  }
+}
+
+async function markNaturalLanguageLogExecuted(logId) {
+  if (!logId) return;
+  try {
+    await queryDb(
+      `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1`,
+      [logId]
+    );
+  } catch (err) {
+    console.error('[NaturalLanguageRouter] Error updating execution log:', err.message);
   }
 }
 
@@ -135,7 +160,7 @@ async function detectProjectSlug(text) {
     for (const p of projects) {
       const slug = p.slug.toLowerCase();
       // Look for slug match surrounded by word boundaries or spaces
-      const regex = new RegExp('\\b' + slug + '\\b', 'i');
+      const regex = new RegExp('\\b' + escapeRegExp(slug) + '\\b', 'i');
       if (regex.test(normalizedText)) {
         return p.slug;
       }
@@ -159,7 +184,7 @@ async function routeNaturalLanguageCommand(text, message) {
 
   if (!intentMatch) {
     // Log as unknown
-    await logNaturalLanguageRequest(sanitizedText, hash, lang, 'unknown', 'none', 'none', false, chatId);
+    const logId = await logNaturalLanguageRequest(sanitizedText, hash, lang, 'unknown', 'none', 'none', false, chatId);
     
     // Return language-aware fallback
     if (lang === 'es' || lang === 'mixed') {
@@ -167,14 +192,16 @@ async function routeNaturalLanguageCommand(text, message) {
         type: 'reply', 
         text: '🤔 No entendí ese comando. Por favor usa un comando válido o revisa el menú con /menu.',
         intent: 'unknown',
-        command: 'none'
+        command: 'none',
+        logId
       };
     }
     return {
       type: 'reply',
       text: '🤔 I did not understand that command. Please use a valid slash command or check /menu.',
       intent: 'unknown',
-      command: 'none'
+      command: 'none',
+      logId
     };
   }
 
@@ -184,17 +211,17 @@ async function routeNaturalLanguageCommand(text, message) {
   if (sessionIntents.includes(intentMatch.intent)) {
     projectSlug = await detectProjectSlug(text);
     if (!projectSlug) {
-      await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, 'ASK_CLARIFICATION', 'read_only', false, chatId);
+      const logId = await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, 'ASK_CLARIFICATION', 'read_only', false, chatId);
       const clarText = (lang === 'es' || lang === 'mixed')
         ? 'Which project should I save this under? (e.g. ¿Bajo qué proyecto debería guardar esto? Por favor especifica un slug de proyecto activo)'
         : 'Which project should I save this under? Please specify an active project slug.';
-      return { type: 'reply', text: clarText, intent: intentMatch.intent, command: 'ASK_CLARIFICATION' };
+      return { type: 'reply', text: clarText, intent: intentMatch.intent, command: 'ASK_CLARIFICATION', logId };
     }
   }
 
   // Handle Safety Gates (state_mutation must not be executed directly via NL)
   if (intentMatch.risk_tier === 'state_mutation') {
-    await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, intentMatch.mapped_command, intentMatch.risk_tier, false, chatId);
+    const logId = await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, intentMatch.mapped_command, intentMatch.risk_tier, false, chatId);
     
     let replyText = '';
     if (intentMatch.mapped_command === 'HELP_APPROVALS') {
@@ -231,23 +258,24 @@ async function routeNaturalLanguageCommand(text, message) {
         : '⚠️ *Action Blocked*: High-risk state mutation requires explicit slash commands.';
     }
 
-    return { type: 'reply', text: replyText, intent: intentMatch.intent, command: intentMatch.mapped_command };
+    return { type: 'reply', text: replyText, intent: intentMatch.intent, command: intentMatch.mapped_command, logId };
   }
 
-  // Log successful read-only translation
-  await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, intentMatch.mapped_command, intentMatch.risk_tier, true, chatId);
+  // Log initial request insertion (executed_boolean initially false, updated after successful dispatch)
+  const logId = await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, intentMatch.mapped_command, intentMatch.risk_tier, false, chatId);
 
   if (intentMatch.mapped_command === 'HELP_DASHBOARD') {
     const dashboardUrl = process.env.PUBLIC_URL ? (process.env.PUBLIC_URL + '/admin/jarvis') : '/admin/jarvis';
-    return { type: 'reply', text: (lang === 'es' || lang === 'mixed') ? `Aquí tienes tu dashboard: ${dashboardUrl}` : `Here is your dashboard: ${dashboardUrl}`, intent: intentMatch.intent, command: intentMatch.mapped_command };
+    return { type: 'reply', text: (lang === 'es' || lang === 'mixed') ? `Aquí tienes tu dashboard: ${dashboardUrl}` : `Here is your dashboard: ${dashboardUrl}`, intent: intentMatch.intent, command: intentMatch.mapped_command, logId };
   }
 
   // Return mapped command for handlers to execute
-  return { type: 'command', command: intentMatch.mapped_command, intent: intentMatch.intent };
+  return { type: 'command', command: intentMatch.mapped_command, intent: intentMatch.intent, logId };
 }
 
 module.exports = {
   routeNaturalLanguageCommand,
+  markNaturalLanguageLogExecuted,
   detectLanguage,
   sanitizeLogText
 };

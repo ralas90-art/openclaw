@@ -84,8 +84,35 @@ export default function JarvisDashboard() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const urlTicket = params.get('ticket');
     const urlToken = params.get('token');
-    if (urlToken) {
+
+    if (urlTicket) {
+      fetch('/api/jarvis/auth/exchange-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket: urlTicket.trim() })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.token) {
+          sessionStorage.setItem('admin_token', data.token);
+          setToken(data.token);
+        } else {
+          setError(data.error || 'Failed to exchange single-use ticket.');
+        }
+      })
+      .catch(err => {
+        console.error('[Dashboard] Ticket exchange error:', err);
+        setError('Failed to exchange auth ticket.');
+      })
+      .finally(() => {
+        params.delete('ticket');
+        const newSearch = params.toString();
+        const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
+        window.history.replaceState({}, document.title, newPath);
+      });
+    } else if (urlToken) {
       const cleanToken = urlToken.trim();
       sessionStorage.setItem('admin_token', cleanToken);
       setToken(cleanToken);
