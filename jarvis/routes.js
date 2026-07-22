@@ -32,17 +32,99 @@ function getRedirectUri(req) {
   const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const host = req.headers.host;
   return `${protocol}://${host}/api/jarvis/google/callback`;
+}const {
+  safeTimingEqual,
+  checkTicketRateLimit,
+  createAuthTicket,
+  validateAndConsumeTicket,
+  createSessionToken,
+  validateSessionToken
+} = require('./auth-tickets');
+
+// Middleware to authenticate either admin token or active session token
+async function authenticateAdminSession(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing bearer token' });
+  }
+
+  if (process.env.INTERNAL_ADMIN_TOKEN && safeTimingEqual(token, process.env.INTERNAL_ADMIN_TOKEN)) {
+    return next();
+  }
+
+  const sessionResult = await validateSessionToken(token);
+  if (sessionResult.valid) {
+    req.sessionMetadata = sessionResult.metadata;
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Unauthorized: invalid or expired session token' });
 }
 
 async function authenticateAnyToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
   
-  if (token && token === process.env.INTERNAL_ADMIN_TOKEN) {
-    return next();
+  if (token) {
+    if (process.env.INTERNAL_ADMIN_TOKEN && safeTimingEqual(token, process.env.INTERNAL_ADMIN_TOKEN)) {
+      return next();
+    }
+    const sessionResult = await validateSessionToken(token);
+    if (sessionResult.valid) {
+      req.sessionMetadata = sessionResult.metadata;
+      return next();
+    }
   }
   return authenticateMobileToken(req, res, next);
 }
+
+// POST /api/jarvis/auth/exchange-ticket
+router.post('/auth/exchange-ticket', async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown_ip';
+  if (!checkTicketRateLimit(`exchange_${ip}`, 20, 60000)) {
+    return res.status(429).json({ success: false, error: 'Rate limit exceeded' });
+  }
+
+  const { ticket } = req.body || {};
+  if (!ticket || typeof ticket !== 'string') {
+    return res.status(400).json({ success: false, error: 'Ticket parameter is required' });
+  }
+
+  const validation = await validateAndConsumeTicket(ticket, 'dashboard_access');
+  if (!validation.valid) {
+    return res.status(401).json({ success: false, error: validation.reason || 'Ticket exchange failed' });
+  }
+
+  try {
+    const sessionToken = await createSessionToken(validation.metadata || {}, 3600);
+    return res.status(200).json({
+      success: true,
+      session_token: sessionToken,
+      expires_in: 3600
+    });
+  } catch (err) {
+    console.error('[AuthExchange Error]', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to issue session token' });
+  }
+});
+
+// POST /api/jarvis/google/connect-ticket
+router.post('/google/connect-ticket', authenticateAdminSession, async (req, res) => {
+  const { connector } = req.body || {};
+  if (connector !== 'gmail' && connector !== 'google_drive') {
+    return res.status(400).json({ success: false, error: 'Invalid connector ID' });
+  }
+
+  try {
+    const ticket = await createAuthTicket('google_oauth_connect', { connector }, 300);
+    return res.status(200).json({ success: true, ticket });
+  } catch (err) {
+    console.error('[ConnectTicket Error]', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to issue OAuth connect ticket' });
+  }
+});
 
 // POST /api/jarvis/mobile-intake
 router.post('/mobile-intake', authenticateMobileToken, handleMobileIntake);
@@ -82,18 +164,29 @@ router.get('/daily-brief', authenticateAnyToken, async (req, res) => {
 
 // GET /api/jarvis/google/connect
 router.get('/google/connect', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const headerToken = authHeader && authHeader.split(' ')[1];
-  const queryToken = req.query.token;
-  const token = headerToken || queryToken;
-
-  if (!token || token !== process.env.INTERNAL_ADMIN_TOKEN) {
-    return res.status(401).send('<h1>401 Unauthorized</h1><p>Invalid or missing admin token.</p>');
+  const ticket = req.query.ticket;
+  if (!ticket) {
+    return res.status(400).send('<h1>400 Bad Request</h1><p>Missing auth ticket parameter.</p>');
   }
 
-  const connectorId = req.query.connector;
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown_ip';
+  if (!checkTicketRateLimit(`connect_${ip}`, 10, 60000)) {
+    return res.status(429).send('<h1>429 Rate Limit Exceeded</h1><p>Too many connection attempts.</p>');
+  }
+
+  const validation = await validateAndConsumeTicket(ticket, 'google_oauth_connect');
+  if (!validation.valid) {
+    return res.status(401).send(`<h1>401 Unauthorized</h1><p>${validation.reason || 'Invalid or expired ticket'}</p>`);
+  }
+
+  const connectorId = validation.metadata && validation.metadata.connector;
   if (connectorId !== 'gmail' && connectorId !== 'google_drive') {
-    return res.status(400).send('<h1>400 Bad Request</h1><p>Invalid or missing connector ID. Only "gmail" or "google_drive" are supported.</p>');
+    return res.status(400).send('<h1>400 Bad Request</h1><p>Invalid connector specified in ticket.</p>');
+  }
+
+  const encryptionKey = process.env.JARVIS_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    return res.status(500).send('<h1>500 Internal Server Error</h1><p>JARVIS_ENCRYPTION_KEY is missing on server.</p>');
   }
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -102,7 +195,6 @@ router.get('/google/connect', async (req, res) => {
 
   try {
     const redirectUri = getRedirectUri(req);
-
     const { google } = require('googleapis');
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -112,7 +204,7 @@ router.get('/google/connect', async (req, res) => {
 
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
     const crypto = require('crypto');
-    const hmac = crypto.createHmac('sha256', process.env.JARVIS_ENCRYPTION_KEY || 'fallback-key');
+    const hmac = crypto.createHmac('sha256', encryptionKey);
     hmac.update(`${connectorId}:${expiresAt}`);
     const signature = hmac.digest('hex');
     const state = `${connectorId}:${expiresAt}:${signature}`;
@@ -158,12 +250,17 @@ router.get('/google/callback', async (req, res) => {
     return res.status(400).send('<h1>400 Bad Request</h1><p>OAuth session has expired. Please try again.</p>');
   }
 
+  const encryptionKey = process.env.JARVIS_ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    return res.status(500).send('<h1>500 Internal Server Error</h1><p>JARVIS_ENCRYPTION_KEY is missing on server.</p>');
+  }
+
   const crypto = require('crypto');
-  const hmac = crypto.createHmac('sha256', process.env.JARVIS_ENCRYPTION_KEY || 'fallback-key');
+  const hmac = crypto.createHmac('sha256', encryptionKey);
   hmac.update(`${connectorId}:${expiresAt}`);
   const expectedSignature = hmac.digest('hex');
 
-  if (signature !== expectedSignature) {
+  if (!safeTimingEqual(signature, expectedSignature)) {
     return res.status(400).send('<h1>400 Bad Request</h1><p>Invalid state signature. Safety validation failed.</p>');
   }
 

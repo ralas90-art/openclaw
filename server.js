@@ -570,15 +570,23 @@ const { runSchemaMigrations } = require('./jarvis/db');
 
 async function bootServer() {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.DATABASE_URL) {
+        throw new Error('DATABASE_URL is missing in production.');
+      }
+      if (!process.env.JARVIS_ENCRYPTION_KEY) {
+        throw new Error('JARVIS_ENCRYPTION_KEY is missing in production.');
+      }
+    }
     await runSchemaMigrations();
   } catch (err) {
-    console.error('❌ [Server Boot] Failed schema migrations:', err.message);
+    console.error('❌ [Server Boot] Critical failure during startup migrations/config checks:', err.message);
     process.exit(1);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  return app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN`);
+    console.log(`🛡️ Admin API secured behind INTERNAL_ADMIN_TOKEN & Session Tickets`);
     console.log(`📊 Admin UI available at /admin`);
 
     // Telegram Bot Startup Checks
@@ -604,4 +612,9 @@ async function bootServer() {
   });
 }
 
-bootServer();
+if (require.main === module) {
+  bootServer();
+}
+
+module.exports = { app, bootServer };
+

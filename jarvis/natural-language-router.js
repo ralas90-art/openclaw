@@ -178,7 +178,7 @@ async function routeNaturalLanguageCommand(text, message) {
   const lang = detectLanguage(text);
   const hash = crypto.createHash('sha256').update(text).digest('hex');
   const sanitizedText = sanitizeLogText(text);
-  const chatId = message.chat?.id?.toString() || 'unknown';
+  const chatId = (message && message.chat && message.chat.id) ? String(message.chat.id) : 'unknown';
 
   const intentMatch = findIntent(text);
 

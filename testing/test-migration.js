@@ -1,6 +1,7 @@
 /**
  * Database Migration & Work Session Constraint Test Suite
- * Verifies idempotent database migration execution, pool stability, and active work session duplicate rejection.
+ * Verifies idempotent database migration execution, pool stability, and real concurrent active work session duplicate rejection.
+ * Exits non-zero on failure.
  */
 
 const { runMigrations } = require('../jarvis/migrations');
@@ -15,7 +16,12 @@ function assert(condition, message) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting Migration & DB Hardening Tests...\n');
+  console.log('🧪 Starting Migration & Real Concurrency DB Hardening Tests...\n');
+
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️ SKIPPED: DATABASE_URL not configured. Skipping live DB migration tests.');
+    process.exit(0);
+  }
 
   // Test 1: Idempotent Migrations
   try {
@@ -24,41 +30,44 @@ async function runTests() {
     await runMigrations();
     console.log('✅ Test 2: Second (idempotent) migration run passed.');
   } catch (err) {
-    console.warn('⚠️ Migration execution skipped or failed (DB environment dependant):', err.message);
+    console.error('❌ Migration execution failed:', err.message);
+    process.exit(1);
   }
 
-  // Test 3: Active Session Single-Occupancy Constraint (Simulated or Live DB)
-  const testSlug = 'septivolt';
+  // Test 3: Real Concurrent Inserts using Promise.allSettled with valid project slug
+  const testSlug = 'cresca-os';
 
-  // Clean up any stale active sessions for test slug first
   try {
-    await queryDb("UPDATE jarvis_work_sessions SET status = 'completed' WHERE project_slug = $1 AND status = 'active';", [testSlug]);
-    
-    // Start session 1
-    const s1 = await startWorkSession(testSlug, 'testing', 'Session 1');
-    assert(s1 && s1.status === 'active', 'First session must start as active');
-    console.log('✅ Test 3A: First work session started successfully.');
+    // Clean up any active session for test project first
+    await queryDb("UPDATE jarvis_work_sessions SET status = 'completed' WHERE project_slug = $1 AND status IN ('active', 'updated');", [testSlug]);
 
-    // Attempt starting session 2 (Must be rejected!)
-    let session2Rejected = false;
-    try {
-      await startWorkSession(testSlug, 'testing', 'Session 2');
-    } catch (err) {
-      if (err.message.includes('already active')) {
-        session2Rejected = true;
-      }
-    }
-    assert(session2Rejected, 'Starting duplicate active work session for same project must be rejected');
-    console.log('✅ Test 3B: Duplicate active session rejected successfully.');
+    console.log(`- Testing real concurrent session creation for project: '${testSlug}'...`);
+    const results = await Promise.allSettled([
+      startWorkSession(testSlug, 'testing', 'Concurrent Start 1'),
+      startWorkSession(testSlug, 'testing', 'Concurrent Start 2')
+    ]);
+
+    const fulfilled = results.filter(r => r.status === 'fulfilled');
+    const rejected = results.filter(r => r.status === 'rejected');
+
+    assert(fulfilled.length === 1, `Exactly 1 concurrent session start must succeed. Got ${fulfilled.length}`);
+    assert(rejected.length === 1, `Exactly 1 concurrent session start must be rejected. Got ${rejected.length}`);
+    assert(
+      rejected[0].reason && rejected[0].reason.message.includes('already active'),
+      'Rejected session error must indicate active session constraint'
+    );
+    console.log('✅ Test 3: Real concurrent session constraint (`ux_ws_one_active`) passed.');
 
     // Clean up test session
-    await doneWorkSession(testSlug, 'Test completed', 'testing');
-    console.log('✅ Test 3C: Session ended cleanly.');
+    await doneWorkSession(testSlug, 'Concurrent test cleanup', 'testing');
+    console.log('✅ Test 4: Session cleanup completed.');
   } catch (err) {
-    console.warn('⚠️ Active session DB constraint test warning:', err.message);
+    console.error('❌ Concurrency test failed:', err.message);
+    process.exit(1);
+  } finally {
+    await closePool();
   }
 
-  await closePool();
   console.log('\n🎉 ALL Migration & DB Hardening Tests Passed Successfully!');
 }
 

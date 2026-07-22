@@ -82,10 +82,31 @@ export default function JarvisDashboard() {
     }
   };
 
+  const handleGoogleConnect = async (connectorId) => {
+    try {
+      const res = await fetch('/api/jarvis/google/connect-ticket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ connector: connectorId })
+      });
+      const data = await res.json();
+      if (data.success && data.ticket) {
+        window.location.href = `/api/jarvis/google/connect?ticket=${encodeURIComponent(data.ticket)}&force=true`;
+      } else {
+        setError(data.error || 'Failed to issue Google connect ticket.');
+      }
+    } catch (err) {
+      console.error('[GoogleConnect Error]', err);
+      setError('Network failure generating connect ticket.');
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlTicket = params.get('ticket');
-    const urlToken = params.get('token');
 
     if (urlTicket) {
       fetch('/api/jarvis/auth/exchange-ticket', {
@@ -95,9 +116,10 @@ export default function JarvisDashboard() {
       })
       .then(res => res.json())
       .then(data => {
-        if (data.token) {
-          sessionStorage.setItem('admin_token', data.token);
-          setToken(data.token);
+        const sessionTok = data.session_token || data.token;
+        if (sessionTok) {
+          sessionStorage.setItem('admin_token', sessionTok);
+          setToken(sessionTok);
         } else {
           setError(data.error || 'Failed to exchange single-use ticket.');
         }
@@ -112,14 +134,6 @@ export default function JarvisDashboard() {
         const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
         window.history.replaceState({}, document.title, newPath);
       });
-    } else if (urlToken) {
-      const cleanToken = urlToken.trim();
-      sessionStorage.setItem('admin_token', cleanToken);
-      setToken(cleanToken);
-      params.delete('token');
-      const newSearch = params.toString();
-      const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
-      window.history.replaceState({}, document.title, newPath);
     }
   }, []);
 
@@ -593,15 +607,13 @@ export default function JarvisDashboard() {
                     {c.last_used_at && <p style={{ margin: '5px 0' }}><strong>Last Used:</strong> {new Date(c.last_used_at).toLocaleString()}</p>}
                   </div>
                   <div style={{ marginTop: '20px' }}>
-                    <a
-                      href={`/api/jarvis/google/connect?connector=${c.connector_id}&token=${token}&force=true`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleGoogleConnect(c.connector_id)}
                       className="btn btn-primary"
                       style={{ display: 'inline-block', fontSize: '0.85rem' }}
                     >
                       Authorize Connector
-                    </a>
+                    </button>
                   </div>
                 </div>
               ))}

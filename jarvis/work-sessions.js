@@ -4,12 +4,10 @@ const fs = require('fs');
 const path = require('path');
 
 // 1. Ensure Table Schema and Migrations
+// 1. Ensure Table Schema and Migrations
 async function ensureWorkSessionsTableExists() {
-  try {
-    await runSchemaMigrations();
-  } catch (err) {
-    console.error('[WorkSessions] Error executing migrations:', err.message);
-  }
+  // Migrations run at server boot. Table check is a no-op fallback.
+  return true;
 }
 
 // 2. State Mutation protection and Sanitization
@@ -20,9 +18,13 @@ function sanitizeHandoffContent(content) {
 
 // 3. Ingestion Function
 async function ingestHandoffFile() {
-  await ensureWorkSessionsTableExists();
-  
-  const handoffPath = path.resolve(__dirname, '../docs/JARVIS_HANDOFF.md');
+  const docsDir = path.resolve(__dirname, '../docs');
+  const handoffPath = path.resolve(docsDir, 'JARVIS_HANDOFF.md');
+  const relative = path.relative(docsDir, handoffPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Security Error: Path traversal attempt detected outside docs directory.');
+  }
+
   if (!fs.existsSync(handoffPath)) {
     throw new Error('docs/JARVIS_HANDOFF.md not found in the workspace.');
   }
@@ -46,7 +48,7 @@ async function ingestHandoffFile() {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    if (line.trim().startsWith('project_slug:')) {
+    if (!projectSlug && line.trim().startsWith('project_slug:')) {
       projectSlug = line.split('project_slug:')[1].trim();
       continue;
     }

@@ -371,31 +371,46 @@ async function handleInboxRead(filename) {
 async function handleCommand(text, message) {
   if (!text) return;
 
+  let pendingLogId = null;
+
   if (!text.trim().startsWith('/')) {
     const nlResult = await routeNaturalLanguageCommand(text, message);
     console.log(`[Telegram Handlers] nl_intent_detected=${nlResult.intent || 'unknown'}`);
     console.log(`[Telegram Handlers] mapped_command=${nlResult.command || 'none'}`);
+    
+    if (nlResult.logId) {
+      pendingLogId = nlResult.logId;
+    }
+
     if (nlResult.type === 'reply') {
+      if (pendingLogId) {
+        await markNaturalLanguageLogExecuted(pendingLogId).catch(err =>
+          console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
+        );
+      }
       return nlResult.text;
     }
     if (nlResult.type === 'command') {
       text = nlResult.command;
-      if (nlResult.logId) {
-        markNaturalLanguageLogExecuted(nlResult.logId).catch(err =>
-          console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
-        );
-      }
     }
   }
 
   const parsed = parseMultilineCommand(text);
   const command = parsed.command;
 
+  let output = null;
+
   // 1. Registry & Help Commands
-  if (command === '/help') return handleHelp();
-  if (command === '/menu') {
+  if (command === '/help') output = handleHelp();
+  else if (command === '/menu') {
     const { handleMenuCommand } = require('./hermes-ux-menu');
-    return handleMenuCommand(message);
+    output = handleMenuCommand(message);
+  } else if (command === '/jarvis_dashboard' || command === '/jarvisdashboard') {
+    const { createAuthTicket } = require('../../jarvis/auth-tickets');
+    const ticket = await createAuthTicket('dashboard_access', { user_id: message ? message.chat.id : 'unknown' }, 300);
+    const publicUrl = getPublicBaseUrl();
+    const dashboardUrl = `${publicUrl}/admin/jarvis?ticket=${ticket}`;
+    output = `📊 *Jarvis Dashboard Access*\n\nHere is your single-use dashboard access link (valid for 5 minutes):\n${dashboardUrl}\n\n⚠️ *Security Note*: This link can only be used once. Token exchange happens automatically on load.`;
   }
 
   // Jarvis Personal Assistant Commands

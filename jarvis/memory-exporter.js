@@ -206,16 +206,15 @@ async function exportDecisions() {
  */
 async function exportJarvisMemory() {
   try {
+    if (process.env.SKIP_MEMORY_EXPORT === 'true' || process.env.NODE_ENV === 'test') {
+      console.log('[MemoryExporter] SKIP_MEMORY_EXPORT set. Skipping physical file snapshot generation to preserve tracked operational files.');
+      return { success: true, skipped: true };
+    }
+
     ensureMemoryDir();
     
-    if (!DB_URL) {
+    if (!process.env.DATABASE_URL) {
       console.warn('[MemoryExporter] Database connection URL missing. Creating placeholders.');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'PROJECT_STATE.md'), getHeaderBlock('🗂️ Active Project Registry') + '\n(Database offline placeholder)\n', 'utf8');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'DAILY_BRIEF.md'), '# 📆 Daily Brief\n\n(Database offline placeholder)\n', 'utf8');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'COMPLETED_WORK.md'), getHeaderBlock('🏆 Completed Work Log') + '\n(Database offline placeholder)\n', 'utf8');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'BLOCKERS.md'), getHeaderBlock('🛑 Active Blockers') + '\n(Database offline placeholder)\n', 'utf8');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'NEXT_ACTIONS.md'), getHeaderBlock('⚡ Recommended Next Actions') + '\n(Database offline placeholder)\n', 'utf8');
-      fs.writeFileSync(path.join(MEMORY_DIR, 'DECISIONS.md'), getHeaderBlock('🧠 Architectural & Design Decisions Log') + '\n(Database offline placeholder)\n', 'utf8');
       return { success: false, reason: 'Database config missing' };
     }
 
