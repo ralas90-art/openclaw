@@ -3,12 +3,67 @@
  * Verifies Sanitization, Natural Language Router, DB Pooling/Migrations, and Auth Ticket Exchange
  */
 
-require('dotenv').config();
+process.env.NODE_ENV = 'test';
+process.env.SKIP_MEMORY_EXPORT = 'true';
+
+const fs = require('fs');
+const path = require('path');
+
+function normalizePgUrl(urlStr) {
+  if (!urlStr) return '';
+  try {
+    const u = new URL(urlStr);
+    return `${u.protocol}//${u.username}:${u.password}@${u.hostname}:${u.port || 5432}${u.pathname}`;
+  } catch (e) {
+    return urlStr.trim();
+  }
+}
+
+const testDbUrl = process.env.TEST_DATABASE_URL;
+const prodDbUrl = process.env.DATABASE_URL;
+
+if (!testDbUrl) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
+}
+if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl)) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
+}
+
+process.env.DATABASE_URL = testDbUrl;
+
 const assert = require('assert');
 const { sanitizeSecrets, sanitizeError, sanitizeText } = require('../jarvis/sanitizer');
 const { routeNaturalLanguageCommand, detectLanguage, markNaturalLanguageLogExecuted } = require('../jarvis/natural-language-router');
 const { queryDb } = require('../jarvis/db');
 const { runMigrations } = require('../jarvis/migrations');
+
+const memoryFiles = [
+  'jarvis/memory/BLOCKERS.md',
+  'jarvis/memory/COMPLETED_WORK.md',
+  'jarvis/memory/DAILY_BRIEF.md',
+  'jarvis/memory/DECISIONS.md',
+  'jarvis/memory/NEXT_ACTIONS.md',
+  'jarvis/memory/PROJECT_STATE.md'
+];
+
+function getMemorySnapshot() {
+  const snapshot = {};
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    snapshot[f] = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+  }
+  return snapshot;
+}
+
+function assertMemoryUnchanged(initialSnapshot) {
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    const current = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+    if (initialSnapshot[f] !== current) {
+      throw new Error(`SECURITY/ISOLATION FAILURE: Memory file ${f} was mutated during test execution!`);
+    }
+  }
+}
 
 async function runTests() {
   console.log('🧪 Starting Jarvis Security Mitigation Plan v3 Regression Test Suite...\n');
@@ -62,26 +117,21 @@ async function runTests() {
 
   // Test 5: Database Connection Pool & Schema Migrations
   console.log('\n--- Test 5: DB Connection Pool & Schema Migrations ---');
-  const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-  if (!testDbUrl) {
-    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL (or DATABASE_URL) is missing. Release blocked.');
-    process.exit(1);
-  }
-  process.env.DATABASE_URL = testDbUrl;
-
   try {
     const migrationSuccess = await runMigrations();
     assert(migrationSuccess === true, 'runMigrations must return true on success');
     console.log('   runMigrations executed successfully without errors.');
   } catch (err) {
-    console.error('❌ Migration failure detected during test 5:', err.message);
-    process.exit(1);
+    throw new Error(`Migration failure detected during test 5: ${err.message}`);
   }
   console.log('✅ Test 5 Passed: Authoritative DB Schema Migrations verified.');
 
+  assertMemoryUnchanged(memSnapshot);
+  console.log('✅ Memory files integrity check passed (0 mutations).');
   console.log('\n🎉 ALL REGRESSION TESTS PASSED SUCCESSFULLY!');
 }
 
+const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('❌ Test Suite Failed:', err);
   process.exit(1);

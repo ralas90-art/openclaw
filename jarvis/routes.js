@@ -445,8 +445,8 @@ router.post('/approvals/:id/approve', authenticateAdminSession, async (req, res)
     const result = await executeApprovedAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action approved and executed successfully', result });
   } catch (err) {
-    console.error('[Approve Route Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[Approve Route Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -458,8 +458,8 @@ router.post('/approvals/:id/reject', authenticateAdminSession, async (req, res) 
     await rejectApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal rejected' });
   } catch (err) {
-    console.error('[Reject Route Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[Reject Route Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -471,8 +471,8 @@ router.post('/approvals/:id/cancel', authenticateAdminSession, async (req, res) 
     await cancelApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal cancelled' });
   } catch (err) {
-    console.error('[Cancel Route Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[Cancel Route Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -484,8 +484,8 @@ router.post('/priorities/:id/propose', authenticateAdminSession, async (req, res
     const proposal = await proposeAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposed successfully', proposal });
   } catch (err) {
-    console.error('[Propose Route Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[Propose Route Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -604,8 +604,8 @@ router.get('/work-sessions', authenticateAdminSession, async (req, res) => {
     const sessions = await workSessions.listWorkSessions(limit);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -615,8 +615,8 @@ router.get('/work-sessions/latest', authenticateAdminSession, async (req, res) =
     const session = await workSessions.getActiveSession();
     return res.status(200).json(session || { message: 'No active session' });
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -627,8 +627,8 @@ router.get('/work-sessions/project/:project_slug', authenticateAdminSession, asy
     const sessions = await workSessions.getProjectSessions(slug);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -639,8 +639,8 @@ router.post('/work-sessions/start', authenticateAdminSession, async (req, res) =
     const session = await workSessions.startWorkSession(project_slug, source || 'dashboard', text_content);
     return res.status(201).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(400).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(400).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -651,8 +651,8 @@ router.post('/work-sessions/update', authenticateAdminSession, async (req, res) 
     const session = await workSessions.updateWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(400).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(400).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -663,8 +663,8 @@ router.post('/work-sessions/done', authenticateAdminSession, async (req, res) =>
     const session = await workSessions.doneWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', err.message);
-    return res.status(400).json({ error: err.message });
+    console.error('[WorkSessions API Error]', sanitizeError(err).message);
+    return res.status(400).json({ error: sanitizeError(err).message });
   }
 });
 
@@ -674,8 +674,8 @@ router.post('/handoff/ingest', authenticateAdminSession, async (req, res) => {
     const session = await workSessions.ingestHandoffFile();
     return res.status(200).json({ success: true, message: 'Handoff file ingested successfully', session });
   } catch (err) {
-    console.error('[Handoff Ingest API Error]', err.message);
-    return res.status(400).json({ error: err.message });
+    console.error('[Handoff Ingest API Error]', sanitizeError(err).message);
+    return res.status(400).json({ error: sanitizeError(err).message });
   }
 });
 

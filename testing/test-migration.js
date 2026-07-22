@@ -5,39 +5,75 @@
  * Exits non-zero on failure.
  */
 
-require('dotenv').config();
+process.env.NODE_ENV = 'test';
+process.env.SKIP_MEMORY_EXPORT = 'true';
+
+const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 
-process.env.NODE_ENV = 'test';
+function normalizePgUrl(urlStr) {
+  if (!urlStr) return '';
+  try {
+    const u = new URL(urlStr);
+    return `${u.protocol}//${u.username}:${u.password}@${u.hostname}:${u.port || 5432}${u.pathname}`;
+  } catch (e) {
+    return urlStr.trim();
+  }
+}
+
+const testDbUrl = process.env.TEST_DATABASE_URL;
+const prodDbUrl = process.env.DATABASE_URL;
+
+if (!testDbUrl) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
+}
+if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl)) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
+}
+
+process.env.DATABASE_URL = testDbUrl;
 
 const { runMigrations } = require('../jarvis/migrations');
 const { startWorkSession, doneWorkSession } = require('../jarvis/work-sessions');
 const { queryDb, closePool } = require('../jarvis/db');
 
+const memoryFiles = [
+  'jarvis/memory/BLOCKERS.md',
+  'jarvis/memory/COMPLETED_WORK.md',
+  'jarvis/memory/DAILY_BRIEF.md',
+  'jarvis/memory/DECISIONS.md',
+  'jarvis/memory/NEXT_ACTIONS.md',
+  'jarvis/memory/PROJECT_STATE.md'
+];
+
+function getMemorySnapshot() {
+  const snapshot = {};
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    snapshot[f] = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+  }
+  return snapshot;
+}
+
+function assertMemoryUnchanged(initialSnapshot) {
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    const current = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+    if (initialSnapshot[f] !== current) {
+      throw new Error(`SECURITY/ISOLATION FAILURE: Memory file ${f} was mutated during test execution!`);
+    }
+  }
+}
+
 function assert(condition, message) {
   if (!condition) {
-    console.error(`❌ Assertion failed: ${message}`);
-    process.exit(1);
+    throw new Error(`Migration Test Assertion Failed: ${message}`);
   }
 }
 
 async function runTests() {
   console.log('🧪 Starting Isolated DB Migration & Real Concurrency Tests...\n');
-
-  const testDbUrl = process.env.TEST_DATABASE_URL;
-  if (!testDbUrl) {
-    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL is missing. Mandatory isolated DB tests cannot run. Release blocked.');
-    process.exit(1);
-  }
-
-  const prodDbUrl = process.env.DATABASE_URL;
-  if (prodDbUrl && testDbUrl.trim().toLowerCase() === prodDbUrl.trim().toLowerCase()) {
-    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL cannot equal DATABASE_URL. Isolated DB test safety violation.');
-    process.exit(1);
-  }
-
-  // Set DATABASE_URL to test DB for connection pool during test execution
-  process.env.DATABASE_URL = testDbUrl;
 
   // Test 1: Idempotent Migrations
   try {
@@ -89,9 +125,12 @@ async function runTests() {
     console.log('✅ Test 4: Isolated test project & session data cleaned up cleanly in finally block.');
   }
 
+  assertMemoryUnchanged(memSnapshot);
+  console.log('✅ Memory files integrity check passed (0 mutations).');
   console.log('\n🎉 ALL Migration & DB Hardening Tests Passed Successfully!');
 }
 
+const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('Test execution failed:', err);
   process.exit(1);

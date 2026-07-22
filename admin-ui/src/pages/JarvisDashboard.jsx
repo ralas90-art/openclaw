@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, Mail, Database, CheckCircle2, XCircle, Ban, History, ShieldAlert, ArrowRight, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
 
 export default function JarvisDashboard() {
-  const [token, setToken] = useState(sessionStorage.getItem('admin_token') || '');
+  const [token, setToken] = useState(() => {
+    const saved = sessionStorage.getItem('admin_token') || '';
+    return saved.startsWith('srv_sess_') ? saved : '';
+  });
   const [tokenInput, setTokenInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +32,10 @@ export default function JarvisDashboard() {
     e.preventDefault();
     const cleanToken = tokenInput.trim();
     if (!cleanToken) return;
+    if (!cleanToken.startsWith('srv_sess_')) {
+      setError('Access Denied: Only valid server session tokens (srv_sess_...) are permitted.');
+      return;
+    }
     sessionStorage.setItem('admin_token', cleanToken);
     setToken(cleanToken);
   };

@@ -19,6 +19,7 @@ const audit = require('./dashboard-action-audit');
 const dispatcher = require('../hermes/runtime-dispatcher-adapter');
 const roles = require('../runtime/runtime-roles');
 const tgHandlers = require('../../interfaces/telegram/handlers');
+const { sanitizeError } = require('../../jarvis/sanitizer');
 
 // Helper to get an authorized chat ID for Telegram/Runtime roles
 function getAuthorizedChatId() {
@@ -122,43 +123,53 @@ function actionsEnabledMiddleware(req, res, next) {
   next();
 }
 
-// Security helper: get current INTERNAL_ADMIN_TOKEN
-function getAdminToken() {
-  return process.env.INTERNAL_ADMIN_TOKEN || 'admin-test-token-123';
-}
+const { validateSessionToken } = require('../../jarvis/auth-tickets');
 
 // Authentication Middleware
-function protectDashboard(req, res, next) {
-  const token = req.query.token || req.headers['x-admin-token'] || (req.body && req.body.token);
-  const expected = getAdminToken();
-  
+async function protectDashboard(req, res, next) {
+  let authHeader = req.headers['authorization'] || req.headers['x-admin-token'];
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (typeof authHeader === 'string') {
+    token = authHeader.trim();
+  } else if (req.body && typeof req.body.token === 'string') {
+    token = req.body.token.trim();
+  }
+
   const crypto = require('crypto');
   const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
   const ipHash = crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
   const actor = `ip_hash_${ipHash}`;
-  
-  if (!token) {
+
+  if (!token || !token.startsWith('srv_sess_')) {
     audit.logDashboardAction({
       actionType: 'access',
       actor,
       resultStatus: 'denied',
-      safeMessage: 'missing_dashboard_token',
-      metadata: { denialReason: 'missing_dashboard_token' }
+      safeMessage: 'invalid_or_missing_session_token',
+      metadata: { denialReason: 'invalid_or_missing_session_token' }
     });
     return res.status(401).send(renderLoginPage());
   }
-  
-  if (token !== expected) {
-    audit.logDashboardAction({
-      actionType: 'access',
-      actor,
-      resultStatus: 'denied',
-      safeMessage: 'invalid_dashboard_token',
-      metadata: { denialReason: 'invalid_dashboard_token' }
-    });
+
+  try {
+    const sessionRes = await validateSessionToken(token);
+    if (!sessionRes.valid) {
+      audit.logDashboardAction({
+        actionType: 'access',
+        actor,
+        resultStatus: 'denied',
+        safeMessage: 'expired_or_invalid_session',
+        metadata: { denialReason: 'expired_or_invalid_session' }
+      });
+      return res.status(401).send(renderLoginPage());
+    }
+    req.sessionMetadata = sessionRes.metadata;
+    next();
+  } catch (err) {
     return res.status(401).send(renderLoginPage());
   }
-  next();
 }
 
 // Middleware to verify POST actions (Token, Nonce, Actions Enabled)
@@ -205,31 +216,27 @@ function verifyPostAction(req, res, next) {
   }
 
   // 3. Check Token Auth
-  const token = req.query.token || req.headers['x-admin-token'] || (req.body && req.body.token);
-  if (!token) {
-    audit.logDashboardAction({
-      actionType,
-      hermesJobId: jobId,
-      approvalId,
-      actor,
-      resultStatus: 'denied',
-      safeMessage: 'missing_dashboard_token',
-      metadata: { denialReason: 'missing_dashboard_token' }
-    });
-    return res.status(401).send('Unauthorized: missing_dashboard_token');
+  let authHeader = req.headers['authorization'] || req.headers['x-admin-token'];
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (typeof authHeader === 'string') {
+    token = authHeader.trim();
+  } else if (req.body && typeof req.body.token === 'string') {
+    token = req.body.token.trim();
   }
 
-  if (token !== expected) {
+  if (!token || !token.startsWith('srv_sess_')) {
     audit.logDashboardAction({
       actionType,
       hermesJobId: jobId,
       approvalId,
       actor,
       resultStatus: 'denied',
-      safeMessage: 'invalid_dashboard_token',
-      metadata: { denialReason: 'invalid_dashboard_token' }
+      safeMessage: 'invalid_or_missing_session_token',
+      metadata: { denialReason: 'invalid_or_missing_session_token' }
     });
-    return res.status(401).send('Unauthorized: invalid_dashboard_token');
+    return res.status(401).send('Unauthorized: invalid_or_missing_session_token');
   }
 
   // 4. Check and Consume Nonce
@@ -399,7 +406,7 @@ function getSafetyStatus() {
 function renderDashboardShell(title, activeTab, content, token) {
   const safety = getSafetyStatus();
   const bannerClass = safety.verified ? "" : " safety-unavailable";
-  const tParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  const tParam = token ? `` : '';
   const links = [
     { id: 'overview', href: '/dashboard', label: 'Overview', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>` },
     { id: 'cockpit', href: '/dashboard/cockpit', label: 'Cockpit', icon: `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>` },
@@ -538,7 +545,7 @@ function renderDashboardShell(title, activeTab, content, token) {
 
 // 1. Overview Page Route
 router.get('/', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const health = obs.getHermesQueueHealth();
   
   // Calculate budget metrics for the ring
@@ -682,7 +689,7 @@ router.get('/', protectDashboard, (req, res) => {
 
 // 2. Queue Page Route
 router.get('/queue', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const { q, status, botId, priority, errorCategory } = req.query;
 
   let jobs = search.filterHermesJobs({ status, botId, priority, errorCategory });
@@ -784,7 +791,7 @@ router.get('/queue', protectDashboard, (req, res) => {
 
 // 3. Trace Page Route
 router.get('/trace', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const { jobId } = req.query;
 
   let job = null;
@@ -904,7 +911,7 @@ router.get('/trace', protectDashboard, (req, res) => {
 
 // 4. Daily Brief Page Route
 router.get('/brief', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const targetDate = req.query.date || new Date().toISOString().substring(0, 10);
   
   // Resolve workspace directory
@@ -1071,13 +1078,13 @@ router.get('/brief', protectDashboard, (req, res) => {
 
 // Fallback redirect for /daily-brief
 router.get('/daily-brief', protectDashboard, (req, res) => {
-  const token = req.query.token;
-  res.redirect(`/dashboard/brief?token=${encodeURIComponent(token)}`);
+  const token = (req.body && req.body.token);
+  res.redirect(`/dashboard/brief`);
 });
 
 // 5. Usage Page Route
 router.get('/usage', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const { startDate, endDate, provider, model, botId, hermesJobId, runtimeJobId, project } = req.query;
   const filters = { startDate, endDate, provider, model, botId, hermesJobId, runtimeJobId, project };
 
@@ -1332,7 +1339,7 @@ router.get('/usage', protectDashboard, (req, res) => {
 
 // GET /dashboard/action/confirm - Confirmation page before mutating queue state
 router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLimitMiddleware, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const action = req.query.action;
   const jobId = req.query.jobId;
   const approvalId = req.query.approvalId;
@@ -1439,7 +1446,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
 
 // POST /dashboard/action/dispatch
 router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || req.query.token;
+  const token = req.body.token || (req.body && req.body.token);
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1472,7 +1479,7 @@ router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (re
       }
     });
 
-    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`);
+    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(jobId)}`);
   } catch (err) {
     audit.logDashboardAction({
       actionType: 'dispatch',
@@ -1481,13 +1488,13 @@ router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (re
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Dispatch failed: ${err.message}`);
+    res.status(500).send(`Dispatch failed: ${sanitizeError(err).message}`);
   }
 });
 
 // POST /dashboard/action/cancel
 router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) => {
-  const token = req.body.token || req.query.token;
+  const token = req.body.token || (req.body && req.body.token);
   const jobId = req.body.jobId || req.query.jobId;
   const reason = req.body.reason || req.query.reason || 'Operator canceled execution via dashboard';
 
@@ -1516,7 +1523,7 @@ router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) 
       metadata: { reason }
     });
 
-    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`);
+    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(jobId)}`);
   } catch (err) {
     audit.logDashboardAction({
       actionType: 'cancel',
@@ -1525,13 +1532,13 @@ router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Cancellation failed: ${err.message}`);
+    res.status(500).send(`Cancellation failed: ${sanitizeError(err).message}`);
   }
 });
 
 // POST /dashboard/action/retry
 router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || req.query.token;
+  const token = req.body.token || (req.body && req.body.token);
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1565,7 +1572,7 @@ router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, 
       }
     });
 
-    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(newJob.hermesJobId)}&token=${encodeURIComponent(token)}`);
+    res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(newJob.hermesJobId)}`);
   } catch (err) {
     audit.logDashboardAction({
       actionType: 'retry',
@@ -1574,13 +1581,13 @@ router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Retry failed: ${err.message}`);
+    res.status(500).send(`Retry failed: ${sanitizeError(err).message}`);
   }
 });
 
 // POST /dashboard/action/approve
 router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || req.query.token;
+  const token = req.body.token || (req.body && req.body.token);
   const approvalId = req.body.approvalId || req.query.approvalId;
 
   if (!approvalId) {
@@ -1630,9 +1637,9 @@ router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req
     });
 
     if (hermesJobId) {
-      res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(hermesJobId)}&token=${encodeURIComponent(token)}`);
+      res.redirect(`/dashboard/trace?jobId=${encodeURIComponent(hermesJobId)}`);
     } else {
-      res.redirect(`/dashboard/queue?token=${encodeURIComponent(token)}`);
+      res.redirect(`/dashboard/queue`);
     }
   } catch (err) {
     audit.logDashboardAction({
@@ -1643,7 +1650,7 @@ router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Approval failed: ${err.message}`);
+    res.status(500).send(`Approval failed: ${sanitizeError(err).message}`);
   }
 });
 
@@ -1659,7 +1666,7 @@ function escapeHtml(str) {
 
 // GET /dashboard/prospects
 router.get('/prospects', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const store = require('../prospects/prospect-store');
   const researchStore = require('../research/prospect-research-store');
   const scoreStore = require('../research/prospect-score-store');
@@ -1856,13 +1863,13 @@ router.get('/prospects', protectDashboard, (req, res) => {
 
 // POST /dashboard/prospects/search
 router.post('/prospects/search', protectDashboard, async (req, res) => {
-  const token = req.query.token || req.headers['x-admin-token'] || req.body.token;
+  const token = (req.body && req.body.token) || req.headers['x-admin-token'] || req.body.token;
   const q = (req.body.searchQuery || '').trim();
   const region = (req.body.searchRegion || '').trim();
   const profile = (req.body.searchProfile || 'BASIC_DISCOVERY').trim();
 
   if (!q) {
-    return res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&error=${encodeURIComponent('Search query is required.')}`);
+    return res.redirect(`/dashboard/prospects&error=${encodeURIComponent('Search query is required.')}`);
   }
 
   try {
@@ -1879,15 +1886,15 @@ router.post('/prospects/search', protectDashboard, async (req, res) => {
     const found = results.length;
     const added = countAfter - countBefore;
 
-    res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&success=true&found=${found}&added=${added}`);
+    res.redirect(`/dashboard/prospects&success=true&found=${found}&added=${added}`);
   } catch (err) {
-    res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+    res.redirect(`/dashboard/prospects&error=${encodeURIComponent(err.message)}`);
   }
 });
 
 // GET /dashboard/prospects/outreach/confirm - Confirmation page before outreach handoff
 router.get('/prospects/outreach/confirm', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const prospectId = (req.query.prospectId || '').trim();
 
   if (!prospectId) {
@@ -1973,12 +1980,12 @@ router.get('/prospects/outreach/confirm', protectDashboard, (req, res) => {
 
 // POST /dashboard/prospects/outreach - Outreach handoff execution
 router.post('/prospects/outreach', protectDashboard, async (req, res) => {
-  const token = req.query.token || req.headers['x-admin-token'] || req.body.token;
+  const token = (req.body && req.body.token) || req.headers['x-admin-token'] || req.body.token;
   const prospectId = (req.body.prospectId || '').trim();
   const botId = (req.body.botId || 'content-forge').trim();
 
   if (!prospectId) {
-    return res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&error=${encodeURIComponent('Prospect ID is required.')}`);
+    return res.redirect(`/dashboard/prospects&error=${encodeURIComponent('Prospect ID is required.')}`);
   }
 
   try {
@@ -1995,15 +2002,15 @@ router.post('/prospects/outreach', protectDashboard, async (req, res) => {
     });
 
     const job = result.jobs[0];
-    res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&success=outreach_queued&jobId=${job.hermesJobId}`);
+    res.redirect(`/dashboard/prospects&success=outreach_queued&jobId=${job.hermesJobId}`);
   } catch (err) {
-    res.redirect(`/dashboard/prospects?token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+    res.redirect(`/dashboard/prospects&error=${encodeURIComponent(err.message)}`);
   }
 });
 
 // GET /dashboard/outreach
 router.get('/outreach', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const reviewStore = require('../prospects/prospect-outreach-review-store');
   const reviews = reviewStore.syncReviews();
 
@@ -2263,7 +2270,7 @@ router.get('/outreach', protectDashboard, (req, res) => {
 
 // GET /dashboard/outreach/view
 router.get('/outreach/view', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const reviewId = (req.query.reviewId || '').trim();
 
   if (!reviewId) {
@@ -2470,7 +2477,7 @@ router.get('/outreach/view', protectDashboard, (req, res) => {
 
 // POST /dashboard/outreach/status
 router.post('/outreach/status', protectDashboard, (req, res) => {
-  const token = req.query.token || req.body.token;
+  const token = (req.body && req.body.token) || req.body.token;
   const reviewId = (req.body.reviewId || '').trim();
   const status = (req.body.status || '').trim();
   const redirectTarget = req.body.redirect || 'list';
@@ -2478,9 +2485,9 @@ router.post('/outreach/status', protectDashboard, (req, res) => {
   if (!reviewId || !status) {
     const errorMsg = 'Missing reviewId or status.';
     if (redirectTarget === 'view') {
-      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&error=${encodeURIComponent(errorMsg)}`);
+      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&error=${encodeURIComponent(errorMsg)}`);
     }
-    return res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&error=${encodeURIComponent(errorMsg)}`);
+    return res.redirect(`/dashboard/outreach&error=${encodeURIComponent(errorMsg)}`);
   }
 
   try {
@@ -2488,27 +2495,27 @@ router.post('/outreach/status', protectDashboard, (req, res) => {
     reviewStore.updateReviewStatus(reviewId, status);
 
     if (redirectTarget === 'view') {
-      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&success=status_updated`);
+      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&success=status_updated`);
     }
-    res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&success=status_updated`);
+    res.redirect(`/dashboard/outreach&success=status_updated`);
   } catch (err) {
     if (redirectTarget === 'view') {
-      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&error=${encodeURIComponent(err.message)}`);
     }
-    res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+    res.redirect(`/dashboard/outreach&error=${encodeURIComponent(err.message)}`);
   }
 });
 
 // POST /dashboard/outreach/notes
 router.post('/outreach/notes', protectDashboard, (req, res) => {
-  const token = req.query.token || req.body.token;
+  const token = (req.body && req.body.token) || req.body.token;
   const reviewId = (req.body.reviewId || '').trim();
   const notes = req.body.notes || '';
   const redirectTarget = req.body.redirect || 'list';
 
   if (!reviewId) {
     const errorMsg = 'Missing reviewId.';
-    return res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&error=${encodeURIComponent(errorMsg)}`);
+    return res.redirect(`/dashboard/outreach&error=${encodeURIComponent(errorMsg)}`);
   }
 
   try {
@@ -2516,25 +2523,25 @@ router.post('/outreach/notes', protectDashboard, (req, res) => {
     reviewStore.updateReviewNotes(reviewId, notes);
 
     if (redirectTarget === 'view') {
-      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&success=notes_saved`);
+      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&success=notes_saved`);
     }
-    res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&success=notes_saved`);
+    res.redirect(`/dashboard/outreach&success=notes_saved`);
   } catch (err) {
     if (redirectTarget === 'view') {
-      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+      return res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&error=${encodeURIComponent(err.message)}`);
     }
-    res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+    res.redirect(`/dashboard/outreach&error=${encodeURIComponent(err.message)}`);
   }
 });
 
 // POST /dashboard/outreach/update
 router.post('/outreach/update', protectDashboard, (req, res) => {
-  const token = req.query.token || req.body.token;
+  const token = (req.body && req.body.token) || req.body.token;
   const reviewId = (req.body.reviewId || '').trim();
 
   if (!reviewId) {
     const errorMsg = 'Missing reviewId.';
-    return res.redirect(`/dashboard/outreach?token=${encodeURIComponent(token)}&error=${encodeURIComponent(errorMsg)}`);
+    return res.redirect(`/dashboard/outreach&error=${encodeURIComponent(errorMsg)}`);
   }
 
   const updates = {};
@@ -2564,15 +2571,15 @@ router.post('/outreach/update', protectDashboard, (req, res) => {
   try {
     const reviewStore = require('../prospects/prospect-outreach-review-store');
     reviewStore.updateReviewFields(reviewId, updates);
-    res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&success=outreach_updated`);
+    res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&success=outreach_updated`);
   } catch (err) {
-    res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&token=${encodeURIComponent(token)}&error=${encodeURIComponent(err.message)}`);
+    res.redirect(`/dashboard/outreach/view?reviewId=${encodeURIComponent(reviewId)}&error=${encodeURIComponent(err.message)}`);
   }
 });
 
 // GET /dashboard/research - List all research records
 router.get('/research', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const store = require('../research/prospect-research-store');
   const records = Object.values(store.loadResearch());
 
@@ -2630,7 +2637,7 @@ router.get('/research', protectDashboard, (req, res) => {
 
 // GET /dashboard/research/view - Detailed view of a single research record
 router.get('/research/view', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const researchId = req.query.researchId;
 
   if (!researchId) {
@@ -2786,7 +2793,7 @@ router.get('/research/view', protectDashboard, (req, res) => {
 
 // GET /dashboard/scores - Ranked prospect scores leaderboard
 router.get('/scores', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const scoreStore = require('../research/prospect-score-store');
   const scores = scoreStore.getTopScores(100);
 
@@ -2863,7 +2870,7 @@ router.get('/scores', protectDashboard, (req, res) => {
 
 // GET /dashboard/cockpit - Prioritized Daily Prospecting Cockpit (Phase R4)
 router.get('/cockpit', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const cockpit = require('../prospects/prospect-priority-cockpit');
   
   const filters = {
@@ -3141,7 +3148,7 @@ router.get('/cockpit', protectDashboard, (req, res) => {
 
 // GET /dashboard/playbook - Operator Playbook
 router.get('/playbook', protectDashboard, (req, res) => {
-  const token = req.query.token;
+  const token = (req.body && req.body.token);
   const root = process.env.OPENCLAW_WORKSPACE_ROOT || path.join(__dirname, '../..');
   const playbookPath = path.resolve(root, 'openclaw', 'ops', 'OPS1_DAILY_OPERATOR_PLAYBOOK.md');
   let rawContent = '';

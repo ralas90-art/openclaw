@@ -1,9 +1,33 @@
-/**
- * Natural Language Audit & Dispatch Lifecycle Test Suite
- * Verifies dispatchCommand(), logId generation, execution status updates, exact row targetting,
- * longest-alias-first intent matching, regex alias escaping, and failure state safety.
- * Exits non-zero on failure.
- */
+process.env.NODE_ENV = 'test';
+process.env.SKIP_MEMORY_EXPORT = 'true';
+process.env.TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE = 'true';
+process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'chat_succ_1,chat_conc_A';
+process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'chat_succ_1,chat_conc_A';
+
+const fs = require('fs');
+const path = require('path');
+
+function normalizePgUrl(urlStr) {
+  if (!urlStr) return '';
+  try {
+    const u = new URL(urlStr);
+    return `${u.protocol}//${u.username}:${u.password}@${u.hostname}:${u.port || 5432}${u.pathname}`;
+  } catch (e) {
+    return urlStr.trim();
+  }
+}
+
+const testDbUrl = process.env.TEST_DATABASE_URL;
+const prodDbUrl = process.env.DATABASE_URL;
+
+if (!testDbUrl) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
+}
+if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl)) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
+}
+
+process.env.DATABASE_URL = testDbUrl;
 
 const {
   routeNaturalLanguageCommand,
@@ -12,14 +36,37 @@ const {
 const { dispatchCommand, handleCommand } = require('../interfaces/telegram/handlers');
 const { queryDb } = require('../jarvis/db');
 
-process.env.TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE = 'true';
-process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'chat_succ_1,chat_conc_A';
-process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'chat_succ_1,chat_conc_A';
+const memoryFiles = [
+  'jarvis/memory/BLOCKERS.md',
+  'jarvis/memory/COMPLETED_WORK.md',
+  'jarvis/memory/DAILY_BRIEF.md',
+  'jarvis/memory/DECISIONS.md',
+  'jarvis/memory/NEXT_ACTIONS.md',
+  'jarvis/memory/PROJECT_STATE.md'
+];
+
+function getMemorySnapshot() {
+  const snapshot = {};
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    snapshot[f] = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+  }
+  return snapshot;
+}
+
+function assertMemoryUnchanged(initialSnapshot) {
+  for (const f of memoryFiles) {
+    const fullPath = path.join(__dirname, '..', f);
+    const current = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
+    if (initialSnapshot[f] !== current) {
+      throw new Error(`SECURITY/ISOLATION FAILURE: Memory file ${f} was mutated during test execution!`);
+    }
+  }
+}
 
 function assert(condition, message) {
   if (!condition) {
-    console.error(`❌ Assertion failed: ${message}`);
-    process.exit(1);
+    throw new Error(`NL Audit Test Assertion Failed: ${message}`);
   }
 }
 
@@ -54,14 +101,6 @@ async function runTests() {
   }
   assert(!regexError, 'Regex escaping must prevent syntax errors on special characters');
   console.log('✅ Test 3: Safe regex alias escaping passed.');
-
-  const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-  if (!testDbUrl) {
-    console.error('❌ SECURITY BLOCKER: TEST_DATABASE_URL (or DATABASE_URL) is missing. Mandatory NL audit DB tests cannot run. Release blocked.');
-    process.exit(1);
-  }
-
-  process.env.DATABASE_URL = testDbUrl;
 
   // Test 4: Dispatcher Flow with Real DB Log Lifecycle (Successful Dispatch)
   console.log('- Testing real dispatcher with successful command...');
@@ -111,9 +150,12 @@ async function runTests() {
   ]);
   console.log('✅ Test 7: Test audit logs cleaned up cleanly.');
 
+  assertMemoryUnchanged(memSnapshot);
+  console.log('✅ Memory files integrity check passed (0 mutations).');
   console.log('\n🎉 ALL Natural Language Audit & Dispatcher Tests Passed Successfully!');
 }
 
+const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('Test execution failed:', err);
   process.exit(1);

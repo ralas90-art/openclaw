@@ -265,7 +265,9 @@ app.post('/webhook/telegram', async (req, res) => {
           let reply;
           let handlerResultStatus = 'success';
           try {
-            reply = await handleCommand(message.text, message);
+            const { dispatchCommand } = require('./interfaces/telegram/handlers');
+            const dispatchRes = await dispatchCommand(message.text, message);
+            reply = dispatchRes ? dispatchRes.text : null;
           } catch (handlerErr) {
             console.error(`[Telegram Webhook Error] Command handler failed: ${handlerErr.message}`);
             handlerResultStatus = 'error';
@@ -304,15 +306,30 @@ app.post('/webhook/telegram', async (req, res) => {
   }
 });
 
-// 1. Internal Admin Token Guard for /api/admin routes
-function requireInternalAdminAuthToken(req, res, next) {
+// 1. Internal Admin Auth Guard for /api/admin routes (requires valid srv_sess_... token)
+async function requireInternalAdminAuthToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+  if (!token && req.headers['x-admin-token']) {
+    token = req.headers['x-admin-token'];
+  }
   
-  if (!token || token !== process.env.INTERNAL_ADMIN_TOKEN) {
+  if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  next();
+
+  if (token.startsWith('srv_sess_')) {
+    try {
+      const { validateSessionToken } = require('./jarvis/auth-tickets');
+      const sessionRes = await validateSessionToken(token);
+      if (sessionRes && sessionRes.valid) {
+        req.sessionMetadata = sessionRes.metadata;
+        return next();
+      }
+    } catch (_) {}
+  }
+
+  return res.status(401).json({ error: "Unauthorized" });
 }
 
 // ==========================================
@@ -366,10 +383,12 @@ apiRouter.post('/runtime/safe-mode', async (req, res) => {
   res.json({ success: true, safe_mode: runtimeGovernor.isSafeMode() });
 });
 
+const { sanitizeError } = require('./jarvis/sanitizer');
+
 apiRouter.get('/tenants', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Supabase offline" });
   const { data, error } = await supabase.from('tenants').select('id, name, created_at').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: sanitizeError(error).message });
   res.json(data);
 });
 
@@ -412,7 +431,7 @@ apiRouter.post('/tenants', async (req, res) => {
   
   // 1. Create tenant
   const { data: tenant, error: tErr } = await supabase.from('tenants').insert([{ name }]).select().single();
-  if (tErr) return res.status(500).json({ error: tErr.message });
+  if (tErr) return res.status(500).json({ error: sanitizeError(tErr).message });
   
   // 2. Add connection
   if (provider) {
@@ -488,35 +507,35 @@ apiRouter.post('/replay', async (req, res) => {
     
     res.json({ success: true, message: `Replay initiated for event ${event_id}` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 
 apiRouter.get('/operations/failed-syncs', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Supabase offline" });
   const { data, error } = await supabase.from('sync_idempotency').select('*').eq('status', 'failed').order('last_seen_at', { ascending: false }).limit(50);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: sanitizeError(error).message });
   res.json(data || []);
 });
 
 apiRouter.get('/operations/deadletters', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Supabase offline" });
   const { data, error } = await supabase.from('dead_letter_events').select('*').order('created_at', { ascending: false }).limit(50);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: sanitizeError(error).message });
   res.json(data || []);
 });
 
 apiRouter.get('/audit-logs', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Supabase offline" });
   const { data, error } = await supabase.from('admin_action_logs').select('*').order('created_at', { ascending: false }).limit(50);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: sanitizeError(error).message });
   res.json(data || []);
 });
 
 apiRouter.get('/incidents', async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Supabase offline" });
   const { data, error } = await supabase.from('runtime_incidents').select('*').order('created_at', { ascending: false }).limit(50);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: sanitizeError(error).message });
   res.json(data || []);
 });
 
@@ -537,7 +556,7 @@ apiRouter.get('/reports/executive-weekly', async (req, res) => {
     const report = await executiveWeeklyReport.generate(tenant_id, start_date, end_date);
     res.json(report);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: sanitizeError(err).message });
   }
 });
 

@@ -123,15 +123,17 @@ async function logNaturalLanguageRequest(sanitizedText, hash, lang, intentStr, m
 }
 
 async function markNaturalLanguageLogExecuted(logId) {
-  if (!logId) return;
-  try {
-    await queryDb(
-      `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1`,
-      [logId]
-    );
-  } catch (err) {
-    console.error('[NaturalLanguageRouter] Error updating execution log:', err.message);
+  if (!logId) {
+    throw new Error('markNaturalLanguageLogExecuted requires a valid logId');
   }
+  const rows = await queryDb(
+    `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1 RETURNING id`,
+    [logId]
+  );
+  if (!rows || rows.length !== 1) {
+    throw new Error(`markNaturalLanguageLogExecuted failed: expected exactly 1 updated row for logId ${logId}, got ${rows ? rows.length : 0}`);
+  }
+  return true;
 }
 
 // Helper to look up active project slugs mentioned in query
