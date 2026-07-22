@@ -1,5 +1,7 @@
 const crypto = require('crypto');
-const { queryDb } = require('./controller');
+const { queryDb } = require('./db');
+const { sanitizeSecrets, sanitizeError } = require('./sanitizer');
+
 
 // 1. Dictionaries for Language Detection
 const ES_KEYWORDS = ['que', 'qué', 'tengo', 'pendiente', 'hoy', 'enséñame', 'enseñame', 'mis', 'prioridades', 'hay', 'aprobaciones', 'muéstrame', 'muestrame', 'el', 'historial', 'de', 'marca', 'esto', 'como', 'procesado', 'reconecta', 'manda', 'envía', 'envia', 'mensaje', 'email', 'contacta', 'este', 'prospecto', 'aprueba', 'rechaza', 'cuales', 'cuáles', 'son', 'seguimientos', 'vencidos', 'mejores', 'leads', 'cómo', 'como', 'están', 'estan', 'conectores', 'abre', 'dame', 'los', 'sesión', 'sesion', 'trabajé', 'trabaje', 'cambió', 'cambio', 'actualización', 'actualizacion', 'capturas', 'teléfono', 'telefono', 'handoff', 'empieza', 'termina', 'guarda', 'bajo', 'proyecto'];
@@ -82,28 +84,7 @@ function findIntent(text) {
 // 3. Sanitization
 function sanitizeLogText(text) {
   if (!text) return '';
-  let sanitized = text;
-  
-  // Redact secrets
-  const redactionPatterns = [
-    /DATABASE_URL=[\S]+/g,
-    /postgresql:\/\/[\S]+/g,
-    /INTERNAL_ADMIN_TOKEN=[\S]+/g,
-    /JARVIS_ENCRYPTION_KEY=[\S]+/g,
-    /GOOGLE_CLIENT_SECRET=[\S]+/g,
-    /GOOGLE_REFRESH_TOKEN=[\S]+/g,
-    /access_token=[\S]+/g,
-    /refresh_token=[\S]+/g,
-    /authTag=[\S]+/g,
-    /ciphertext=[\S]+/g,
-    /https?:\/\/[\S]+\?[\S]+/g // Redact URLs with query parameters to be safe
-  ];
-
-  for (const pattern of redactionPatterns) {
-    sanitized = sanitized.replace(pattern, '[REDACTED]');
-  }
-
-  // Truncate to 1000 characters
+  let sanitized = sanitizeSecrets(text);
   if (sanitized.length > 1000) {
     sanitized = sanitized.substring(0, 1000) + '...[TRUNCATED]';
   }

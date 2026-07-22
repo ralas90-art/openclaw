@@ -5,51 +5,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Client } = require('pg');
-
+const { queryDb } = require('./db');
 const MEMORY_DIR = path.resolve(__dirname, 'memory');
-const DB_URL = process.env.DATABASE_URL;
-
-// Helper to ensure target folder exists
-function ensureMemoryDir() {
-  if (!fs.existsSync(MEMORY_DIR)) {
-    fs.mkdirSync(MEMORY_DIR, { recursive: true });
-  }
-}
-
-/**
- * Format headers and snapshots metadata
- */
-function getHeaderBlock(title) {
-  const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-  return [
-    `# ${title}`,
-    ``,
-    `> [!NOTE]`,
-    `> This is a read-only local export snapshot of the operational Jarvis database.`,
-    `> Generated At: ${timestamp}`,
-    ``,
-    `---`,
-    ``
-  ].join('\n');
-}
-
-/**
- * Execute raw PostgreSQL queries
- */
-async function queryDb(sqlText, params = []) {
-  if (DB_URL) {
-    const client = new Client({ connectionString: DB_URL });
-    await client.connect();
-    try {
-      const res = await client.query(sqlText, params);
-      return res.rows;
-    } finally {
-      await client.end();
-    }
-  }
-  return null;
-}
 
 /**
  * Exporter: Projects

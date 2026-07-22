@@ -1,69 +1,23 @@
-const { queryDb } = require('./controller');
+const { queryDb } = require('./db');
+const { sanitizeSecrets } = require('./sanitizer');
+const { runMigrations } = require('./migrations');
 const fs = require('fs');
 const path = require('path');
 
 // 1. Ensure Table Schema and Migrations
 async function ensureWorkSessionsTableExists() {
-  const sqlSessions = `
-    CREATE TABLE IF NOT EXISTS jarvis_work_sessions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_slug TEXT NOT NULL,
-      status TEXT NOT NULL,
-      started_at TIMESTAMPTZ,
-      ended_at TIMESTAMPTZ,
-      summary TEXT,
-      changed_files_summary TEXT,
-      tests_run_summary TEXT,
-      blockers TEXT,
-      next_actions TEXT,
-      source TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `;
   try {
-    await queryDb(sqlSessions);
+    await runMigrations();
   } catch (err) {
-    console.error('[WorkSessions] Error creating jarvis_work_sessions:', err.message);
-  }
-
-  // B. Alter jarvis_mobile_uploads columns
-  try {
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS caption TEXT;");
-    await queryDb("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS language VARCHAR(50);");
-  } catch (err) {
-    console.error('[WorkSessions] Error altering jarvis_mobile_uploads:', err.message);
+    console.error('[WorkSessions] Error executing migrations:', err.message);
   }
 }
+
 
 // 2. State Mutation protection and Sanitization
 function sanitizeHandoffContent(content) {
   if (!content) return '';
-  let sanitized = content;
-  const patterns = [
-    /DATABASE_URL=[\S]+/g,
-    /postgresql:\/\/[\S]+/g,
-    /INTERNAL_ADMIN_TOKEN=[\S]+/g,
-    /JARVIS_ENCRYPTION_KEY=[\S]+/g,
-    /GOOGLE_CLIENT_SECRET=[\S]+/g,
-    /GOOGLE_REFRESH_TOKEN=[\S]+/g,
-    /access_token=[\S]+/g,
-    /refresh_token=[\S]+/g,
-    /authTag=[\S]+/g,
-    /ciphertext=[\S]+/g,
-    /https?:\/\/[\S]+\?[\S]+/g
-  ];
-  for (const pattern of patterns) {
-    sanitized = sanitized.replace(pattern, '[REDACTED]');
-  }
-  const lines = sanitized.split('\n');
-  const cleanedLines = lines.map(line => {
-    if (line.includes('API_KEY=') || line.includes('SECRET=') || line.includes('PASSWORD=')) {
-      return line.split('=')[0] + '=[REDACTED]';
-    }
-    return line;
-  });
-  return cleanedLines.join('\n');
+  return sanitizeSecrets(content);
 }
 
 // 3. Ingestion Function
@@ -205,12 +159,19 @@ async function startWorkSession(projectSlug, source = 'telegram', textContent = 
     throw new Error(`A work session is already active for project: ${cleanSlug}`);
   }
 
-  const rows = await queryDb(
-    `INSERT INTO jarvis_work_sessions (project_slug, status, started_at, summary, source)
-     VALUES ($1, 'active', NOW(), $2, $3) RETURNING *;`,
-    [cleanSlug, textContent ? textContent.trim() : 'Session started', source]
-  );
-  return rows[0];
+  try {
+    const rows = await queryDb(
+      `INSERT INTO jarvis_work_sessions (project_slug, status, started_at, summary, source)
+       VALUES ($1, 'active', NOW(), $2, $3) RETURNING *;`,
+      [cleanSlug, textContent ? textContent.trim() : 'Session started', source]
+    );
+    return rows[0];
+  } catch (err) {
+    if (err.message && (err.message.includes('unique') || err.message.includes('idx_active_work_session'))) {
+      throw new Error(`A work session is already active for project: ${cleanSlug}`);
+    }
+    throw err;
+  }
 }
 
 // 5. Session Update

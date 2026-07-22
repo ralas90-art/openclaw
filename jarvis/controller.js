@@ -3,35 +3,17 @@
  * Implements Phase 2: Daily Brief Generator + Project State Commands
  */
 
-const { Client } = require('pg');
+const { queryDb } = require('./db');
+const { sanitizeSecrets, sanitizeError } = require('./sanitizer');
 const { exportJarvisMemory } = require('./memory-exporter');
 const queueStore = require('../openclaw/hermes/hermes-queue-store');
-
-const DB_URL = process.env.DATABASE_URL;
-
-/**
- * Helper to run queries securely on Supabase PostgreSQL
- */
-async function queryDb(sqlText, params = []) {
-  if (!DB_URL) {
-    console.warn('[JarvisController] DATABASE_URL missing.');
-    return [];
-  }
-  const client = new Client({ connectionString: DB_URL });
-  await client.connect();
-  try {
-    const res = await client.query(sqlText, params);
-    return res.rows;
-  } finally {
-    await client.end();
-  }
-}
 
 /**
  * 1. Generates and returns a markdown daily brief, saving it to database and snapshots
  */
 async function getDailyBrief(refresh = false) {
   console.log('[JarvisController] Compiling prioritized Daily Brief...');
+
   const todayStr = new Date().toISOString().substring(0, 10);
 
   // 1. Idempotency Check: return existing brief if refresh is false

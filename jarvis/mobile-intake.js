@@ -4,27 +4,11 @@
  */
 
 const crypto = require('crypto');
-const { Client } = require('pg');
+const { queryDb } = require('./db');
+const { sanitizeSecrets, sanitizeError } = require('./sanitizer');
 
-const DB_URL = process.env.DATABASE_URL;
 const rateLimitCache = new Map(); // device_id -> { count, windowStart }
 
-/**
- * Direct PG Database Query helper
- */
-async function queryDb(sqlText, params = []) {
-  if (!DB_URL) {
-    throw new Error('DATABASE_URL is not configured');
-  }
-  const client = new Client({ connectionString: DB_URL });
-  await client.connect();
-  try {
-    const res = await client.query(sqlText, params);
-    return res.rows;
-  } finally {
-    await client.end();
-  }
-}
 
 /**
  * Checks in-memory rate limiting by device ID

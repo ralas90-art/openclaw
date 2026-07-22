@@ -5,14 +5,9 @@
 
 const { google } = require('googleapis');
 const crypto = require('crypto');
+const { queryDb } = require('./db');
+const { sanitizeSecrets, sanitizeError } = require('./sanitizer');
 
-let _queryDb;
-function queryDb(...args) {
-  if (!_queryDb) {
-    _queryDb = require('./controller').queryDb;
-  }
-  return _queryDb(...args);
-}
 
 /**
  * Derives a 32-byte encryption key from environment variables
