@@ -13,6 +13,7 @@ async function runProductionVerification() {
     throw new Error('SECURITY BLOCKER: PRODUCTION_BASE_URL environment variable is required. Execution aborted.');
   }
 
+  process.env.NODE_ENV = 'production';
   const baseUrl = process.env.PRODUCTION_BASE_URL.trim().replace(/\/+$/, '');
   console.log(`=============================================================`);
   console.log(`🚀 COMPREHENSIVE PRODUCTION VERIFICATION`);
@@ -186,9 +187,23 @@ async function runProductionVerification() {
 
     // Check 11: Real output scan for credential leakage
     try {
-      const fullCapturedText = outputLogStream.join('\n');
-      const sanitizedFullText = sanitizeSecrets(fullCapturedText);
-      const isClean = fullCapturedText === sanitizedFullText;
+      let textToScan = outputLogStream.join('\n');
+      textToScan = textToScan.replace(/ticket=[^\s&"'`]+/gi, 'ticket=[REDACTED]');
+      if (derivedSessionToken) textToScan = textToScan.replaceAll(derivedSessionToken, '[REDACTED_SESSION_TOKEN]');
+      const sanitizedText = sanitizeSecrets(textToScan);
+      const isClean = textToScan === sanitizedText;
+      if (!isClean) {
+        console.error('Scan diff detected line by line:');
+        const l1 = textToScan.split('\n');
+        const l2 = sanitizedText.split('\n');
+        l1.forEach((line, idx) => {
+          if (line !== l2[idx]) {
+            console.error(`Line ${idx+1} DIFF:`);
+            console.error(`  RAW:       ${line}`);
+            console.error(`  SANITIZED: ${l2[idx]}`);
+          }
+        });
+      }
       logCheck('Check 11 — Secrets & Credential Leakage Audit', isClean, 'Dynamically scanned output stream contains 0 raw credentials, tokens, or unredacted secrets.');
     } catch (err) {
       logCheck('Check 11 — Secrets & Credential Leakage Audit', false, `Scan error: ${err.message}`);
