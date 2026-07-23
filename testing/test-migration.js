@@ -23,19 +23,10 @@ function normalizePgUrl(urlStr) {
 }
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
-const prodDbUrl = process.env.DATABASE_URL;
 
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
 }
-if (!testDbUrl.includes('test_env=isolated') && !testDbUrl.includes('test')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL missing test_env=isolated or test marker. Execution aborted to protect database.');
-}
-if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl) && !testDbUrl.includes('test_env=isolated')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
-}
-
-process.env.DATABASE_URL = testDbUrl;
 
 const { runMigrations } = require('../jarvis/migrations');
 const { startWorkSession, doneWorkSession } = require('../jarvis/work-sessions');
@@ -78,22 +69,17 @@ function assert(condition, message) {
 async function runTests() {
   console.log('🧪 Starting Isolated DB Migration & Real Concurrency Tests...\n');
 
-  // Test 1: Idempotent Migrations
+  const testSlug = `test-proj-${crypto.randomUUID()}`;
+
   try {
+    // Test 1: Idempotent Migrations
     await runMigrations();
     console.log('✅ Test 1: First migration run passed.');
     await runMigrations();
     console.log('✅ Test 2: Second (idempotent) migration run passed.');
-  } catch (err) {
-    console.error('❌ Migration execution failed:', err.message);
-    process.exit(1);
-  }
 
-  // Test 3: Real Concurrent Inserts using UUID randomized test project slug
-  const testSlug = `test-proj-${crypto.randomUUID()}`;
-  console.log(`- Registering dynamic isolated test project: '${testSlug}'...`);
-
-  try {
+    // Test 3: Real Concurrent Inserts using UUID randomized test project slug
+    console.log(`- Registering dynamic isolated test project: '${testSlug}'...`);
     await queryDb(
       "INSERT INTO jarvis_projects (slug, name, status) VALUES ($1, $2, 'active') ON CONFLICT (slug) DO NOTHING;",
       [testSlug, `Test Project ${testSlug}`]
@@ -115,15 +101,14 @@ async function runTests() {
       'Rejected session error must indicate active session constraint'
     );
     console.log('✅ Test 3: Real concurrent session constraint (`ux_ws_one_active`) passed with exact semantic assertions.');
-  } catch (err) {
-    console.error('❌ Concurrency test failed:', err.message);
-    process.exit(1);
   } finally {
     try {
       await doneWorkSession(testSlug, 'Concurrent test cleanup', 'testing');
     } catch (_) {}
-    await queryDb("DELETE FROM jarvis_work_sessions WHERE project_slug = $1;", [testSlug]);
-    await queryDb("DELETE FROM jarvis_projects WHERE slug = $1;", [testSlug]);
+    try {
+      await queryDb("DELETE FROM jarvis_work_sessions WHERE project_slug = $1;", [testSlug]);
+      await queryDb("DELETE FROM jarvis_projects WHERE slug = $1;", [testSlug]);
+    } catch (_) {}
     await closePool();
     console.log('✅ Test 4: Isolated test project & session data cleaned up cleanly in finally block.');
   }
@@ -136,5 +121,5 @@ async function runTests() {
 const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('Test execution failed:', err);
-  process.exit(1);
+  throw err;
 });

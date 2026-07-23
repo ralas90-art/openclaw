@@ -55,30 +55,30 @@ router.use((req, res, next) => {
 // Nonce Storage System (CSRF / Replay protection)
 const nonces = new Map(); // nonce -> { bindingKey, expiresAt }
 
-function getNonceBindingKey(action, targetId, token) {
+function getNonceBindingKey(action, targetId, sessionToken) {
   const crypto = require('crypto');
-  const tokenHash = crypto.createHash('sha256').update(token || '').digest('hex').substring(0, 16);
+  const tokenHash = crypto.createHash('sha256').update(sessionToken || 'anonymous').digest('hex').substring(0, 16);
   return `${action}:${targetId}:${tokenHash}`;
 }
 
-function generateNonce(action, targetId, token) {
+function generateNonce(action, targetId, sessionToken) {
   const crypto = require('crypto');
   const nonce = crypto.randomBytes(16).toString('hex');
   const ttl = parseInt(process.env.DASHBOARD_ACTION_NONCE_TTL_SECONDS, 10) || 300;
   const expiresAt = Date.now() + ttl * 1000;
-  const bindingKey = getNonceBindingKey(action, targetId, token);
+  const bindingKey = getNonceBindingKey(action, targetId, sessionToken);
   nonces.set(nonce, { bindingKey, expiresAt });
   return nonce;
 }
 
-function verifyAndConsumeNonce(nonce, action, targetId, token) {
+function verifyAndConsumeNonce(nonce, action, targetId, sessionToken) {
   if (!nonce) return false;
   const record = nonces.get(nonce);
   if (!record) return false;
   
   nonces.delete(nonce); // Consume immediately (one-time use)
   
-  const expectedBindingKey = getNonceBindingKey(action, targetId, token);
+  const expectedBindingKey = getNonceBindingKey(action, targetId, sessionToken);
   if (record.bindingKey !== expectedBindingKey) return false;
   if (Date.now() > record.expiresAt) return false;
   
@@ -139,17 +139,15 @@ const { validateSessionToken } = require('../../jarvis/auth-tickets');
 
 // Authentication Middleware
 async function protectDashboard(req, res, next) {
-  let authHeader = req.headers['authorization'] || req.headers['x-admin-token'];
+  const authHeader = req.headers.authorization || req.headers['x-admin-token'];
   let token = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7).trim();
   } else if (typeof authHeader === 'string') {
     token = authHeader.trim();
-  } else if (req.headers.cookie) {
+  } else {
     const cookies = parseCookies(req.headers.cookie);
-    token = cookies.jarvis_session_token;
-  } else if (req.body && typeof req.body.token === 'string') {
-    token = req.body.token.trim();
+    token = cookies.jarvis_session_token || null;
   }
 
   const crypto = require('crypto');
@@ -181,13 +179,14 @@ async function protectDashboard(req, res, next) {
       return res.status(401).send(renderLoginPage());
     }
     req.sessionMetadata = sessionRes.metadata;
+    req.sessionToken = token;
     next();
   } catch (err) {
     return res.status(401).send(renderLoginPage());
   }
 }
 
-// Middleware to verify POST actions (Token, Nonce, Actions Enabled)
+// Middleware to verify POST actions (Nonce, Actions Enabled)
 function verifyPostAction(req, res, next) {
   const actionType = req.path.split('/').pop();
   const jobId = (req.body && req.body.jobId) || req.query.jobId || null;
@@ -200,22 +199,7 @@ function verifyPostAction(req, res, next) {
   const ipHash = crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
   const actor = `ip_hash_${ipHash}`;
 
-  // 1. Check if token config is missing
-  const expected = process.env.INTERNAL_ADMIN_TOKEN;
-  if (!expected || expected.trim() === '') {
-    audit.logDashboardAction({
-      actionType,
-      hermesJobId: jobId,
-      approvalId,
-      actor,
-      resultStatus: 'denied',
-      safeMessage: 'Rejection: INTERNAL_ADMIN_TOKEN is not configured on the server.',
-      metadata: { denialReason: 'MISSING_SERVER_TOKEN' }
-    });
-    return res.status(401).send('Unauthorized: Server admin token is not configured.');
-  }
-
-  // 2. Check Actions Enabled
+  // 1. Check Actions Enabled
   const actionsEnabled = process.env.DASHBOARD_ACTIONS_ENABLED === 'true';
   if (!actionsEnabled) {
     audit.logDashboardAction({
@@ -230,18 +214,9 @@ function verifyPostAction(req, res, next) {
     return res.status(403).send('Dashboard operational mutations are disabled.');
   }
 
-  // 3. Check Token Auth
-  let authHeader = req.headers['authorization'] || req.headers['x-admin-token'];
-  let token = null;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7).trim();
-  } else if (typeof authHeader === 'string') {
-    token = authHeader.trim();
-  } else if (req.body && typeof req.body.token === 'string') {
-    token = req.body.token.trim();
-  }
-
-  if (!token || !token.startsWith('srv_sess_')) {
+  // 2. Validate Session Identity
+  const sessionToken = req.sessionToken;
+  if (!sessionToken || !sessionToken.startsWith('srv_sess_')) {
     audit.logDashboardAction({
       actionType,
       hermesJobId: jobId,
@@ -254,18 +229,18 @@ function verifyPostAction(req, res, next) {
     return res.status(401).send('Unauthorized: invalid_or_missing_session_token');
   }
 
-  // 4. Check and Consume Nonce
-  if (!targetId || !verifyAndConsumeNonce(nonce, actionType, targetId, token)) {
+  // 3. Check and Consume Nonce
+  if (!targetId || !verifyAndConsumeNonce(nonce, actionType, targetId, sessionToken)) {
     audit.logDashboardAction({
       actionType,
       hermesJobId: jobId,
       approvalId,
       actor,
       resultStatus: 'denied',
-      safeMessage: 'expired_session',
-      metadata: { denialReason: 'expired_session' }
+      safeMessage: 'invalid_or_expired_nonce',
+      metadata: { denialReason: 'INVALID_NONCE' }
     });
-    return res.status(400).send('Bad Request: expired_session');
+    return res.status(400).send('Invalid or expired action nonce');
   }
 
   next();
@@ -361,36 +336,8 @@ function renderLoginPage() {
         <h1>Cresca OS Auth</h1>
         <p>Hermes Portal Auth - Enter your administration security token</p>
         <div id="error-message" style="display: none; color: #ef4444; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 1.5rem; text-align: center;"></div>
-        <input type="password" id="token" placeholder="INTERNAL_ADMIN_TOKEN" class="input" onkeydown="if(event.key==='Enter') login()"/>
-        <div class="btn btn-primary" onclick="login()" style="cursor: pointer;">Enter Dashboard</div>
+        <p>To access the operator portal, please request an access link via Telegram <code>/jarvis_dashboard</code> or exchange a valid auth ticket.</p>
       </div>
-      <script>
-        function login() {
-          const t = document.getElementById('token').value.trim();
-          if (t) {
-            const params = new URLSearchParams(window.location.search);
-            params.set('token', t);
-            window.location.href = window.location.pathname + '?' + params.toString();
-          }
-        }
-        // Try reading token from query or URL if passed
-        const urlParams = new URLSearchParams(window.location.search);
-        const tok = urlParams.get('token');
-        if (tok) {
-          sessionStorage.removeItem('hermes_admin_token');
-          const errDiv = document.getElementById('error-message');
-          if (errDiv) {
-            errDiv.style.display = 'block';
-            errDiv.textContent = 'Invalid security token. Please try again.';
-          }
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else {
-          const saved = sessionStorage.getItem('hermes_admin_token');
-          if (saved) {
-            window.location.href = window.location.pathname + '?token=' + encodeURIComponent(saved);
-          }
-        }
-      </script>
     </body>
     </html>
   `;
@@ -441,13 +388,13 @@ function renderDashboardShell(title, activeTab, content, token) {
   for (const link of links) {
     const isActive = activeTab === link.id;
     navLinksHtml += `
-      <a href="${link.href}" onclick="appendToken(this)" class="sidebar-link ${isActive ? 'active' : ''}">
+      <a href="${link.href}" class="sidebar-link ${isActive ? 'active' : ''}">
         ${link.icon}
         <span>${link.label}</span>
       </a>
     `;
     mobileLinksHtml += `
-      <a href="${link.href}" onclick="appendToken(this)" class="sidebar-link ${isActive ? 'active' : ''}">
+      <a href="${link.href}" class="sidebar-link ${isActive ? 'active' : ''}">
         ${link.icon}
         <span>${link.label}</span>
       </a>
@@ -467,7 +414,7 @@ function renderDashboardShell(title, activeTab, content, token) {
       <div class="app-layout">
         <!-- Sidebar -->
         <aside class="sidebar">
-          <a href="/dashboard" onclick="appendToken(this)" class="sidebar-brand">
+          <a href="/dashboard" class="sidebar-brand">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="url(#logoGrad)" />
               <path d="M2 17L12 22L22 17" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -488,7 +435,7 @@ function renderDashboardShell(title, activeTab, content, token) {
 
         <!-- Mobile Header -->
         <header class="mobile-header">
-          <a href="/dashboard" onclick="appendToken(this)" class="mobile-brand">
+          <a href="/dashboard" class="mobile-brand">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#22D3EE" />
               <path d="M2 17L12 22L22 17" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -524,34 +471,6 @@ function renderDashboardShell(title, activeTab, content, token) {
           const m = document.getElementById('mobile-nav-menu');
           m.classList.toggle('show');
         }
-
-        function appendToken(el) {
-          const token = sessionStorage.getItem('hermes_admin_token');
-          if (!token) return;
-          const separator = el.href.includes('?') ? '&' : '?';
-          el.href += separator + 'token=' + encodeURIComponent(token);
-        }
-
-        // Try reading token from query or URL if passed
-        const urlParams = new URLSearchParams(window.location.search);
-        const tok = urlParams.get('token');
-        if (tok) {
-          sessionStorage.setItem('hermes_admin_token', tok);
-          urlParams.delete('token');
-          const newQuery = urlParams.toString();
-          const newSearch = newQuery ? '?' + newQuery : '';
-          window.history.replaceState({}, document.title, window.location.pathname + newSearch);
-        }
-
-        // Auto-populate all form token inputs
-        document.addEventListener('DOMContentLoaded', () => {
-          const token = sessionStorage.getItem('hermes_admin_token');
-          if (token) {
-            document.querySelectorAll('input[name="token"]').forEach(input => {
-              input.value = token;
-            });
-          }
-        });
       </script>
     </body>
     </html>
@@ -787,11 +706,11 @@ router.get('/queue', protectDashboard, (req, res) => {
                   <td><code>${j.requestedBy || 'system'}</code></td>
                   <td>${j.updatedAt}</td>
                   <td>
-                    <a href="/dashboard/trace?jobId=${j.hermesJobId}" class="action-link" onclick="appendToken(this)">Trace Lifecycle</a>
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'queued' || j.status === 'approved')) ? ` | <a href="/dashboard/action/confirm?action=dispatch&jobId=${j.hermesJobId}" onclick="appendToken(this)" class="action-link" style="color: #4ADE80; font-weight: 600;">Dispatch</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'awaiting_approval' && j.approvalId)) ? ` | <a href="/dashboard/action/confirm?action=approve&approvalId=${j.approvalId}" onclick="appendToken(this)" class="action-link" style="color: #C084FC; font-weight: 600;">Approve</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'failed' || j.status === 'blocked')) ? ` | <a href="/dashboard/action/confirm?action=retry&jobId=${j.hermesJobId}" onclick="appendToken(this)" class="action-link" style="color: #FBBF24; font-weight: 600;">Retry</a>` : ''}
-                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status !== 'completed' && j.status !== 'failed' && j.status !== 'canceled')) ? ` | <a href="/dashboard/action/confirm?action=cancel&jobId=${j.hermesJobId}" onclick="appendToken(this)" class="action-link" style="color: #F87171; font-weight: 600;">Cancel</a>` : ''}
+                    <a href="/dashboard/trace?jobId=${j.hermesJobId}" class="action-link">Trace Lifecycle</a>
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'queued' || j.status === 'approved')) ? ` | <a href="/dashboard/action/confirm?action=dispatch&jobId=${j.hermesJobId}" class="action-link" style="color: #4ADE80; font-weight: 600;">Dispatch</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'awaiting_approval' && j.approvalId)) ? ` | <a href="/dashboard/action/confirm?action=approve&approvalId=${j.approvalId}" class="action-link" style="color: #C084FC; font-weight: 600;">Approve</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status === 'failed' || j.status === 'blocked')) ? ` | <a href="/dashboard/action/confirm?action=retry&jobId=${j.hermesJobId}" class="action-link" style="color: #FBBF24; font-weight: 600;">Retry</a>` : ''}
+                    ${(process.env.DASHBOARD_ACTIONS_ENABLED === 'true' && (j.status !== 'completed' && j.status !== 'failed' && j.status !== 'canceled')) ? ` | <a href="/dashboard/action/confirm?action=cancel&jobId=${j.hermesJobId}" class="action-link" style="color: #F87171; font-weight: 600;">Cancel</a>` : ''}
                   </td>
                 </tr>
               `).join('')}
@@ -881,16 +800,16 @@ router.get('/trace', protectDashboard, (req, res) => {
                 <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
             `;
             if (canDispatch) {
-              html += `<a href="/dashboard/action/confirm?action=dispatch&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="btn btn-success">🚀 Dispatch Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=dispatch&jobId=${job.hermesJobId}" class="btn btn-success">🚀 Dispatch Job</a>`;
             }
             if (canApprove) {
-              html += `<a href="/dashboard/action/confirm?action=approve&approvalId=${job.approvalId}" onclick="appendToken(this)" class="btn btn-primary">✅ Approve Execution</a>`;
+              html += `<a href="/dashboard/action/confirm?action=approve&approvalId=${job.approvalId}" class="btn btn-primary">✅ Approve Execution</a>`;
             }
             if (canRetry) {
-              html += `<a href="/dashboard/action/confirm?action=retry&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="btn btn-warning">🔄 Retry Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=retry&jobId=${job.hermesJobId}" class="btn btn-warning">🔄 Retry Job</a>`;
             }
             if (canCancel) {
-              html += `<a href="/dashboard/action/confirm?action=cancel&jobId=${job.hermesJobId}" onclick="appendToken(this)" class="btn btn-danger">❌ Cancel Job</a>`;
+              html += `<a href="/dashboard/action/confirm?action=cancel&jobId=${job.hermesJobId}" class="btn btn-danger">❌ Cancel Job</a>`;
             }
             html += `
                 </div>
@@ -1049,13 +968,13 @@ router.get('/brief', protectDashboard, (req, res) => {
               if (act.command && process.env.DASHBOARD_ACTIONS_ENABLED === 'true') {
                 if (act.command.startsWith('/approve_run ')) {
                   const appVal = act.command.substring(13).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=approve&approvalId=${encodeURIComponent(appVal)}" onclick="appendToken(this)" class="btn btn-primary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Approve Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=approve&approvalId=${encodeURIComponent(appVal)}" class="btn btn-primary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Approve Now</a></div>`;
                 } else if (act.command.startsWith('/hermes_retry ')) {
                   const jobVal = act.command.substring(14).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=retry&jobId=${encodeURIComponent(jobVal)}" onclick="appendToken(this)" class="btn btn-warning" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Retry Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=retry&jobId=${encodeURIComponent(jobVal)}" class="btn btn-warning" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Retry Now</a></div>`;
                 } else if (act.command.startsWith('/hermes_dispatch ')) {
                   const jobVal = act.command.substring(17).trim();
-                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=dispatch&jobId=${encodeURIComponent(jobVal)}" onclick="appendToken(this)" class="btn btn-success" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Dispatch Now</a></div>`;
+                  actionBtnHtml = `<div style="margin-top: 0.5rem;"><a href="/dashboard/action/confirm?action=dispatch&jobId=${encodeURIComponent(jobVal)}" class="btn btn-success" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">Dispatch Now</a></div>`;
                 }
               }
               return `
@@ -1336,7 +1255,7 @@ router.get('/usage', protectDashboard, (req, res) => {
                   <td>${e.totalTokens.toLocaleString()} <span style="font-size: 0.75rem; color: var(--text-secondary);">(${e.inputTokens}/${e.outputTokens})</span></td>
                   <td>$${e.estimatedCostUsd.toFixed(5)}</td>
                   <td><span class="badge ${e.isEstimated ? 'badge-running' : 'badge-completed'}">${e.isEstimated ? 'Estimated' : 'Actual'}</span></td>
-                  <td><a href="/dashboard/trace?jobId=${e.hermesJobId || e.runtimeJobId || ''}" class="action-link" onclick="appendToken(this)">Trace</a></td>
+                  <td><a href="/dashboard/trace?jobId=${e.hermesJobId || e.runtimeJobId || ''}" class="action-link">Trace</a></td>
                 </tr>
               `).join('')}
           </tbody>
@@ -1445,14 +1364,6 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
           <button type="submit" class="btn btn-primary">Confirm & Execute</button>
         </div>
       </form>
-      <script>
-        document.addEventListener("DOMContentLoaded", () => {
-          const t = sessionStorage.getItem("hermes_admin_token");
-          if (t) {
-            document.getElementById("form-token").value = t;
-          }
-        });
-      </script>
     </div>
   `;
 
@@ -1460,8 +1371,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
 });
 
 // POST /dashboard/action/dispatch
-router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || (req.body && req.body.token);
+router.post('/action/dispatch', protectDashboard, verifyPostAction, rateLimitMiddleware, async (req, res) => {
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1503,13 +1413,12 @@ router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (re
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Dispatch failed: ${sanitizeError()}`);
+    res.status(500).send(`Dispatch failed: ${sanitizeError(err)}`);
   }
 });
 
 // POST /dashboard/action/cancel
-router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) => {
-  const token = req.body.token || (req.body && req.body.token);
+router.post('/action/cancel', protectDashboard, verifyPostAction, rateLimitMiddleware, (req, res) => {
   const jobId = req.body.jobId || req.query.jobId;
   const reason = req.body.reason || req.query.reason || 'Operator canceled execution via dashboard';
 
@@ -1547,13 +1456,12 @@ router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Cancellation failed: ${sanitizeError()}`);
+    res.status(500).send(`Cancellation failed: ${sanitizeError(err)}`);
   }
 });
 
 // POST /dashboard/action/retry
-router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || (req.body && req.body.token);
+router.post('/action/retry', protectDashboard, verifyPostAction, rateLimitMiddleware, async (req, res) => {
   const jobId = req.body.jobId || req.query.jobId;
 
   if (!jobId) {
@@ -1596,13 +1504,12 @@ router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Retry failed: ${sanitizeError()}`);
+    res.status(500).send(`Retry failed: ${sanitizeError(err)}`);
   }
 });
 
 // POST /dashboard/action/approve
-router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req, res) => {
-  const token = req.body.token || (req.body && req.body.token);
+router.post('/action/approve', protectDashboard, verifyPostAction, rateLimitMiddleware, async (req, res) => {
   const approvalId = req.body.approvalId || req.query.approvalId;
 
   if (!approvalId) {
@@ -1665,7 +1572,7 @@ router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Approval failed: ${sanitizeError()}`);
+    res.status(500).send(`Approval failed: ${sanitizeError(err)}`);
   }
 });
 
@@ -1718,24 +1625,24 @@ router.get('/prospects', protectDashboard, (req, res) => {
       if (p.hermesJobId) {
         const job = hermesQueue[p.hermesJobId];
         if (job) {
-          jobHtml = `<a href="/dashboard/trace?jobId=${p.hermesJobId}" onclick="appendToken(this)" class="action-link"><code>${escapeHtml(p.hermesJobId)}</code></a> <span class="badge badge-${job.status}">${job.status}</span>`;
+          jobHtml = `<a href="/dashboard/trace?jobId=${p.hermesJobId}" class="action-link"><code>${escapeHtml(p.hermesJobId)}</code></a> <span class="badge badge-${job.status}">${job.status}</span>`;
           const isActive = !['completed', 'failed', 'canceled'].includes(job.status);
           if (isActive) {
             actionHtml = `<span style="color: var(--muted-foreground); font-size: 0.85rem;">Job Active</span><br/>${outreachModeLabel}`;
           } else {
-            actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" onclick="appendToken(this)" class="action-link" style="font-weight: 600;">Handoff Again</a>${outreachModeLabel}`;
+            actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" class="action-link" style="font-weight: 600;">Handoff Again</a>${outreachModeLabel}`;
           }
         } else {
           jobHtml = `<code>${escapeHtml(p.hermesJobId)}</code> <span style="color: var(--muted-foreground); font-size: 0.75rem;">(missing)</span>`;
-          actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" onclick="appendToken(this)" class="action-link" style="font-weight: 600;">Outreach Handoff</a>${outreachModeLabel}`;
+          actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" class="action-link" style="font-weight: 600;">Outreach Handoff</a>${outreachModeLabel}`;
         }
       } else {
-        actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" onclick="appendToken(this)" class="action-link" style="font-weight: 600;">Outreach Handoff</a>${outreachModeLabel}`;
+        actionHtml = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${p.prospectId}" class="action-link" style="font-weight: 600;">Outreach Handoff</a>${outreachModeLabel}`;
       }
 
       let researchHtml = '';
       if (research) {
-        researchHtml = `<a href="/dashboard/research/view?researchId=${research.researchId}" onclick="appendToken(this)" class="action-link" style="color: #38bdf8; font-weight: 600;">Findings</a> <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2);">Enriched</span>`;
+        researchHtml = `<a href="/dashboard/research/view?researchId=${research.researchId}" class="action-link" style="color: #38bdf8; font-weight: 600;">Findings</a> <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2);">Enriched</span>`;
       } else {
         researchHtml = `<span style="color: var(--muted-foreground);">None</span>`;
       }
@@ -1794,7 +1701,7 @@ router.get('/prospects', protectDashboard, (req, res) => {
     const jobId = req.query.jobId || '';
     bannerHtml = `
       <div style="color: #10b981; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); padding: 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 1.5rem; text-align: center;">
-        <strong>Outreach Job Queued:</strong> Successfully created Hermes job <a href="/dashboard/trace?jobId=${escapeHtml(jobId)}" onclick="appendToken(this)" style="color: #34d399; font-weight: bold; text-decoration: underline;"><code>${escapeHtml(jobId)}</code></a>!
+        <strong>Outreach Job Queued:</strong> Successfully created Hermes job <a href="/dashboard/trace?jobId=${escapeHtml(jobId)}" style="color: #34d399; font-weight: bold; text-decoration: underline;"><code>${escapeHtml(jobId)}</code></a>!
       </div>
     `;
   } else if (req.query.error) {
@@ -1845,7 +1752,7 @@ router.get('/prospects', protectDashboard, (req, res) => {
         <input type="hidden" name="token" value="">
         <input type="text" name="q" value="${escapeHtml(req.query.q || '')}" placeholder="Search prospects..." style="flex: 1;">
         <button type="submit" class="btn btn-primary" style="height: 38px;">Search</button>
-        ${req.query.q ? `<a href="/dashboard/prospects" onclick="appendToken(this)" class="btn btn-secondary" style="height: 38px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">Clear</a>` : ''}
+        ${req.query.q ? `<a href="/dashboard/prospects" class="btn btn-secondary" style="height: 38px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">Clear</a>` : ''}
       </form>
 
       <div class="table-container">
@@ -1983,7 +1890,7 @@ router.get('/prospects/outreach/confirm', protectDashboard, (req, res) => {
         </div>
 
         <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-          <a href="/dashboard/prospects" onclick="appendToken(this)" class="btn btn-secondary">Cancel</a>
+          <a href="/dashboard/prospects" class="btn btn-secondary">Cancel</a>
           <button type="submit" class="btn btn-primary">Confirm Handoff</button>
         </div>
       </form>
@@ -2115,7 +2022,7 @@ router.get('/outreach', protectDashboard, (req, res) => {
             ${followUpHtml}
           </td>
           <td>
-            ${r.hermesJobId ? `<a href="${traceLink}" onclick="appendToken(this)" style="color: var(--accent-purple); text-decoration: underline;"><code>${escapeHtml(r.hermesJobId)}</code></a>` : '<span style="color: var(--text-secondary);">None</span>'}
+            ${r.hermesJobId ? `<a href="${traceLink}" style="color: var(--accent-purple); text-decoration: underline;"><code>${escapeHtml(r.hermesJobId)}</code></a>` : '<span style="color: var(--text-secondary);">None</span>'}
           </td>
           <td>
             ${r.runtimeJobId ? `<code>${escapeHtml(r.runtimeJobId)}</code>` : '<span style="color: var(--text-secondary);">None</span>'}
@@ -2139,7 +2046,7 @@ router.get('/outreach', protectDashboard, (req, res) => {
             </div>
           </td>
           <td>
-            <a href="${detailLink}" onclick="appendToken(this)" style="font-weight: 600; text-decoration: underline; color: var(--accent-purple);">View Drafts</a>
+            <a href="${detailLink}" style="font-weight: 600; text-decoration: underline; color: var(--accent-purple);">View Drafts</a>
           </td>
         </tr>
       `;
@@ -2247,7 +2154,7 @@ router.get('/outreach', protectDashboard, (req, res) => {
         
         <div style="display: flex; gap: 0.5rem;">
           <input type="submit" value="Filter" class="btn btn-primary" style="height: 44px; cursor: pointer;">
-          ${(req.query.q || req.query.status || req.query.town || req.query.category || req.query.follow_up_due) ? `<a href="/dashboard/outreach" onclick="appendToken(this)" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text-secondary); text-decoration: none; height: 44px; box-sizing: border-box;">Clear</a>` : ''}
+          ${(req.query.q || req.query.status || req.query.town || req.query.category || req.query.follow_up_due) ? `<a href="/dashboard/outreach" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text-secondary); text-decoration: none; height: 44px; box-sizing: border-box;">Clear</a>` : ''}
         </div>
       </form>
     </div>
@@ -2362,7 +2269,7 @@ router.get('/outreach/view', protectDashboard, (req, res) => {
     </script>
 
     <div class="panel" style="margin-bottom: 2rem;">
-      <a href="/dashboard/outreach" onclick="appendToken(this)" style="display: inline-flex; align-items: center; margin-bottom: 1.5rem; color: var(--text-secondary); font-weight: 500; text-decoration: none;">
+      <a href="/dashboard/outreach" style="display: inline-flex; align-items: center; margin-bottom: 1.5rem; color: var(--text-secondary); font-weight: 500; text-decoration: none;">
         &larr; Back to Reviews Workspace
       </a>
 
@@ -2478,7 +2385,7 @@ router.get('/outreach/view', protectDashboard, (req, res) => {
             <h3>🛡️ Metadata</h3>
             <div class="detail-row"><span class="detail-label">Review ID:</span><span><code>${escapeHtml(record.reviewId)}</code></span></div>
             <div class="detail-row"><span class="detail-label">Prospect ID:</span><span><code>${escapeHtml(record.prospectId)}</code></span></div>
-            <div class="detail-row"><span class="detail-label">Hermes Job:</span><span>${record.hermesJobId ? `<a href="/dashboard/trace?jobId=${escapeHtml(record.hermesJobId)}" onclick="appendToken(this)"><code>${escapeHtml(record.hermesJobId)}</code></a>` : 'None'}</span></div>
+            <div class="detail-row"><span class="detail-label">Hermes Job:</span><span>${record.hermesJobId ? `<a href="/dashboard/trace?jobId=${escapeHtml(record.hermesJobId)}"><code>${escapeHtml(record.hermesJobId)}</code></a>` : 'None'}</span></div>
             <div class="detail-row"><span class="detail-label">Runtime Job:</span><span><code>${escapeHtml(record.runtimeJobId || 'None')}</code></span></div>
             <div class="detail-row"><span class="detail-label">Last Contact:</span><span>${record.lastManualContactAt ? new Date(record.lastManualContactAt).toLocaleString() : 'Never'}</span></div>
           </div>
@@ -2610,7 +2517,7 @@ router.get('/research', protectDashboard, (req, res) => {
           <td><span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: bold;">${Math.round(r.confidence * 100)}%</span></td>
           <td>${new Date(r.updatedAt).toLocaleString()}</td>
           <td>
-            <a href="/dashboard/research/view?researchId=${r.researchId}" onclick="appendToken(this)" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Summary</a>
+            <a href="/dashboard/research/view?researchId=${r.researchId}" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Summary</a>
           </td>
         </tr>
       `;
@@ -2731,7 +2638,7 @@ router.get('/research/view', protectDashboard, (req, res) => {
 
   const content = `
     <div style="margin-bottom: 1.5rem;">
-      <a href="/dashboard/research" onclick="appendToken(this)" style="color: var(--accent-purple); text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem;">
+      <a href="/dashboard/research" style="color: var(--accent-purple); text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem;">
         &larr; Back to Research Catalog
       </a>
     </div>
@@ -2829,7 +2736,7 @@ router.get('/scores', protectDashboard, (req, res) => {
       }
 
       const researchLink = s.researchId && s.researchId !== 'none'
-        ? `<a href="/dashboard/research/view?researchId=${encodeURIComponent(s.researchId)}" onclick="appendToken(this)" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Research</a>`
+        ? `<a href="/dashboard/research/view?researchId=${encodeURIComponent(s.researchId)}" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Research</a>`
         : '<span style="color: var(--text-secondary);">No Research</span>';
 
       rows += `
@@ -2967,20 +2874,20 @@ router.get('/cockpit', protectDashboard, (req, res) => {
       const viewProspectLink = `/dashboard/prospects?q=${encodeURIComponent(item.businessName)}`;
       
       const viewResearchLink = item.hasResearch
-        ? `<a href="/dashboard/research/view?researchId=${item.researchId}" onclick="appendToken(this)" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Research</a>`
+        ? `<a href="/dashboard/research/view?researchId=${item.researchId}" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">View Research</a>`
         : `<span style="color: var(--text-secondary);">No Research</span>`;
 
       const viewScoreLink = item.hasScore
         ? (item.hasResearch 
-            ? `<a href="/dashboard/research/view?researchId=${item.researchId || item.scoreId}" onclick="appendToken(this)" style="color: #34d399; text-decoration: underline; font-weight: 600;">View Score</a>`
-            : `<a href="/dashboard/scores" onclick="appendToken(this)" style="color: #34d399; text-decoration: underline; font-weight: 600;">Leaderboard</a>`)
+            ? `<a href="/dashboard/research/view?researchId=${item.researchId || item.scoreId}" style="color: #34d399; text-decoration: underline; font-weight: 600;">View Score</a>`
+            : `<a href="/dashboard/scores" style="color: #34d399; text-decoration: underline; font-weight: 600;">Leaderboard</a>`)
         : `<span style="color: var(--text-secondary);">Unscored</span>`;
 
       const viewOutreachLink = item.reviewId
-        ? `<a href="/dashboard/outreach/view?reviewId=${item.reviewId}" onclick="appendToken(this)" style="color: var(--accent-purple); text-decoration: underline; font-weight: 600;">View Outreach</a>`
+        ? `<a href="/dashboard/outreach/view?reviewId=${item.reviewId}" style="color: var(--accent-purple); text-decoration: underline; font-weight: 600;">View Outreach</a>`
         : `<span style="color: var(--text-secondary);">No Outreach</span>`;
 
-      const handoffLink = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${item.prospectId}" onclick="appendToken(this)" style="color: var(--accent-blue); text-decoration: underline; font-weight: 600;">Handoff Flow</a>`;
+      const handoffLink = `<a href="/dashboard/prospects/outreach/confirm?prospectId=${item.prospectId}" style="color: var(--accent-blue); text-decoration: underline; font-weight: 600;">Handoff Flow</a>`;
 
       rows += `
         <tr>
@@ -3009,7 +2916,7 @@ router.get('/cockpit', protectDashboard, (req, res) => {
           <td>${outcomeHtml}</td>
           <td>
             <div style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
-              <a href="${viewProspectLink}" onclick="appendToken(this)" style="color: var(--accent-purple); text-decoration: underline;">View Prospect</a>
+              <a href="${viewProspectLink}" style="color: var(--accent-purple); text-decoration: underline;">View Prospect</a>
               ${item.hasResearch ? viewResearchLink : ''}
               ${item.hasScore ? viewScoreLink : ''}
               ${item.reviewId ? viewOutreachLink : ''}
@@ -3122,7 +3029,7 @@ router.get('/cockpit', protectDashboard, (req, res) => {
         
         <div style="display: flex; gap: 0.5rem;">
           <input type="submit" value="Filter" class="btn btn-primary" style="height: 44px; cursor: pointer;">
-          ${(filters.priority || filters.status || filters.recommendedChannel || filters.town || filters.category || filters.hasResearch || filters.hasScore || filters.hasOutreachDraft) ? `<a href="/dashboard/cockpit" onclick="appendToken(this)" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text-secondary); text-decoration: none; height: 44px; box-sizing: border-box;">Clear</a>` : ''}
+          ${(filters.priority || filters.status || filters.recommendedChannel || filters.town || filters.category || filters.hasResearch || filters.hasScore || filters.hasOutreachDraft) ? `<a href="/dashboard/cockpit" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text-secondary); text-decoration: none; height: 44px; box-sizing: border-box;">Clear</a>` : ''}
         </div>
       </form>
     </div>
@@ -3195,7 +3102,7 @@ router.get('/playbook', protectDashboard, (req, res) => {
       if (lowerUrl.startsWith('javascript:') || lowerUrl.startsWith('data:')) {
         return text; // Strip dangerous scripting
       }
-      return `<a href="${url}" onclick="if(this.href.startsWith('/')) appendToken(this)" style="color: var(--accent-blue); text-decoration: underline;">${text}</a>`;
+      return `<a href="${url}" style="color: var(--accent-blue); text-decoration: underline;">${text}</a>`;
     });
 
     // 1. GFM Alerts (> [!WARNING] etc)
@@ -3325,7 +3232,7 @@ router.get('/playbook', protectDashboard, (req, res) => {
         </div>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
           <span style="font-size: 0.85rem; color: var(--text-secondary); font-family: monospace;">openclaw/ops/OPS1_LIVE_USAGE_METRICS_TEMPLATE.md</span>
-          <a href="/dashboard/cockpit" onclick="appendToken(this)" class="btn btn-primary" style="height: 40px; display: inline-flex; align-items: center;">Go to Cockpit</a>
+          <a href="/dashboard/cockpit" class="btn btn-primary" style="height: 40px; display: inline-flex; align-items: center;">Go to Cockpit</a>
         </div>
       </div>
 

@@ -41,7 +41,10 @@ export default function JarvisDashboard() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiFetch('/api/jarvis/auth/logout', { method: 'POST' });
+    } catch (_) {}
     clearSessionToken();
     setToken('');
     setTokenInput('');
@@ -52,19 +55,17 @@ export default function JarvisDashboard() {
     setLoading(true);
     setError('');
     setMessage('');
-    
-    const headers = { 'Authorization': `Bearer ${token}` };
 
     try {
       const [statsRes, briefRes, prioritiesRes, approvalsRes, connectorsRes, mobileRes, projectsRes, sessionsRes] = await Promise.all([
-        fetch('/api/jarvis/approval-stats', { headers }),
-        fetch('/api/jarvis/daily-brief', { headers }),
-        fetch('/api/jarvis/priorities', { headers }),
-        fetch('/api/jarvis/approvals', { headers }),
-        fetch('/api/jarvis/connectors', { headers }),
-        fetch('/api/jarvis/mobile-uploads', { headers }),
-        fetch('/api/jarvis/projects', { headers }),
-        fetch('/api/jarvis/work-sessions', { headers })
+        apiFetch('/api/jarvis/approval-stats'),
+        apiFetch('/api/jarvis/daily-brief'),
+        apiFetch('/api/jarvis/priorities'),
+        apiFetch('/api/jarvis/approvals'),
+        apiFetch('/api/jarvis/connectors'),
+        apiFetch('/api/jarvis/mobile-uploads'),
+        apiFetch('/api/jarvis/projects'),
+        apiFetch('/api/jarvis/work-sessions')
       ]);
 
       if (statsRes.status === 401 || briefRes.status === 401) {
@@ -92,12 +93,8 @@ export default function JarvisDashboard() {
 
   const handleGoogleConnect = async (connectorId) => {
     try {
-      const res = await fetch('/api/jarvis/google/connect-ticket', {
+      const res = await apiFetch('/api/jarvis/google/connect-ticket', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify({ connector: connectorId })
       });
       const data = await res.json();
@@ -117,16 +114,14 @@ export default function JarvisDashboard() {
     const urlTicket = params.get('ticket');
 
     if (urlTicket) {
-      fetch('/api/jarvis/auth/exchange-ticket', {
+      apiFetch('/api/jarvis/auth/exchange-ticket', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticket: urlTicket.trim() })
       })
       .then(res => res.json())
       .then(data => {
         const sessionTok = data.session_token || data.token;
-        if (sessionTok) {
-          sessionStorage.setItem('admin_token', sessionTok);
+        if (sessionTok && setSessionToken(sessionTok)) {
           setToken(sessionTok);
         } else {
           setError(data.error || 'Failed to exchange single-use ticket.');
@@ -151,11 +146,10 @@ export default function JarvisDashboard() {
 
   // Approval Mutation Handlers
   const handleApprove = async (id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
     setSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch(`/api/jarvis/approvals/${id}/approve`, { method: 'POST', headers });
+      const res = await apiFetch(`/api/jarvis/approvals/${id}/approve`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setMessage(`✅ Success: ${data.message || 'Action executed'}`);
@@ -172,11 +166,10 @@ export default function JarvisDashboard() {
   };
 
   const handleReject = async (id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
     setSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch(`/api/jarvis/approvals/${id}/reject`, { method: 'POST', headers });
+      const res = await apiFetch(`/api/jarvis/approvals/${id}/reject`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setMessage(`🛑 Proposal rejected.`);
@@ -193,11 +186,10 @@ export default function JarvisDashboard() {
   };
 
   const handleCancel = async (id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
     setSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch(`/api/jarvis/approvals/${id}/cancel`, { method: 'POST', headers });
+      const res = await apiFetch(`/api/jarvis/approvals/${id}/cancel`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setMessage(`🚫 Proposal cancelled.`);
@@ -215,11 +207,10 @@ export default function JarvisDashboard() {
 
   // Priority Action Propose Handler
   const handlePropose = async (priorityId) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
     setSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch(`/api/jarvis/priorities/${priorityId}/propose`, { method: 'POST', headers });
+      const res = await apiFetch(`/api/jarvis/priorities/${priorityId}/propose`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setMessage(`📝 Action proposed successfully! ID: ${data.proposal?.id}`);
@@ -236,10 +227,9 @@ export default function JarvisDashboard() {
   };
 
   const handleFetchApprovalDetails = async (id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
     setModalError('');
     try {
-      const res = await fetch(`/api/jarvis/approvals/${id}`, { headers });
+      const res = await apiFetch(`/api/jarvis/approvals/${id}`);
       if (res.ok) {
         setSelectedApproval(await res.json());
       }

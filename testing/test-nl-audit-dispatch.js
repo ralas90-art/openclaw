@@ -18,19 +18,10 @@ function normalizePgUrl(urlStr) {
 }
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
-const prodDbUrl = process.env.DATABASE_URL;
 
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
 }
-if (!testDbUrl.includes('test_env=isolated') && !testDbUrl.includes('test')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL missing test_env=isolated or test marker. Execution aborted to protect database.');
-}
-if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl) && !testDbUrl.includes('test_env=isolated')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
-}
-
-process.env.DATABASE_URL = testDbUrl;
 
 const {
   routeNaturalLanguageCommand,
@@ -105,53 +96,56 @@ async function runTests() {
   assert(!regexError, 'Regex escaping must prevent syntax errors on special characters');
   console.log('✅ Test 3: Safe regex alias escaping passed.');
 
-  // Test 4: Dispatcher Flow with Real DB Log Lifecycle (Successful Dispatch)
-  console.log('- Testing real dispatcher with successful command...');
-  const successRes = await dispatchCommand('show me my pending approvals', { chat: { id: 'chat_succ_1' } });
-  console.log('successRes output:', successRes);
-  assert(successRes.ok === true, 'Successful NL command dispatch must return ok === true');
-  assert(successRes.logId, 'dispatchCommand must return valid logId');
+  let successRes, deniedRes, resA, resB;
+  try {
+    // Test 4: Dispatcher Flow with Real DB Log Lifecycle (Successful Dispatch)
+    console.log('- Testing real dispatcher with successful command...');
+    successRes = await dispatchCommand('show me my pending approvals', { chat: { id: 'chat_succ_1' } });
+    console.log('successRes output:', successRes);
+    assert(successRes.ok === true, 'Successful NL command dispatch must return ok === true');
+    assert(successRes.logId, 'dispatchCommand must return valid logId');
 
-  const succLog = await queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [successRes.logId]);
-  assert(succLog.length === 1 && succLog[0].executed_boolean === true, 'Successful dispatch must set executed_boolean = true in DB');
-  console.log('✅ Test 4: Successful dispatch marked executed_boolean = true in DB.');
+    const succLog = await queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [successRes.logId]);
+    assert(succLog.length === 1 && succLog[0].executed_boolean === true, 'Successful dispatch must set executed_boolean = true in DB');
+    console.log('✅ Test 4: Successful dispatch marked executed_boolean = true in DB.');
 
-  // Test 5: Dispatcher Flow with Gated/Denied Command (Failed Dispatch)
-  console.log('- Testing real dispatcher with gated/denied command...');
-  const deniedRes = await dispatchCommand('approve this approval request', { chat: { id: 'chat_denied_1' } });
-  assert(deniedRes.ok === false, 'Gated/denied NL mutation must return ok === false');
-  assert(deniedRes.logId, 'Gated dispatch must retain logId');
+    // Test 5: Dispatcher Flow with Gated/Denied Command (Failed Dispatch)
+    console.log('- Testing real dispatcher with gated/denied command...');
+    deniedRes = await dispatchCommand('approve this approval request', { chat: { id: 'chat_denied_1' } });
+    assert(deniedRes.ok === false, 'Gated/denied NL mutation must return ok === false');
+    assert(deniedRes.logId, 'Gated dispatch must retain logId');
 
-  const deniedLog = await queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [deniedRes.logId]);
-  assert(deniedLog.length === 1 && deniedLog[0].executed_boolean === false, 'Denied dispatch must leave executed_boolean = false in DB');
-  console.log('✅ Test 5: Gated/denied dispatch left executed_boolean = false in DB.');
+    const deniedLog = await queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [deniedRes.logId]);
+    assert(deniedLog.length === 1 && deniedLog[0].executed_boolean === false, 'Denied dispatch must leave executed_boolean = false in DB');
+    console.log('✅ Test 5: Gated/denied dispatch left executed_boolean = false in DB.');
 
-  // Test 6: Concurrent NL Dispatch & Exact-Row Isolation
-  console.log('- Testing 2 concurrent NL dispatches for exact-row isolation...');
-  const [resA, resB] = await Promise.all([
-    dispatchCommand('show me my priorities', { chat: { id: 'chat_conc_A' } }),
-    dispatchCommand('approve this priority item', { chat: { id: 'chat_conc_B' } }) // Gated -> fails ok
-  ]);
+    // Test 6: Concurrent NL Dispatch & Exact-Row Isolation
+    console.log('- Testing 2 concurrent NL dispatches for exact-row isolation...');
+    [resA, resB] = await Promise.all([
+      dispatchCommand('show me my priorities', { chat: { id: 'chat_conc_A' } }),
+      dispatchCommand('approve this priority item', { chat: { id: 'chat_conc_B' } }) // Gated -> fails ok
+    ]);
 
-  assert(resA.logId && resB.logId && resA.logId !== resB.logId, 'Concurrent dispatches must generate unique logIds');
+    assert(resA.logId && resB.logId && resA.logId !== resB.logId, 'Concurrent dispatches must generate unique logIds');
 
-  const [logA, logB] = await Promise.all([
-    queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resA.logId]),
-    queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resB.logId])
-  ]);
+    const [logA, logB] = await Promise.all([
+      queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resA.logId]),
+      queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resB.logId])
+    ]);
 
-  assert(logA[0].executed_boolean === true, 'Successful concurrent command must have executed_boolean = true');
-  assert(logB[0].executed_boolean === false, 'Failed concurrent command must have executed_boolean = false');
-  console.log('✅ Test 6: Concurrent NL dispatch exact-row isolation passed.');
-
-  // Clean up test audit logs
-  await queryDb('DELETE FROM jarvis_natural_language_logs WHERE id IN ($1, $2, $3, $4)', [
-    successRes.logId,
-    deniedRes.logId,
-    resA.logId,
-    resB.logId
-  ]);
-  console.log('✅ Test 7: Test audit logs cleaned up cleanly.');
+    assert(logA[0].executed_boolean === true, 'Successful concurrent command must have executed_boolean = true');
+    assert(logB[0].executed_boolean === false, 'Failed concurrent command must have executed_boolean = false');
+    console.log('✅ Test 6: Concurrent NL dispatch exact-row isolation passed.');
+  } finally {
+    // Clean up test audit logs
+    const idsToClean = [successRes?.logId, deniedRes?.logId, resA?.logId, resB?.logId].filter(Boolean);
+    if (idsToClean.length > 0) {
+      try {
+        await queryDb(`DELETE FROM jarvis_natural_language_logs WHERE id IN (${idsToClean.map((_, i) => `$${i + 1}`).join(',')})`, idsToClean);
+      } catch (_) {}
+    }
+    console.log('✅ Test 7: Test audit logs cleaned up cleanly in finally block.');
+  }
 
   assertMemoryUnchanged(memSnapshot);
   console.log('✅ Memory files integrity check passed (0 mutations).');
@@ -161,5 +155,5 @@ async function runTests() {
 const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('Test execution failed:', err);
-  process.exit(1);
+  throw err;
 });

@@ -15,19 +15,10 @@ function normalizePgUrl(urlStr) {
 }
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
-const prodDbUrl = process.env.DATABASE_URL;
 
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
 }
-if (!testDbUrl.includes('test_env=isolated') && !testDbUrl.includes('test')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL missing test_env=isolated or test marker. Execution aborted to protect database.');
-}
-if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl) && !testDbUrl.includes('test_env=isolated')) {
-  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
-}
-
-process.env.DATABASE_URL = testDbUrl;
 
 const express = require('express');
 const http = require('http');

@@ -249,11 +249,37 @@ async function validateSessionToken(token) {
   return { valid: false, reason: 'Session not found or invalid' };
 }
 
+/**
+ * Revoke an active session token (e.g., on logout).
+ */
+async function revokeSessionToken(token) {
+  if (!token || typeof token !== 'string') {
+    return false;
+  }
+  const tokenHash = hashToken(token);
+
+  if (process.env.DATABASE_URL) {
+    try {
+      await queryDb(
+        `DELETE FROM jarvis_sessions WHERE token_hash = $1 OR session_token = $1;`,
+        [tokenHash]
+      );
+    } catch (err) {
+      console.error('[AuthTickets] DB error revoking session token:', err.message);
+    }
+  }
+
+  memorySessionStore.delete(tokenHash);
+  memorySessionStore.delete(token);
+  return true;
+}
+
 module.exports = {
   safeTimingEqual,
   checkTicketRateLimit,
   createAuthTicket,
   validateAndConsumeTicket,
   createSessionToken,
-  validateSessionToken
+  validateSessionToken,
+  revokeSessionToken
 };

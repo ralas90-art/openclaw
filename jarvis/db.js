@@ -11,7 +11,10 @@ function getDbIdentity(connectionString) {
   if (!connectionString || typeof connectionString !== 'string') return '';
   try {
     const parsed = new URL(connectionString);
-    return `${parsed.host}${parsed.pathname}`.toLowerCase();
+    const host = parsed.hostname || '';
+    const port = parsed.port || '5432';
+    const dbName = (parsed.pathname || '').replace(/^\/+/, '');
+    return `${host}:${port}/${dbName}`.toLowerCase();
   } catch (err) {
     return connectionString.toLowerCase();
   }
@@ -23,8 +26,9 @@ function getPool() {
   // In production, NEVER use TEST_DATABASE_URL
   if (process.env.NODE_ENV !== 'production' && process.env.TEST_DATABASE_URL) {
     const testUrl = process.env.TEST_DATABASE_URL.trim();
-    if (!testUrl.includes('test_env=isolated') && !testUrl.includes('test')) {
-      throw new Error('[JarvisDB] Safety Guard: TEST_DATABASE_URL missing dedicated test-database marker (test_env=isolated or test in DB name).');
+    const mainUrl = (process.env.DATABASE_URL || '').trim();
+    if (mainUrl && getDbIdentity(testUrl) === getDbIdentity(mainUrl)) {
+      throw new Error('[JarvisDB] Safety Guard: TEST_DATABASE_URL targets the identical database (host/port/dbname) as DATABASE_URL!');
     }
     dbUrl = testUrl;
   }

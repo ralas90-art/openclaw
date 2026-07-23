@@ -40,7 +40,8 @@ const {
   createAuthTicket,
   validateAndConsumeTicket,
   createSessionToken,
-  validateSessionToken
+  validateSessionToken,
+  revokeSessionToken
 } = require('./auth-tickets');
 
 function parseCookies(cookieHeader) {
@@ -142,7 +143,30 @@ router.post('/auth/exchange-ticket', async (req, res) => {
 });
 
 // POST /api/jarvis/auth/logout
-router.post('/auth/logout', (req, res) => {
+router.post('/auth/logout', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  let token = authHeader && authHeader.split(' ')[1];
+  if (!token && req.headers['x-admin-token']) {
+    token = req.headers['x-admin-token'];
+  }
+  if (!token && req.headers.cookie) {
+    const list = {};
+    req.headers.cookie.split(';').forEach(c => {
+      let [n, ...r] = c.split('=');
+      n = n?.trim();
+      if (n) list[n] = decodeURIComponent(r.join('=').trim());
+    });
+    token = list.jarvis_session_token || null;
+  }
+
+  if (token) {
+    try {
+      await revokeSessionToken(token);
+    } catch (err) {
+      console.error('[Logout] Revoke session error:', sanitizeError(err));
+    }
+  }
+
   res.setHeader('Set-Cookie', 'jarvis_session_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
   return res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
@@ -468,8 +492,8 @@ router.post('/approvals/:id/approve', authenticateAdminSession, async (req, res)
     const result = await executeApprovedAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action approved and executed successfully', result });
   } catch (err) {
-    console.error('[Approve Route Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[Approve Route Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -481,8 +505,8 @@ router.post('/approvals/:id/reject', authenticateAdminSession, async (req, res) 
     await rejectApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal rejected' });
   } catch (err) {
-    console.error('[Reject Route Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[Reject Route Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -494,8 +518,8 @@ router.post('/approvals/:id/cancel', authenticateAdminSession, async (req, res) 
     await cancelApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal cancelled' });
   } catch (err) {
-    console.error('[Cancel Route Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[Cancel Route Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -507,8 +531,8 @@ router.post('/priorities/:id/propose', authenticateAdminSession, async (req, res
     const proposal = await proposeAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposed successfully', proposal });
   } catch (err) {
-    console.error('[Propose Route Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[Propose Route Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -627,8 +651,8 @@ router.get('/work-sessions', authenticateAdminSession, async (req, res) => {
     const sessions = await workSessions.listWorkSessions(limit);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -638,8 +662,8 @@ router.get('/work-sessions/latest', authenticateAdminSession, async (req, res) =
     const session = await workSessions.getActiveSession();
     return res.status(200).json(session || { message: 'No active session' });
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -650,8 +674,8 @@ router.get('/work-sessions/project/:project_slug', authenticateAdminSession, asy
     const sessions = await workSessions.getProjectSessions(slug);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(500).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -662,8 +686,8 @@ router.post('/work-sessions/start', authenticateAdminSession, async (req, res) =
     const session = await workSessions.startWorkSession(project_slug, source || 'dashboard', text_content);
     return res.status(201).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(400).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
   }
 });
 
@@ -674,8 +698,8 @@ router.post('/work-sessions/update', authenticateAdminSession, async (req, res) 
     const session = await workSessions.updateWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(400).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
   }
 });
 
@@ -686,8 +710,8 @@ router.post('/work-sessions/done', authenticateAdminSession, async (req, res) =>
     const session = await workSessions.doneWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError());
-    return res.status(400).json({ error: sanitizeError() });
+    console.error('[WorkSessions API Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
   }
 });
 
@@ -697,8 +721,8 @@ router.post('/handoff/ingest', authenticateAdminSession, async (req, res) => {
     const session = await workSessions.ingestHandoffFile();
     return res.status(200).json({ success: true, message: 'Handoff file ingested successfully', session });
   } catch (err) {
-    console.error('[Handoff Ingest API Error]', sanitizeError());
-    return res.status(400).json({ error: sanitizeError() });
+    console.error('[Handoff Ingest API Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
   }
 });
 

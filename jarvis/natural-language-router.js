@@ -127,7 +127,7 @@ async function markNaturalLanguageLogExecuted(logId) {
     throw new Error('markNaturalLanguageLogExecuted requires a valid logId');
   }
   const rows = await queryDb(
-    `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1 RETURNING id`,
+    `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1 AND executed_boolean = false RETURNING id`,
     [logId]
   );
   if (!rows || rows.length !== 1) {
@@ -247,6 +247,9 @@ async function routeNaturalLanguageCommand(text, message) {
 
   // Log initial request insertion (executed_boolean initially false, updated after successful dispatch)
   const logId = await logNaturalLanguageRequest(sanitizedText, hash, lang, intentMatch.intent, intentMatch.mapped_command, intentMatch.risk_tier, false, chatId);
+  if (!logId) {
+    return { type: 'error', text: '❌ Audit log persistence failure. Action execution blocked.', intent: intentMatch.intent, command: intentMatch.mapped_command, logId: null };
+  }
 
   if (intentMatch.mapped_command === 'HELP_DASHBOARD') {
     const dashboardUrl = process.env.PUBLIC_URL ? (process.env.PUBLIC_URL + '/admin/jarvis') : '/admin/jarvis';

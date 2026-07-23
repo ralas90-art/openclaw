@@ -78,11 +78,14 @@ async function runTests() {
   // 1. Forbidden Secret Leaks & Token Query Patterns
   const forbiddenPatterns = [
     { pattern: /req\.query\.token/i, name: 'req.query.token parameter usage' },
+    { pattern: /hermes_admin_token/i, name: 'Legacy hermes_admin_token sessionStorage reference' },
+    { pattern: /appendToken\b/i, name: 'Legacy appendToken function reference' },
     { pattern: /token=\$\{process\.env\.INTERNAL_ADMIN_TOKEN/i, name: 'Raw master token URL embedding' },
     { pattern: /connector=[^&]+&token=/i, name: 'Raw connector token query URL' },
     { pattern: /href=["'].*token=\$\{.*INTERNAL_ADMIN_TOKEN/i, name: 'Raw master token HTML href link' },
     { pattern: /VITE_INTERNAL_ADMIN_TOKEN/i, name: 'VITE_INTERNAL_ADMIN_TOKEN reference' },
     { pattern: /admin-test-token-123/i, name: 'Legacy admin token fallback string admin-test-token-123' },
+    { pattern: /sanitizeError\(\s*\)/i, name: 'sanitizeError() invoked with missing argument' },
     { pattern: /sanitizeError\(.*\)\.message/i, name: 'Invalid .message call on sanitizeError string return value' },
     { pattern: /res\.status\(\d+\)\.(json|send)\(.*\b(err|error)\.message\b/i, name: 'Unsanitized raw err.message in HTTP response' }
   ];

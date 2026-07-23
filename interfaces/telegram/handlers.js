@@ -378,6 +378,10 @@ async function dispatchCommand(text, message) {
     console.log(`[Telegram Handlers] nl_intent_detected=${nlResult.intent || 'unknown'}`);
     console.log(`[Telegram Handlers] mapped_command=${nlResult.command || 'none'}`);
     
+    if (nlResult.type === 'error') {
+      return { ok: false, text: nlResult.text, logId: null };
+    }
+
     if (nlResult.logId) {
       pendingLogId = nlResult.logId;
     }
@@ -389,7 +393,6 @@ async function dispatchCommand(text, message) {
           await markNaturalLanguageLogExecuted(pendingLogId);
         } catch (auditErr) {
           console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
-          return { ok: false, text: '❌ Audit log persistence failure. Action execution blocked.', logId: pendingLogId };
         }
       }
       return { ok: isOk, text: nlResult.text, logId: pendingLogId };
@@ -412,7 +415,6 @@ async function dispatchCommand(text, message) {
         await markNaturalLanguageLogExecuted(pendingLogId);
       } catch (auditErr) {
         console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
-        return { ok: false, text: '❌ Audit log persistence failure. Action execution blocked.', logId: pendingLogId };
       }
     }
 
