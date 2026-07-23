@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../api/client';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -15,12 +16,8 @@ export default function Onboarding() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/tenants', {
+      const res = await apiFetch('/api/admin/tenants', {
         method: 'POST',
-        headers: { 
-          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(form)
       });
       const result = await res.json();

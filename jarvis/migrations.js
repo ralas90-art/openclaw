@@ -6,7 +6,7 @@
 const { withTransaction } = require('./db');
 
 async function runMigrations() {
-  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  const dbUrl = (process.env.NODE_ENV !== 'production' && process.env.TEST_DATABASE_URL) ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;
   if (!dbUrl) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('[JarvisMigrations] DATABASE_URL is missing in production environment. Failing boot.');
@@ -119,10 +119,11 @@ async function runMigrations() {
         );
       `);
 
-      // 9. jarvis_auth_tickets table (for single-use tickets)
+      // 9. jarvis_auth_tickets table (for single-use tickets - SHA-256 hashed)
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_auth_tickets (
           ticket_id TEXT PRIMARY KEY,
+          ticket_hash VARCHAR(64),
           purpose TEXT NOT NULL,
           metadata JSONB DEFAULT '{}'::jsonb,
           expires_at TIMESTAMPTZ NOT NULL,
@@ -130,16 +131,23 @@ async function runMigrations() {
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+      await client.query("ALTER TABLE jarvis_auth_tickets ADD COLUMN IF NOT EXISTS ticket_hash VARCHAR(64);");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_auth_tickets_hash ON jarvis_auth_tickets (ticket_hash);");
+      await client.query("UPDATE jarvis_auth_tickets SET used = TRUE WHERE ticket_hash IS NULL;");
 
-      // 10. jarvis_sessions table (for dashboard session tokens)
+      // 10. jarvis_sessions table (for dashboard session tokens - SHA-256 hashed)
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_sessions (
           session_token TEXT PRIMARY KEY,
+          token_hash VARCHAR(64),
           metadata JSONB DEFAULT '{}'::jsonb,
           expires_at TIMESTAMPTZ NOT NULL,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+      await client.query("ALTER TABLE jarvis_sessions ADD COLUMN IF NOT EXISTS token_hash VARCHAR(64);");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_sessions_hash ON jarvis_sessions (token_hash);");
+      await client.query("DELETE FROM jarvis_sessions WHERE token_hash IS NULL;");
 
       // 11. jarvis_projects table
       await client.query(`

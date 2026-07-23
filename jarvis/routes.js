@@ -43,13 +43,35 @@ const {
   validateSessionToken
 } = require('./auth-tickets');
 
+function parseCookies(cookieHeader) {
+  const list = {};
+  if (!cookieHeader || typeof cookieHeader !== 'string') return list;
+  cookieHeader.split(';').forEach(cookie => {
+    const parts = cookie.split('=');
+    if (parts.length >= 2) {
+      list[parts.shift().trim()] = decodeURIComponent(parts.join('=').trim());
+    }
+  });
+  return list;
+}
+
 // Middleware to authenticate ONLY active derived session tokens (srv_sess_...)
 async function authenticateAdminSession(req, res, next) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = null;
+  const authHeader = req.headers.authorization || req.headers['x-admin-token'];
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (typeof authHeader === 'string') {
+    token = authHeader.trim();
+  } else if (req.headers.cookie) {
+    const cookies = parseCookies(req.headers.cookie);
+    token = cookies.jarvis_session_token;
+  } else if (req.body && typeof req.body.token === 'string') {
+    token = req.body.token.trim();
+  }
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: missing bearer token' });
+    return res.status(401).json({ error: 'Unauthorized: missing session token' });
   }
 
   if (!token.startsWith('srv_sess_')) {
@@ -66,9 +88,15 @@ async function authenticateAdminSession(req, res, next) {
 }
 
 async function authenticateAnyToken(req, res, next) {
+  let token = null;
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
-  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (req.headers.cookie) {
+    const cookies = parseCookies(req.headers.cookie);
+    token = cookies.jarvis_session_token;
+  }
+
   if (token && token.startsWith('srv_sess_')) {
     const sessionResult = await validateSessionToken(token);
     if (sessionResult.valid) {
@@ -98,15 +126,25 @@ router.post('/auth/exchange-ticket', async (req, res) => {
 
   try {
     const sessionToken = await createSessionToken(validation.metadata || {}, 3600);
+
+    // Set Secure, HttpOnly, SameSite=Lax cookie
+    res.setHeader('Set-Cookie', `jarvis_session_token=${sessionToken}; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+
     return res.status(200).json({
       success: true,
       session_token: sessionToken,
       expires_in: 3600
     });
   } catch (err) {
-    console.error('[AuthExchange Error]', err.message);
-    return res.status(500).json({ success: false, error: 'Failed to issue session token' });
+    console.error('[TicketExchange Error]', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to create session token' });
   }
+});
+
+// POST /api/jarvis/auth/logout
+router.post('/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'jarvis_session_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  return res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 
 // POST /api/jarvis/google/connect-ticket
@@ -201,12 +239,7 @@ router.get('/google/connect', async (req, res) => {
       redirectUri
     );
 
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-    const crypto = require('crypto');
-    const hmac = crypto.createHmac('sha256', encryptionKey);
-    hmac.update(`${connectorId}:${expiresAt}`);
-    const signature = hmac.digest('hex');
-    const state = `${connectorId}:${expiresAt}:${signature}`;
+    const stateTicket = await createAuthTicket('oauth_state', { connectorId }, 600);
 
     const scopes = connectorId === 'gmail'
       ? ['https://www.googleapis.com/auth/gmail.readonly']
@@ -215,7 +248,7 @@ router.get('/google/connect', async (req, res) => {
     const authUrlOptions = {
       access_type: 'offline',
       scope: scopes,
-      state: state
+      state: stateTicket
     };
 
     if (req.query.force === 'true') {
@@ -237,30 +270,20 @@ router.get('/google/callback', async (req, res) => {
     return res.status(400).send('<h1>400 Bad Request</h1><p>Missing auth code or state parameter.</p>');
   }
 
-  const parts = state.split(':');
-  if (parts.length !== 3) {
-    return res.status(400).send('<h1>400 Bad Request</h1><p>Malformed state parameter.</p>');
+  // Atomically validate and consume the oauth_state ticket BEFORE invoking Google
+  const stateValidation = await validateAndConsumeTicket(state, 'oauth_state');
+  if (!stateValidation.valid) {
+    return res.status(401).send(`<h1>401 Unauthorized</h1><p>${stateValidation.reason || 'Invalid or expired state ticket'}</p>`);
   }
 
-  const [connectorId, expiresAtStr, signature] = parts;
-  const expiresAt = parseInt(expiresAtStr, 10);
-
-  if (Date.now() > expiresAt) {
-    return res.status(400).send('<h1>400 Bad Request</h1><p>OAuth session has expired. Please try again.</p>');
+  const connectorId = stateValidation.metadata && (stateValidation.metadata.connectorId || stateValidation.metadata.connector);
+  if (!connectorId) {
+    return res.status(400).send('<h1>400 Bad Request</h1><p>Missing connector identifier in state metadata.</p>');
   }
 
   const encryptionKey = process.env.JARVIS_ENCRYPTION_KEY;
   if (!encryptionKey) {
     return res.status(500).send('<h1>500 Internal Server Error</h1><p>JARVIS_ENCRYPTION_KEY is missing on server.</p>');
-  }
-
-  const crypto = require('crypto');
-  const hmac = crypto.createHmac('sha256', encryptionKey);
-  hmac.update(`${connectorId}:${expiresAt}`);
-  const expectedSignature = hmac.digest('hex');
-
-  if (!safeTimingEqual(signature, expectedSignature)) {
-    return res.status(400).send('<h1>400 Bad Request</h1><p>Invalid state signature. Safety validation failed.</p>');
   }
 
   try {
@@ -445,8 +468,8 @@ router.post('/approvals/:id/approve', authenticateAdminSession, async (req, res)
     const result = await executeApprovedAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action approved and executed successfully', result });
   } catch (err) {
-    console.error('[Approve Route Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[Approve Route Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -458,8 +481,8 @@ router.post('/approvals/:id/reject', authenticateAdminSession, async (req, res) 
     await rejectApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal rejected' });
   } catch (err) {
-    console.error('[Reject Route Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[Reject Route Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -471,8 +494,8 @@ router.post('/approvals/:id/cancel', authenticateAdminSession, async (req, res) 
     await cancelApproval(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposal cancelled' });
   } catch (err) {
-    console.error('[Cancel Route Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[Cancel Route Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -484,8 +507,8 @@ router.post('/priorities/:id/propose', authenticateAdminSession, async (req, res
     const proposal = await proposeAction(id, 'admin_dashboard');
     return res.status(200).json({ success: true, message: 'Action proposed successfully', proposal });
   } catch (err) {
-    console.error('[Propose Route Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[Propose Route Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -604,8 +627,8 @@ router.get('/work-sessions', authenticateAdminSession, async (req, res) => {
     const sessions = await workSessions.listWorkSessions(limit);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -615,8 +638,8 @@ router.get('/work-sessions/latest', authenticateAdminSession, async (req, res) =
     const session = await workSessions.getActiveSession();
     return res.status(200).json(session || { message: 'No active session' });
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -627,8 +650,8 @@ router.get('/work-sessions/project/:project_slug', authenticateAdminSession, asy
     const sessions = await workSessions.getProjectSessions(slug);
     return res.status(200).json(sessions);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(500).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(500).json({ error: sanitizeError() });
   }
 });
 
@@ -639,8 +662,8 @@ router.post('/work-sessions/start', authenticateAdminSession, async (req, res) =
     const session = await workSessions.startWorkSession(project_slug, source || 'dashboard', text_content);
     return res.status(201).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(400).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(400).json({ error: sanitizeError() });
   }
 });
 
@@ -651,8 +674,8 @@ router.post('/work-sessions/update', authenticateAdminSession, async (req, res) 
     const session = await workSessions.updateWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(400).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(400).json({ error: sanitizeError() });
   }
 });
 
@@ -663,8 +686,8 @@ router.post('/work-sessions/done', authenticateAdminSession, async (req, res) =>
     const session = await workSessions.doneWorkSession(project_slug, summary, source || 'dashboard');
     return res.status(200).json(session);
   } catch (err) {
-    console.error('[WorkSessions API Error]', sanitizeError(err).message);
-    return res.status(400).json({ error: sanitizeError(err).message });
+    console.error('[WorkSessions API Error]', sanitizeError());
+    return res.status(400).json({ error: sanitizeError() });
   }
 });
 
@@ -674,8 +697,8 @@ router.post('/handoff/ingest', authenticateAdminSession, async (req, res) => {
     const session = await workSessions.ingestHandoffFile();
     return res.status(200).json({ success: true, message: 'Handoff file ingested successfully', session });
   } catch (err) {
-    console.error('[Handoff Ingest API Error]', sanitizeError(err).message);
-    return res.status(400).json({ error: sanitizeError(err).message });
+    console.error('[Handoff Ingest API Error]', sanitizeError());
+    return res.status(400).json({ error: sanitizeError() });
   }
 });
 

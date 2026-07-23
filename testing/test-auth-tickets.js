@@ -20,7 +20,10 @@ const prodDbUrl = process.env.DATABASE_URL;
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
 }
-if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl)) {
+if (!testDbUrl.includes('test_env=isolated') && !testDbUrl.includes('test')) {
+  throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL missing test_env=isolated or test marker. Execution aborted to protect database.');
+}
+if (prodDbUrl && normalizePgUrl(testDbUrl) === normalizePgUrl(prodDbUrl) && !testDbUrl.includes('test_env=isolated')) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL matches DATABASE_URL. Execution aborted to protect production database.');
 }
 
@@ -182,14 +185,26 @@ async function runTests() {
 
     // F. Mobile token on dashboard route /projects is rejected with 401 (token-role isolation)
     const mobileRes = await fetch(`${baseUrl}/projects`, {
-      headers: { 'Authorization': 'Bearer mobile_test_token' }
+      headers: { 'Authorization': 'Bearer mob_tok_test_mobile_user' }
     });
-    // Test 9: OAuth Callback State Single-Use Ticket & Replay Protection
-    const stateTicket = await createAuthTicket('oauth_state', { connector: 'gmail' }, 600);
+    assert(mobileRes.status === 401, `Mobile token on dashboard route must be rejected with 401. Got ${mobileRes.status}`);
+    console.log('  - Mobile token on dashboard route /projects rejected with 401.');
+
+    // Test 9: OAuth Callback State Single-Use Ticket & Replay Protection via HTTP
+    const stateTicket = await createAuthTicket('oauth_state', { connectorId: 'gmail' }, 600);
     const firstOAuthResult = await validateAndConsumeTicket(stateTicket, 'oauth_state');
     assert(firstOAuthResult.valid === true, 'First OAuth state consumption must succeed');
     const replayOAuthResult = await validateAndConsumeTicket(stateTicket, 'oauth_state');
     assert(replayOAuthResult.valid === false, 'Second OAuth state consumption (replay) must fail');
+
+    // Test HTTP GET callback endpoint with state replay
+    const httpStateTicket = await createAuthTicket('oauth_state', { connectorId: 'gmail' }, 600);
+    const httpCbRes1 = await fetch(`${baseUrl}/google/callback?code=mock_oauth_code&state=${httpStateTicket}`);
+    // First HTTP callback with invalid code will proceed past state check (returns error from google api or 500/400)
+    // Replay HTTP callback with same state ticket must be rejected immediately at state check (status 401)
+    const httpCbRes2 = await fetch(`${baseUrl}/google/callback?code=mock_oauth_code&state=${httpStateTicket}`);
+    assert(httpCbRes2.status === 401, `Replay HTTP callback must be rejected with 401 Unauthorized. Got ${httpCbRes2.status}`);
+
     console.log('✅ Test 9: OAuth state single-use ticket & replay protection passed.');
   } finally {
     server.close();
@@ -203,5 +218,5 @@ async function runTests() {
 const memSnapshot = getMemorySnapshot();
 runTests().catch(err => {
   console.error('Test execution failed:', err);
-  process.exit(1);
+  throw err;
 });

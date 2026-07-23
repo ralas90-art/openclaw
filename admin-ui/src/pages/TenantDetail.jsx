@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { apiFetch } from '../api/client';
 
 export default function TenantDetail() {
   const { tenantId } = useParams();
@@ -10,9 +11,7 @@ export default function TenantDetail() {
   useEffect(() => {
     const fetchTenant = async () => {
       try {
-        const res = await fetch(`/api/admin/tenants/${tenantId}`, {
-          headers: { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') }
-        });
+        const res = await apiFetch(`/api/admin/tenants/${tenantId}`);
         if (res.ok) {
           setData(await res.json());
         }
@@ -28,12 +27,8 @@ export default function TenantDetail() {
   const handleTestSync = async () => {
     setSyncing(true);
     try {
-      const res = await fetch(`/api/admin/tenants/${tenantId}/test-sync`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
-          'Content-Type': 'application/json'
-        }
+      const res = await apiFetch(`/api/admin/tenants/${tenantId}/test-sync`, {
+        method: 'POST'
       });
       const result = await res.json();
       alert(`Sync result: ${JSON.stringify(result.preflight)}`);

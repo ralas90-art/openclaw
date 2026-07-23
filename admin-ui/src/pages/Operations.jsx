@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api/client';
 
 export default function Operations() {
   const [failed, setFailed] = useState([]);
@@ -9,10 +10,9 @@ export default function Operations() {
 
   const fetchData = async () => {
     try {
-      const headers = { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') };
       const [fRes, dRes] = await Promise.all([
-        fetch('/api/admin/operations/failed-syncs', { headers }),
-        fetch('/api/admin/operations/deadletters', { headers })
+        apiFetch('/api/admin/operations/failed-syncs'),
+        apiFetch('/api/admin/operations/deadletters')
       ]);
       if (fRes.ok) setFailed(await fRes.json());
       if (dRes.ok) setDeadLetters(await dRes.json());
@@ -30,12 +30,8 @@ export default function Operations() {
   const handleReplay = async () => {
     if (!replayEventId) return;
     try {
-      const res = await fetch('/api/admin/replay', {
+      const res = await apiFetch('/api/admin/replay', {
         method: 'POST',
-        headers: { 
-          'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || ''),
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ event_id: replayEventId, reason: replayReason, confirm: true })
       });
       const result = await res.json();

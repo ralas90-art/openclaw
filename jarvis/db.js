@@ -7,8 +7,28 @@ const { Pool } = require('pg');
 
 let pool = null;
 
+function getDbIdentity(connectionString) {
+  if (!connectionString || typeof connectionString !== 'string') return '';
+  try {
+    const parsed = new URL(connectionString);
+    return `${parsed.host}${parsed.pathname}`.toLowerCase();
+  } catch (err) {
+    return connectionString.toLowerCase();
+  }
+}
+
 function getPool() {
-  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  let dbUrl = process.env.DATABASE_URL;
+  
+  // In production, NEVER use TEST_DATABASE_URL
+  if (process.env.NODE_ENV !== 'production' && process.env.TEST_DATABASE_URL) {
+    const testUrl = process.env.TEST_DATABASE_URL.trim();
+    if (!testUrl.includes('test_env=isolated') && !testUrl.includes('test')) {
+      throw new Error('[JarvisDB] Safety Guard: TEST_DATABASE_URL missing dedicated test-database marker (test_env=isolated or test in DB name).');
+    }
+    dbUrl = testUrl;
+  }
+
   if (!pool && dbUrl) {
     const isLocalhost = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
     pool = new Pool({

@@ -383,11 +383,14 @@ async function dispatchCommand(text, message) {
     }
 
     if (nlResult.type === 'reply') {
-      const isOk = !nlResult.text.includes('🤔 No entendí') && !nlResult.text.includes('⚠️ *Acción Bloqueada*') && !nlResult.text.includes('⚠️ *Protected Action*');
+      const isOk = !nlResult.text.includes('🤔 No entendí') && !nlResult.text.includes('⚠️ *Acción Bloqueada*') && !nlResult.text.includes('⚠️ *Protected Action*') && !nlResult.text.includes('Which project should I save this under?');
       if (isOk && pendingLogId) {
-        await markNaturalLanguageLogExecuted(pendingLogId).catch(err =>
-          console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
-        );
+        try {
+          await markNaturalLanguageLogExecuted(pendingLogId);
+        } catch (auditErr) {
+          console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
+          return { ok: false, text: '❌ Audit log persistence failure. Action execution blocked.', logId: pendingLogId };
+        }
       }
       return { ok: isOk, text: nlResult.text, logId: pendingLogId };
     }
@@ -405,9 +408,12 @@ async function dispatchCommand(text, message) {
     const ok = !isUnknown && !isDenied;
 
     if (ok && pendingLogId) {
-      await markNaturalLanguageLogExecuted(pendingLogId).catch(err =>
-        console.error('[Telegram Handlers] Failed to mark log executed:', err.message)
-      );
+      try {
+        await markNaturalLanguageLogExecuted(pendingLogId);
+      } catch (auditErr) {
+        console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
+        return { ok: false, text: '❌ Audit log persistence failure. Action execution blocked.', logId: pendingLogId };
+      }
     }
 
     return { ok, text: output || 'Unknown command', logId: pendingLogId };

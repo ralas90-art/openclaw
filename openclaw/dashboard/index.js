@@ -123,6 +123,18 @@ function actionsEnabledMiddleware(req, res, next) {
   next();
 }
 
+function parseCookies(cookieHeader) {
+  const list = {};
+  if (!cookieHeader || typeof cookieHeader !== 'string') return list;
+  cookieHeader.split(';').forEach(cookie => {
+    const parts = cookie.split('=');
+    if (parts.length >= 2) {
+      list[parts.shift().trim()] = decodeURIComponent(parts.join('=').trim());
+    }
+  });
+  return list;
+}
+
 const { validateSessionToken } = require('../../jarvis/auth-tickets');
 
 // Authentication Middleware
@@ -133,6 +145,9 @@ async function protectDashboard(req, res, next) {
     token = authHeader.substring(7).trim();
   } else if (typeof authHeader === 'string') {
     token = authHeader.trim();
+  } else if (req.headers.cookie) {
+    const cookies = parseCookies(req.headers.cookie);
+    token = cookies.jarvis_session_token;
   } else if (req.body && typeof req.body.token === 'string') {
     token = req.body.token.trim();
   }
@@ -1488,7 +1503,7 @@ router.post('/action/dispatch', verifyPostAction, rateLimitMiddleware, async (re
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Dispatch failed: ${sanitizeError(err).message}`);
+    res.status(500).send(`Dispatch failed: ${sanitizeError()}`);
   }
 });
 
@@ -1532,7 +1547,7 @@ router.post('/action/cancel', verifyPostAction, rateLimitMiddleware, (req, res) 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Cancellation failed: ${sanitizeError(err).message}`);
+    res.status(500).send(`Cancellation failed: ${sanitizeError()}`);
   }
 });
 
@@ -1581,7 +1596,7 @@ router.post('/action/retry', verifyPostAction, rateLimitMiddleware, async (req, 
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Retry failed: ${sanitizeError(err).message}`);
+    res.status(500).send(`Retry failed: ${sanitizeError()}`);
   }
 });
 
@@ -1650,7 +1665,7 @@ router.post('/action/approve', verifyPostAction, rateLimitMiddleware, async (req
       resultStatus: 'failure',
       safeMessage: err.message
     });
-    res.status(500).send(`Approval failed: ${sanitizeError(err).message}`);
+    res.status(500).send(`Approval failed: ${sanitizeError()}`);
   }
 });
 

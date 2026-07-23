@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { apiFetch } from '../api/client';
 
 export default function TenantList() {
   const [tenants, setTenants] = useState([]);
@@ -8,9 +9,7 @@ export default function TenantList() {
   useEffect(() => {
     const fetchTenants = async () => {
       try {
-        const res = await fetch('/api/admin/tenants', {
-          headers: { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') }
-        });
+        const res = await apiFetch('/api/admin/tenants');
         if (res.ok) {
           setTenants(await res.json());
         }

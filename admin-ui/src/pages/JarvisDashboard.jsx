@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Mail, Database, CheckCircle2, XCircle, Ban, History, ShieldAlert, ArrowRight, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
+import { apiFetch, getSessionToken, setSessionToken, clearSessionToken } from '../api/client';
 
 export default function JarvisDashboard() {
-  const [token, setToken] = useState(() => {
-    const saved = sessionStorage.getItem('admin_token') || '';
-    return saved.startsWith('srv_sess_') ? saved : '';
-  });
+  const [token, setToken] = useState(() => getSessionToken() || '');
   const [tokenInput, setTokenInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,12 +34,15 @@ export default function JarvisDashboard() {
       setError('Access Denied: Only valid server session tokens (srv_sess_...) are permitted.');
       return;
     }
-    sessionStorage.setItem('admin_token', cleanToken);
-    setToken(cleanToken);
+    if (setSessionToken(cleanToken)) {
+      setToken(cleanToken);
+    } else {
+      setError('Failed to store session token.');
+    }
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('admin_token');
+    clearSessionToken();
     setToken('');
     setTokenInput('');
   };

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api/client';
 
 export default function Dashboard() {
   const [status, setStatus] = useState(null);
@@ -6,13 +7,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, use an Axios instance with the interceptor setting INTERNAL_ADMIN_TOKEN
     const fetchDashboard = async () => {
       try {
-        const headers = { 'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || '') };
         const [statusRes, incidentsRes] = await Promise.all([
-          fetch('/api/admin/runtime/status', { headers }),
-          fetch('/api/admin/incidents', { headers })
+          apiFetch('/api/admin/runtime/status'),
+          apiFetch('/api/admin/incidents')
         ]);
         
         if (statusRes.ok) setStatus(await statusRes.json());

@@ -83,8 +83,8 @@ async function runTests() {
     { pattern: /href=["'].*token=\$\{.*INTERNAL_ADMIN_TOKEN/i, name: 'Raw master token HTML href link' },
     { pattern: /VITE_INTERNAL_ADMIN_TOKEN/i, name: 'VITE_INTERNAL_ADMIN_TOKEN reference' },
     { pattern: /admin-test-token-123/i, name: 'Legacy admin token fallback string admin-test-token-123' },
-    { pattern: /res\.status\(\d+\)\.json\(\{\s*error:\s*err\.message\s*\}\)/i, name: 'Unsanitized raw err.message in HTTP json error response' },
-    { pattern: /res\.status\(\d+\)\.send\(.*err\.message.*\)/i, name: 'Unsanitized raw err.message in HTTP send error response' }
+    { pattern: /sanitizeError\(.*\)\.message/i, name: 'Invalid .message call on sanitizeError string return value' },
+    { pattern: /res\.status\(\d+\)\.(json|send)\(.*\b(err|error)\.message\b/i, name: 'Unsanitized raw err.message in HTTP response' }
   ];
 
   // 2. Legacy Auth Store Symbols

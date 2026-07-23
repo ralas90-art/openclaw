@@ -12,6 +12,11 @@ const memoryTicketStore = new Map();
 const memorySessionStore = new Map();
 const rateLimitMap = new Map();
 
+function hashToken(token) {
+  if (!token || typeof token !== 'string') return '';
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 /**
  * Buffer-length guarded timing-safe string comparison.
  */
@@ -42,20 +47,21 @@ function checkTicketRateLimit(identifier, maxRequests = 20, windowMs = 60000) {
 
 /**
  * Issue a short-lived single-use authorization ticket.
- * @param {string} purpose ('dashboard_access', 'google_oauth_connect')
+ * @param {string} purpose ('dashboard_access', 'google_oauth_connect', 'oauth_state')
  * @param {Object} metadata
  * @param {number} ttlSeconds Default: 300 (5 minutes)
  */
 async function createAuthTicket(purpose, metadata = {}, ttlSeconds = 300) {
   const ticketId = crypto.randomBytes(32).toString('hex');
+  const ticketHash = hashToken(ticketId);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
   if (process.env.DATABASE_URL) {
     try {
       await queryDb(
-        `INSERT INTO jarvis_auth_tickets (ticket_id, purpose, metadata, expires_at, used)
-         VALUES ($1, $2, $3, $4, FALSE);`,
-        [ticketId, purpose, JSON.stringify(metadata), expiresAt.toISOString()]
+        `INSERT INTO jarvis_auth_tickets (ticket_id, ticket_hash, purpose, metadata, expires_at, used)
+         VALUES ($1, $2, $3, $4, $5, FALSE);`,
+        [ticketHash, ticketHash, purpose, JSON.stringify(metadata), expiresAt.toISOString()]
       );
       return ticketId;
     } catch (err) {
@@ -71,7 +77,7 @@ async function createAuthTicket(purpose, metadata = {}, ttlSeconds = 300) {
   }
 
   // Memory fallback for non-prod local testing
-  memoryTicketStore.set(ticketId, {
+  memoryTicketStore.set(ticketHash, {
     purpose,
     metadata,
     expiresAt,
@@ -88,6 +94,7 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
     return { valid: false, reason: 'Invalid ticket format' };
   }
 
+  const ticketHash = hashToken(ticketId);
   const now = new Date();
 
   // 1. Try DB validation & atomic update
@@ -96,8 +103,8 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
       const rows = await queryDb(
         `SELECT ticket_id, purpose, metadata, expires_at, used
          FROM jarvis_auth_tickets
-         WHERE ticket_id = $1;`,
-        [ticketId]
+         WHERE ticket_hash = $1 OR ticket_id = $1;`,
+        [ticketHash]
       );
 
       if (rows && rows.length > 0) {
@@ -118,9 +125,9 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
         const updateRows = await queryDb(
           `UPDATE jarvis_auth_tickets
            SET used = TRUE
-           WHERE ticket_id = $1 AND used = FALSE
+           WHERE (ticket_hash = $1 OR ticket_id = $1) AND used = FALSE
            RETURNING ticket_id;`,
-          [ticketId]
+          [ticketHash]
         );
 
         if (!updateRows || updateRows.length === 0) {
@@ -143,7 +150,7 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
   }
 
   // Memory fallback for non-prod local testing
-  const memTicket = memoryTicketStore.get(ticketId);
+  const memTicket = memoryTicketStore.get(ticketHash) || memoryTicketStore.get(ticketId);
   if (!memTicket) {
     return { valid: false, reason: 'Ticket not found' };
   }
@@ -151,6 +158,7 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
     return { valid: false, reason: 'Ticket has already been used (replay rejected)' };
   }
   if (memTicket.expiresAt < now) {
+    memoryTicketStore.delete(ticketHash);
     memoryTicketStore.delete(ticketId);
     return { valid: false, reason: 'Ticket has expired' };
   }
@@ -159,7 +167,7 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
   }
 
   memTicket.used = true;
-  memoryTicketStore.set(ticketId, memTicket);
+  memoryTicketStore.set(ticketHash, memTicket);
   return { valid: true, metadata: memTicket.metadata };
 }
 
@@ -168,14 +176,15 @@ async function validateAndConsumeTicket(ticketId, expectedPurpose) {
  */
 async function createSessionToken(metadata = {}, ttlSeconds = 3600) {
   const sessionToken = 'srv_sess_' + crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(sessionToken);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
   if (process.env.DATABASE_URL) {
     try {
       await queryDb(
-        `INSERT INTO jarvis_sessions (session_token, metadata, expires_at)
-         VALUES ($1, $2, $3);`,
-        [sessionToken, JSON.stringify(metadata), expiresAt.toISOString()]
+        `INSERT INTO jarvis_sessions (session_token, token_hash, metadata, expires_at)
+         VALUES ($1, $2, $3, $4);`,
+        [tokenHash, tokenHash, JSON.stringify(metadata), expiresAt.toISOString()]
       );
       return sessionToken;
     } catch (err) {
@@ -190,7 +199,7 @@ async function createSessionToken(metadata = {}, ttlSeconds = 3600) {
     throw new Error('DATABASE_URL required for session creation in production.');
   }
 
-  memorySessionStore.set(sessionToken, { metadata, expiresAt });
+  memorySessionStore.set(tokenHash, { metadata, expiresAt });
   return sessionToken;
 }
 
@@ -202,6 +211,7 @@ async function validateSessionToken(token) {
     return { valid: false, reason: 'Invalid token format' };
   }
 
+  const tokenHash = hashToken(token);
   const now = new Date();
 
   if (process.env.DATABASE_URL) {
@@ -209,8 +219,8 @@ async function validateSessionToken(token) {
       const rows = await queryDb(
         `SELECT session_token, metadata, expires_at
          FROM jarvis_sessions
-         WHERE session_token = $1;`,
-        [token]
+         WHERE token_hash = $1 OR session_token = $1;`,
+        [tokenHash]
       );
       if (rows && rows.length > 0) {
         const session = rows[0];
@@ -226,9 +236,10 @@ async function validateSessionToken(token) {
     }
   }
 
-  const memSession = memorySessionStore.get(token);
+  const memSession = memorySessionStore.get(tokenHash) || memorySessionStore.get(token);
   if (memSession) {
     if (memSession.expiresAt < now) {
+      memorySessionStore.delete(tokenHash);
       memorySessionStore.delete(token);
       return { valid: false, reason: 'Session expired' };
     }
