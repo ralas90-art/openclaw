@@ -3341,7 +3341,6 @@ router.get('/playbook', protectDashboard, (req, res) => {
 module.exports = {
   dashboardRouter: router,
   protectDashboard,
-  getAdminToken,
   _ipRequestHistory: ipRequestHistory
 };
 
