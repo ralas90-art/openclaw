@@ -53,7 +53,7 @@ function getPool() {
 /**
  * Shared queryDb interface used by all Jarvis modules.
  */
-async function queryDb(sqlText, params = []) {
+async function queryDb(sqlText, params = [], retries = 2) {
   if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('[JarvisDB] DATABASE_URL missing in production environment.');
@@ -72,6 +72,13 @@ async function queryDb(sqlText, params = []) {
     const res = await p.query(sqlText, params);
     return res.rows;
   } catch (err) {
+    if (retries > 0 && err.message && (err.message.includes('timeout') || err.message.includes('closed') || err.message.includes('connection'))) {
+      if (pool && (pool.ended || pool.ending)) {
+        pool = null;
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return queryDb(sqlText, params, retries - 1);
+    }
     console.error('[JarvisDB] Query error:', err.message);
     throw err;
   }
