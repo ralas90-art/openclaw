@@ -45,7 +45,7 @@ async function runProductionVerification() {
       process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'admin_chat_prod';
 
       ticketLink = await handleCommand('/jarvis_dashboard', mockMessage);
-      outputLogStream.push(ticketLink || '');
+      outputLogStream.push(sanitizeSecrets(ticketLink || ''));
       const match = ticketLink && ticketLink.match(/ticket=([a-f0-9]{64})/);
       if (match) {
         ticketToken = match[1];
@@ -66,7 +66,7 @@ async function runProductionVerification() {
       });
 
       const exchData = await exchRes.json();
-      outputLogStream.push(JSON.stringify(exchData));
+      outputLogStream.push(sanitizeSecrets(JSON.stringify(exchData)));
       if (exchRes.ok && exchData.session_token && exchData.session_token.startsWith('srv_sess_')) {
         derivedSessionToken = exchData.session_token;
         logCheck('Check 2 — Ticket Exchange Endpoint', true, 'Exchanged single-use ticket for derived srv_sess_... session token.');

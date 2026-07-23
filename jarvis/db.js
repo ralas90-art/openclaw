@@ -29,6 +29,10 @@ function getPool() {
     dbUrl = testUrl;
   }
 
+  if (pool && (pool.ended || pool.ending)) {
+    pool = null;
+  }
+
   if (!pool && dbUrl) {
     const isLocalhost = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
     pool = new Pool({
