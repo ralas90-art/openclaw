@@ -37,6 +37,7 @@ if (process.env.DATABASE_URL) {
 
 const {
   routeNaturalLanguageCommand,
+  transitionNaturalLanguageLog,
   detectLanguage
 } = require('../jarvis/natural-language-router');
 const { dispatchCommand, handleCommand } = require('../interfaces/telegram/handlers');
@@ -141,13 +142,66 @@ async function runTests() {
     assert(resA.logId && resB.logId && resA.logId !== resB.logId, 'Concurrent dispatches must generate unique logIds');
 
     const [logA, logB] = await Promise.all([
-      queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resA.logId]),
-      queryDb('SELECT executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resB.logId])
+      queryDb('SELECT status, executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resA.logId]),
+      queryDb('SELECT status, executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [resB.logId])
     ]);
 
-    assert(logA[0].executed_boolean === true, 'Successful concurrent command must have executed_boolean = true');
-    assert(logB[0].executed_boolean === false, 'Failed concurrent command must have executed_boolean = false');
+    assert(logA[0].status === 'executed' && logA[0].executed_boolean === true, 'Successful concurrent command must have status = executed and executed_boolean = true');
+    assert(logB[0].status === 'failed' && logB[0].executed_boolean === false, 'Failed concurrent command must have status = failed and executed_boolean = false');
     console.log('✅ Test 6: Concurrent NL dispatch exact-row isolation passed.');
+
+    // Test 7: Action May Have Executed & Operator Alert Generation
+    console.log('- Testing finalization error handling (action_may_have_executed)...');
+    const testLogRows = await queryDb(
+      `INSERT INTO jarvis_natural_language_logs (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, status, executed_boolean, source_chat_id)
+       VALUES ('test action_may_have_executed', 'hash_test_may_exec', 'en', 'priorities', '/jarvis_priorities', 1.0, 'read_only', 'executing', false, 'chat_may_exec')
+       RETURNING id`
+    );
+    const mayExecLogId = testLogRows[0].id;
+    await transitionNaturalLanguageLog(mayExecLogId, 'action_may_have_executed', ['executing']);
+    const mayExecCheck = await queryDb('SELECT status, executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [mayExecLogId]);
+    assert(mayExecCheck[0].status === 'action_may_have_executed' && mayExecCheck[0].executed_boolean === false, 'action_may_have_executed status must have executed_boolean = false');
+    console.log('✅ Test 7: action_may_have_executed lifecycle status verified.');
+
+    // Test 8: Same-record Replay Prevention (Handler executed 0 times on replay)
+    console.log('- Testing same-record replay rejection...');
+    let replayError = false;
+    try {
+      await transitionNaturalLanguageLog(resA.logId, 'executing', ['pending']);
+    } catch (e) {
+      replayError = true;
+    }
+    assert(replayError, 'Replaying an already executed logId must fail atomic state transition');
+    console.log('✅ Test 8: Same-record replay prevented successfully (0 extra handler executions).');
+
+    // Test 9: Concurrent Dispatches Against Same Audit Record
+    console.log('- Testing 2 concurrent dispatches against the exact same audit record...');
+    const dupTestRows = await queryDb(
+      `INSERT INTO jarvis_natural_language_logs (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, status, executed_boolean, source_chat_id)
+       VALUES ('concurrent same record test', 'hash_same_record', 'en', 'priorities', '/jarvis_priorities', 1.0, 'read_only', 'pending', false, 'chat_same_rec')
+       RETURNING id`
+    );
+    const sameRecordLogId = dupTestRows[0].id;
+
+    let winCount = 0;
+    let loseCount = 0;
+    const transResults = await Promise.allSettled([
+      transitionNaturalLanguageLog(sameRecordLogId, 'executing', ['pending']),
+      transitionNaturalLanguageLog(sameRecordLogId, 'executing', ['pending'])
+    ]);
+
+    for (const r of transResults) {
+      if (r.status === 'fulfilled') winCount++;
+      else loseCount++;
+    }
+    assert(winCount === 1 && loseCount === 1, 'Exactly one concurrent attempt must win the pending -> executing transition');
+    console.log('✅ Test 9: Concurrent attempts against same audit record resulted in exactly 1 winning transition.');
+
+    // Cleanup extra test log IDs
+    try {
+      await queryDb('DELETE FROM jarvis_natural_language_logs WHERE id IN ($1, $2)', [mayExecLogId, sameRecordLogId]);
+    } catch (_) {}
+
   } finally {
     // Clean up test audit logs
     const idsToClean = [successRes?.logId, deniedRes?.logId, resA?.logId, resB?.logId].filter(Boolean);
@@ -156,7 +210,7 @@ async function runTests() {
         await queryDb(`DELETE FROM jarvis_natural_language_logs WHERE id IN (${idsToClean.map((_, i) => `$${i + 1}`).join(',')})`, idsToClean);
       } catch (_) {}
     }
-    console.log('✅ Test 7: Test audit logs cleaned up cleanly in finally block.');
+    console.log('✅ Test 10: Test audit logs cleaned up cleanly in finally block.');
   }
 
   assertMemoryUnchanged(memSnapshot);

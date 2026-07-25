@@ -1,4 +1,5 @@
-const { routeNaturalLanguageCommand, markNaturalLanguageLogExecuted } = require('../../jarvis/natural-language-router');
+const { routeNaturalLanguageCommand, markNaturalLanguageLogExecuted, transitionNaturalLanguageLog } = require('../../jarvis/natural-language-router');
+const { sanitizeSecrets, sanitizeError } = require('../../sanitizer');
 const { supabase } = require('../../lib/supabase');
 const runtimeGovernor = require('../../core/coordination/runtimeGovernor');
 const circuitBreakerRegistry = require('../../core/failover/circuitBreakerRegistry');
@@ -388,11 +389,23 @@ async function dispatchCommand(text, message) {
 
     if (nlResult.type === 'reply') {
       const isOk = !nlResult.text.includes('🤔 No entendí') && !nlResult.text.includes('⚠️ *Acción Bloqueada*') && !nlResult.text.includes('⚠️ *Protected Action*') && !nlResult.text.includes('Which project should I save this under?');
-      if (isOk && pendingLogId) {
-        try {
-          await markNaturalLanguageLogExecuted(pendingLogId);
-        } catch (auditErr) {
-          console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
+      if (pendingLogId) {
+        if (isOk) {
+          try {
+            await markNaturalLanguageLogExecuted(pendingLogId);
+          } catch (auditErr) {
+            console.error('[Telegram Handlers] Audit log execution marking failed:', sanitizeError(auditErr));
+            try {
+              await transitionNaturalLanguageLog(pendingLogId, 'action_may_have_executed', ['pending', 'executing']);
+            } catch (_) {}
+            const operatorAlert = { alert: 'AUDIT_FINALIZATION_FAILURE', logId: pendingLogId, safeMessage: 'Action may have executed, but audit finalization failed.' };
+            console.warn('[OPERATOR_ALERT]', JSON.stringify(operatorAlert));
+            return { ok: false, status: 'action_may_have_executed', text: '⚠️ Action may have executed, but audit finalization failed.', logId: pendingLogId, operatorAlert };
+          }
+        } else {
+          try {
+            await transitionNaturalLanguageLog(pendingLogId, 'failed', ['pending', 'executing']);
+          } catch (_) {}
         }
       }
       return { ok: isOk, text: nlResult.text, logId: pendingLogId };
@@ -404,24 +417,50 @@ async function dispatchCommand(text, message) {
   }
 
   try {
+    if (pendingLogId) {
+      try {
+        await transitionNaturalLanguageLog(pendingLogId, 'executing', ['pending']);
+      } catch (transErr) {
+        console.error('[Telegram Handlers] Atomic execution transition failed:', sanitizeError(transErr));
+        return { ok: false, text: '❌ Duplicate or concurrent command dispatch rejected.', logId: pendingLogId };
+      }
+    }
+
     const output = await handleCommand(textToExecute, message);
     const isUnknown = !output || typeof output !== 'string' || output.includes('Unknown command') || output.includes('🤔 No entendí');
     const isDenied = output && (output.includes('🚫 Permission Denied') || output.includes('Acción Bloqueada') || output.includes('Protected Action') || output.startsWith('❌'));
     
     const ok = !isUnknown && !isDenied;
 
-    if (ok && pendingLogId) {
-      try {
-        await markNaturalLanguageLogExecuted(pendingLogId);
-      } catch (auditErr) {
-        console.error('[Telegram Handlers] Audit log execution marking failed:', auditErr.message);
+    if (pendingLogId) {
+      if (ok) {
+        try {
+          await markNaturalLanguageLogExecuted(pendingLogId);
+        } catch (auditErr) {
+          console.error('[Telegram Handlers] Audit log execution marking failed:', sanitizeError(auditErr));
+          try {
+            await transitionNaturalLanguageLog(pendingLogId, 'action_may_have_executed', ['pending', 'executing']);
+          } catch (_) {}
+          const operatorAlert = { alert: 'AUDIT_FINALIZATION_FAILURE', logId: pendingLogId, safeMessage: 'Action may have executed, but audit finalization failed.' };
+          console.warn('[OPERATOR_ALERT]', JSON.stringify(operatorAlert));
+          return { ok: false, status: 'action_may_have_executed', text: '⚠️ Action may have executed, but audit finalization failed.', logId: pendingLogId, operatorAlert };
+        }
+      } else {
+        try {
+          await transitionNaturalLanguageLog(pendingLogId, 'failed', ['pending', 'executing']);
+        } catch (_) {}
       }
     }
 
     return { ok, text: output || 'Unknown command', logId: pendingLogId };
   } catch (err) {
-    console.error('[Dispatch Error]', err.message);
-    return { ok: false, text: `❌ Execution error: ${err.message}`, logId: pendingLogId };
+    console.error('[Dispatch Error]', sanitizeError(err));
+    if (pendingLogId) {
+      try {
+        await transitionNaturalLanguageLog(pendingLogId, 'failed', ['pending', 'executing']);
+      } catch (_) {}
+    }
+    return { ok: false, text: `❌ Execution error: ${sanitizeError(err)}`, logId: pendingLogId };
   }
 }
 
