@@ -9,13 +9,17 @@ process.env.SKIP_MEMORY_EXPORT = 'true';
 const fs = require('fs');
 const path = require('path');
 
-function normalizePgUrl(urlStr) {
-  if (!urlStr) return '';
+function getDbIdentity(urlStr) {
+  if (!urlStr) return null;
   try {
     const u = new URL(urlStr);
-    return `${u.protocol}//${u.username}:${u.password}@${u.hostname}:${u.port || 5432}${u.pathname}`;
+    return {
+      host: (u.hostname || '').toLowerCase(),
+      port: u.port || '5432',
+      dbname: decodeURIComponent((u.pathname || '').replace(/^\//, '')).toLowerCase()
+    };
   } catch (e) {
-    return urlStr.trim();
+    return null;
   }
 }
 
@@ -23,6 +27,14 @@ const testDbUrl = process.env.TEST_DATABASE_URL;
 
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
+}
+
+if (process.env.DATABASE_URL) {
+  const prodId = getDbIdentity(process.env.DATABASE_URL);
+  const testId = getDbIdentity(testDbUrl);
+  if (prodId && testId && prodId.host === testId.host && prodId.port === testId.port && prodId.dbname === testId.dbname) {
+    throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL targets the same database as DATABASE_URL. Test execution aborted.');
+  }
 }
 
 const assert = require('assert');

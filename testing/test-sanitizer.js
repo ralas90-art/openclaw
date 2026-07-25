@@ -67,7 +67,7 @@ const sanitizedErrMsg = sanitizeError(err);
 assert(!sanitizedErrMsg.includes('pass123'), 'Error message must not expose password');
 console.log('✅ Test 7: Error sanitization passed.');
 
-// Test 8: Sentinel Runtime Test for HTTP Responses, Telegram Replies, Redirects, and Log Outputs
+// Test 8: Sentinel Runtime Test for HTTP Responses, Telegram Replies, Redirects, Paths, and Log Outputs
 const mockErr = new Error('Failed connecting to postgresql://postgres:mysecretpassword@localhost:5432/db with token mob_tok_123456');
 const httpResponseErr = sanitizeError(mockErr);
 assert(!httpResponseErr.includes('mysecretpassword'), 'HTTP response must redact db credentials');
@@ -78,10 +78,15 @@ assert(!tgReply.includes('secret_admin_token_99'), 'Telegram reply must redact I
 
 const redirectUrl = sanitizeText('/google/connect?ticket=secret_ticket_val_123&code=oauth_code_456');
 assert(!redirectUrl.includes('secret_ticket_val_123'), 'Redirect URL must redact ticket secret');
+assert(!redirectUrl.includes('oauth_code_456'), 'Redirect URL must redact OAuth code');
 
-const logOutput = sanitizeLogText('Log entry: Bearer srv_sess_abcdef1234567890 failed');
+const logOutput = sanitizeLogText('Log entry: Bearer srv_sess_abcdef1234567890 failed at C:\\Users\\testadmin\\secrets\\credentials.json');
 assert(!logOutput.includes('srv_sess_abcdef1234567890'), 'Log output must redact Bearer token payload');
 
-console.log('✅ Test 8: Sentinel HTTP response, Telegram reply, redirect, and log sanitization passed.');
+const sqlErr = new Error('error: relation "users" does not exist at Client._processErrorMessage');
+const sanitizedSqlErr = sanitizeError(sqlErr);
+assert(sanitizedSqlErr === 'Internal server error processing request.', 'SQL error details must be replaced with generic response');
+
+console.log('✅ Test 8: Sentinel HTTP response, Telegram reply, redirect, SQL error, and log sanitization passed.');
 
 console.log('\n🎉 ALL Sanitizer Tests Passed Successfully!');

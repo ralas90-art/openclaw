@@ -16,6 +16,7 @@ const SECRET_PATTERNS = [
   /refresh_token=[^\s&"'`]+/gi,
   /auth_token=[^\s&"'`]+/gi,
   /ticket=[^\s&"'`]+/gi,
+  /code=[^\s&"'`]+/gi,
   /mob_tok_[^\s&"'`]+/gi,
   /Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*/gi,
   /authTag=[^\s&"'`]+/gi,
