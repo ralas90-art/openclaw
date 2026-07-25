@@ -12,12 +12,32 @@ function normalizePgUrl(urlStr) {
   } catch (e) {
     return urlStr.trim();
   }
+function getDbIdentity(urlStr) {
+  if (!urlStr) return null;
+  try {
+    const u = new URL(urlStr);
+    return {
+      host: (u.hostname || '').toLowerCase(),
+      port: u.port || '5432',
+      dbname: decodeURIComponent((u.pathname || '').replace(/^\//, '')).toLowerCase()
+    };
+  } catch (e) {
+    return null;
+  }
 }
 
 const testDbUrl = process.env.TEST_DATABASE_URL;
 
 if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
+}
+
+if (process.env.DATABASE_URL) {
+  const prodId = getDbIdentity(process.env.DATABASE_URL);
+  const testId = getDbIdentity(testDbUrl);
+  if (prodId && testId && prodId.host === testId.host && prodId.port === testId.port && prodId.dbname === testId.dbname) {
+    throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL targets the same database as DATABASE_URL. Test execution aborted.');
+  }
 }
 
 const express = require('express');

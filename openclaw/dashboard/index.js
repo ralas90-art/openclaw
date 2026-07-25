@@ -139,13 +139,8 @@ const { validateSessionToken } = require('../../jarvis/auth-tickets');
 
 // Authentication Middleware
 async function protectDashboard(req, res, next) {
-  const authHeader = req.headers.authorization || req.headers['x-admin-token'];
   let token = null;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7).trim();
-  } else if (typeof authHeader === 'string') {
-    token = authHeader.trim();
-  } else {
+  if (req.headers.cookie) {
     const cookies = parseCookies(req.headers.cookie);
     token = cookies.jarvis_session_token || null;
   }
@@ -1273,7 +1268,7 @@ router.get('/usage', protectDashboard, (req, res) => {
 
 // GET /dashboard/action/confirm - Confirmation page before mutating queue state
 router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLimitMiddleware, (req, res) => {
-  const token = (req.body && req.body.token);
+  const sessionToken = req.sessionToken;
   const action = req.query.action;
   const jobId = req.query.jobId;
   const approvalId = req.query.approvalId;
@@ -1287,7 +1282,7 @@ router.get('/action/confirm', protectDashboard, actionsEnabledMiddleware, rateLi
     return res.status(400).send('Missing target identifier (jobId or approvalId).');
   }
 
-  const nonce = generateNonce(action, targetId, token);
+  const nonce = generateNonce(action, targetId, sessionToken);
 
   if (action === 'dispatch') {
     title = 'Confirm Manual Job Dispatch';

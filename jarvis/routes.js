@@ -59,20 +59,13 @@ function parseCookies(cookieHeader) {
 // Middleware to authenticate ONLY active derived session tokens (srv_sess_...)
 async function authenticateAdminSession(req, res, next) {
   let token = null;
-  const authHeader = req.headers.authorization || req.headers['x-admin-token'];
-  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7).trim();
-  } else if (typeof authHeader === 'string') {
-    token = authHeader.trim();
-  } else if (req.headers.cookie) {
+  if (req.headers.cookie) {
     const cookies = parseCookies(req.headers.cookie);
     token = cookies.jarvis_session_token;
-  } else if (req.body && typeof req.body.token === 'string') {
-    token = req.body.token.trim();
   }
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: missing session token' });
+    return res.status(401).json({ error: 'Unauthorized: missing session token cookie' });
   }
 
   if (!token.startsWith('srv_sess_')) {
@@ -82,6 +75,7 @@ async function authenticateAdminSession(req, res, next) {
   const sessionResult = await validateSessionToken(token);
   if (sessionResult.valid) {
     req.sessionMetadata = sessionResult.metadata;
+    req.sessionToken = token;
     return next();
   }
 
@@ -102,6 +96,7 @@ async function authenticateAnyToken(req, res, next) {
     const sessionResult = await validateSessionToken(token);
     if (sessionResult.valid) {
       req.sessionMetadata = sessionResult.metadata;
+      req.sessionToken = token;
       return next();
     }
   }
@@ -128,35 +123,25 @@ router.post('/auth/exchange-ticket', async (req, res) => {
   try {
     const sessionToken = await createSessionToken(validation.metadata || {}, 3600);
 
-    // Set Secure, HttpOnly, SameSite=Lax cookie
-    res.setHeader('Set-Cookie', `jarvis_session_token=${sessionToken}; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+    // Set Secure, HttpOnly, SameSite=Strict cookie
+    res.setHeader('Set-Cookie', `jarvis_session_token=${sessionToken}; HttpOnly; Path=/; Max-Age=3600; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
 
     return res.status(200).json({
       success: true,
-      session_token: sessionToken,
       expires_in: 3600
     });
   } catch (err) {
-    console.error('[TicketExchange Error]', err.message);
+    console.error('[TicketExchange Error]', sanitizeError(err));
     return res.status(500).json({ success: false, error: 'Failed to create session token' });
   }
 });
 
 // POST /api/jarvis/auth/logout
 router.post('/auth/logout', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  let token = authHeader && authHeader.split(' ')[1];
-  if (!token && req.headers['x-admin-token']) {
-    token = req.headers['x-admin-token'];
-  }
-  if (!token && req.headers.cookie) {
-    const list = {};
-    req.headers.cookie.split(';').forEach(c => {
-      let [n, ...r] = c.split('=');
-      n = n?.trim();
-      if (n) list[n] = decodeURIComponent(r.join('=').trim());
-    });
-    token = list.jarvis_session_token || null;
+  let token = null;
+  if (req.headers.cookie) {
+    const cookies = parseCookies(req.headers.cookie);
+    token = cookies.jarvis_session_token || null;
   }
 
   if (token) {
@@ -167,7 +152,7 @@ router.post('/auth/logout', async (req, res) => {
     }
   }
 
-  res.setHeader('Set-Cookie', 'jarvis_session_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  res.setHeader('Set-Cookie', 'jarvis_session_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict');
   return res.status(200).json({ success: true, message: 'Logged out successfully' });
 });
 

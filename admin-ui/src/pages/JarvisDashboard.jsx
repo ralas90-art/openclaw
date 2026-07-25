@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Mail, Database, CheckCircle2, XCircle, Ban, History, ShieldAlert, ArrowRight, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
-import { apiFetch, getSessionToken, setSessionToken, clearSessionToken } from '../api/client';
+import { apiFetch } from '../api/client';
 
 export default function JarvisDashboard() {
-  const [token, setToken] = useState(() => getSessionToken() || '');
-  const [tokenInput, setTokenInput] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,32 +25,16 @@ export default function JarvisDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    const cleanToken = tokenInput.trim();
-    if (!cleanToken) return;
-    if (!cleanToken.startsWith('srv_sess_')) {
-      setError('Access Denied: Only valid server session tokens (srv_sess_...) are permitted.');
-      return;
-    }
-    if (setSessionToken(cleanToken)) {
-      setToken(cleanToken);
-    } else {
-      setError('Failed to store session token.');
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await apiFetch('/api/jarvis/auth/logout', { method: 'POST' });
-    } catch (_) {}
-    clearSessionToken();
-    setToken('');
-    setTokenInput('');
+    } catch (err) {
+      console.error(err);
+    }
+    setIsAuthenticated(false);
   };
 
   const fetchAllData = async () => {
-    if (!token) return;
     setLoading(true);
     setError('');
     setMessage('');
@@ -69,11 +52,12 @@ export default function JarvisDashboard() {
       ]);
 
       if (statsRes.status === 401 || briefRes.status === 401) {
-        handleLogout();
-        setError('Session expired or invalid token.');
+        setIsAuthenticated(false);
+        setError('Session expired or unauthorized.');
         return;
       }
 
+      setIsAuthenticated(true);
       if (statsRes.ok) setStats(await statsRes.json());
       if (briefRes.ok) setBrief(await briefRes.json());
       if (prioritiesRes.ok) setPriorities(await prioritiesRes.json());
@@ -99,7 +83,7 @@ export default function JarvisDashboard() {
       });
       const data = await res.json();
       if (data.success && data.ticket) {
-        window.location.href = `/api/jarvis/google/connect?ticket=${encodeURIComponent(data.ticket)}&force=true`;
+        window.location.assign(`/api/jarvis/google/connect?ticket=${encodeURIComponent(data.ticket)}&force=true`);
       } else {
         setError(data.error || 'Failed to issue Google connect ticket.');
       }
@@ -110,39 +94,43 @@ export default function JarvisDashboard() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     const params = new URLSearchParams(window.location.search);
     const urlTicket = params.get('ticket');
 
-    if (urlTicket) {
-      apiFetch('/api/jarvis/auth/exchange-ticket', {
-        method: 'POST',
-        body: JSON.stringify({ ticket: urlTicket.trim() })
-      })
-      .then(res => res.json())
-      .then(data => {
-        const sessionTok = data.session_token || data.token;
-        if (sessionTok && setSessionToken(sessionTok)) {
-          setToken(sessionTok);
-        } else {
-          setError(data.error || 'Failed to exchange single-use ticket.');
+    const initDashboard = async () => {
+      if (urlTicket) {
+        try {
+          const res = await apiFetch('/api/jarvis/auth/exchange-ticket', {
+            method: 'POST',
+            body: JSON.stringify({ ticket: urlTicket.trim() })
+          });
+          const data = await res.json();
+          if (data.success && isMounted) {
+            setIsAuthenticated(true);
+            await fetchAllData();
+          } else if (isMounted) {
+            setError(data.error || 'Failed to exchange single-use ticket.');
+          }
+        } catch (err) {
+          console.error('[Dashboard] Ticket exchange error:', err);
+          if (isMounted) setError('Failed to exchange auth ticket.');
+        } finally {
+          params.delete('ticket');
+          const newSearch = params.toString();
+          const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
+          window.history.replaceState({}, document.title, newPath);
         }
-      })
-      .catch(err => {
-        console.error('[Dashboard] Ticket exchange error:', err);
-        setError('Failed to exchange auth ticket.');
-      })
-      .finally(() => {
-        params.delete('ticket');
-        const newSearch = params.toString();
-        const newPath = window.location.pathname + (newSearch ? '?' + newSearch : '');
-        window.history.replaceState({}, document.title, newPath);
-      });
-    }
-  }, []);
+      } else {
+        await fetchAllData();
+      }
+    };
 
-  useEffect(() => {
-    fetchAllData();
-  }, [token]);
+    initDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Approval Mutation Handlers
   const handleApprove = async (id) => {
@@ -239,7 +227,7 @@ export default function JarvisDashboard() {
   };
 
   // Gated Authentication Rendering
-  if (!token) {
+  if (!isAuthenticated) {
     return (
       <div style={{
         display: 'flex',
@@ -247,7 +235,7 @@ export default function JarvisDashboard() {
         justifyContent: 'center',
         minHeight: '70vh',
       }}>
-        <form onSubmit={handleLogin} style={{
+        <div style={{
           background: 'rgba(22, 27, 34, 0.6)',
           backdropFilter: 'blur(12px)',
           border: '1px solid #30363d',
@@ -271,31 +259,10 @@ export default function JarvisDashboard() {
             <Lock size={28} color="#fff" />
           </div>
           <h2 style={{ margin: '0 0 10px', fontSize: '1.5rem', color: '#fff' }}>Jarvis Portal Auth</h2>
-          <p style={{ margin: '0 0 25px', color: '#8b949e', fontSize: '0.9rem' }}>Access the Jarvis Dashboard using a single-use ticket or session token.</p>
+          <p style={{ margin: '0 0 25px', color: '#8b949e', fontSize: '0.9rem' }}>Access to the Jarvis Dashboard requires an active session cookie. Please generate a single-use ticket in Telegram using <code>/jarvis_dashboard</code>.</p>
           
           {error && <div style={{ color: '#f85149', background: 'rgba(248, 81, 73, 0.1)', border: '1px solid rgba(248, 81, 73, 0.2)', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '15px' }}>{error}</div>}
-          
-          <input
-            type="password"
-            id="admin-token-input"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="Session Token or Ticket"
-            style={{
-              width: '100%',
-              padding: '12px',
-              boxSizing: 'border-box',
-              background: '#0d1117',
-              border: '1px solid #30363d',
-              borderRadius: '6px',
-              color: '#fff',
-              fontSize: '1rem',
-              textAlign: 'center',
-              marginBottom: '20px'
-            }}
-          />
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }}>Enter Dashboard</button>
-        </form>
+        </div>
       </div>
     );
   }

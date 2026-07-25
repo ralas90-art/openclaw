@@ -113,11 +113,13 @@ async function runMigrations() {
           mapped_command VARCHAR(255) NOT NULL,
           confidence DECIMAL(5,2) NOT NULL,
           risk_tier VARCHAR(50) NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'pending',
           executed_boolean BOOLEAN NOT NULL DEFAULT false,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           source_chat_id VARCHAR(100)
         );
       `);
+      await client.query("ALTER TABLE jarvis_natural_language_logs ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';");
 
       // 9. jarvis_auth_tickets table (for single-use tickets - SHA-256 hashed)
       await client.query(`

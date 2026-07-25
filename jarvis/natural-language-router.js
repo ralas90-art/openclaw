@@ -107,33 +107,39 @@ async function ensureAuditTableExists() {
   return true;
 }
 
-async function logNaturalLanguageRequest(sanitizedText, hash, lang, intentStr, mappedCommand, riskTier, executed, chatId) {
+async function logNaturalLanguageRequest(sanitizedText, hash, lang, intentStr, mappedCommand, riskTier, executed = false, chatId = 'unknown', initialStatus = 'pending') {
   try {
     const rows = await queryDb(`
       INSERT INTO jarvis_natural_language_logs 
-      (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, executed_boolean, source_chat_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, status, executed_boolean, source_chat_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id
-    `, [sanitizedText, hash, lang, intentStr, mappedCommand, 1.0, riskTier, executed, chatId]);
+    `, [sanitizedText, hash, lang, intentStr, mappedCommand, 1.0, riskTier, initialStatus, executed, chatId]);
     return rows.length > 0 ? rows[0].id : null;
   } catch (err) {
-    console.error('[NaturalLanguageRouter] Error inserting audit log:', err.message);
+    console.error('[NaturalLanguageRouter] Error inserting audit log:', sanitizeError(err));
     return null;
   }
 }
 
-async function markNaturalLanguageLogExecuted(logId) {
+async function transitionNaturalLanguageLog(logId, targetStatus, allowedPreviousStatuses = ['pending', 'executing']) {
   if (!logId) {
-    throw new Error('markNaturalLanguageLogExecuted requires a valid logId');
+    throw new Error('transitionNaturalLanguageLog requires a valid logId');
   }
+  const isExecuted = (targetStatus === 'executed');
   const rows = await queryDb(
-    `UPDATE jarvis_natural_language_logs SET executed_boolean = true WHERE id = $1 AND executed_boolean = false RETURNING id`,
-    [logId]
+    `UPDATE jarvis_natural_language_logs SET status = $1, executed_boolean = $2 WHERE id = $3 AND status = ANY($4::text[]) RETURNING id, status`,
+    [targetStatus, isExecuted, logId, allowedPreviousStatuses]
   );
+
   if (!rows || rows.length !== 1) {
-    throw new Error(`markNaturalLanguageLogExecuted failed: expected exactly 1 updated row for logId ${logId}, got ${rows ? rows.length : 0}`);
+    throw new Error(`transitionNaturalLanguageLog failed: expected exactly 1 updated row for logId ${logId} transitioning to '${targetStatus}', got ${rows ? rows.length : 0}`);
   }
   return true;
+}
+
+async function markNaturalLanguageLogExecuted(logId) {
+  return transitionNaturalLanguageLog(logId, 'executed', ['pending', 'executing']);
 }
 
 // Helper to look up active project slugs mentioned in query
@@ -263,6 +269,7 @@ async function routeNaturalLanguageCommand(text, message) {
 module.exports = {
   routeNaturalLanguageCommand,
   markNaturalLanguageLogExecuted,
+  transitionNaturalLanguageLog,
   detectLanguage,
   sanitizeLogText
 };
