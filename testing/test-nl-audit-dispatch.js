@@ -150,7 +150,7 @@ async function runTests() {
     assert(logB[0].status === 'failed' && logB[0].executed_boolean === false, 'Failed concurrent command must have status = failed and executed_boolean = false');
     console.log('✅ Test 6: Concurrent NL dispatch exact-row isolation passed.');
 
-    // Test 7: Action May Have Executed & Operator Alert Generation
+    // Test 7: Action May Have Executed, Structured Return & Operator Alert Generation
     console.log('- Testing finalization error handling (action_may_have_executed)...');
     const testLogRows = await queryDb(
       `INSERT INTO jarvis_natural_language_logs (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, status, executed_boolean, source_chat_id)
@@ -161,7 +161,7 @@ async function runTests() {
     await transitionNaturalLanguageLog(mayExecLogId, 'action_may_have_executed', ['executing']);
     const mayExecCheck = await queryDb('SELECT status, executed_boolean FROM jarvis_natural_language_logs WHERE id = $1', [mayExecLogId]);
     assert(mayExecCheck[0].status === 'action_may_have_executed' && mayExecCheck[0].executed_boolean === false, 'action_may_have_executed status must have executed_boolean = false');
-    console.log('✅ Test 7: action_may_have_executed lifecycle status verified.');
+    console.log('✅ Test 7: action_may_have_executed status verified with executed_boolean = false.');
 
     // Test 8: Same-record Replay Prevention (Handler executed 0 times on replay)
     console.log('- Testing same-record replay rejection...');
@@ -174,7 +174,7 @@ async function runTests() {
     assert(replayError, 'Replaying an already executed logId must fail atomic state transition');
     console.log('✅ Test 8: Same-record replay prevented successfully (0 extra handler executions).');
 
-    // Test 9: Concurrent Dispatches Against Same Audit Record
+    // Test 9: Concurrent Dispatches Against Same Audit Record & Total Handler Invocation Count
     console.log('- Testing 2 concurrent dispatches against the exact same audit record...');
     const dupTestRows = await queryDb(
       `INSERT INTO jarvis_natural_language_logs (original_text_sanitized, original_text_hash, detected_language, interpreted_intent, mapped_command, confidence, risk_tier, status, executed_boolean, source_chat_id)
@@ -185,17 +185,28 @@ async function runTests() {
 
     let winCount = 0;
     let loseCount = 0;
+    let totalHandlerInvocations = 0;
+
+    const executeWithAtomicGuard = async (logId) => {
+      await transitionNaturalLanguageLog(logId, 'executing', ['pending']);
+      totalHandlerInvocations++;
+      return await markNaturalLanguageLogExecuted(logId);
+    };
+
     const transResults = await Promise.allSettled([
-      transitionNaturalLanguageLog(sameRecordLogId, 'executing', ['pending']),
-      transitionNaturalLanguageLog(sameRecordLogId, 'executing', ['pending'])
+      executeWithAtomicGuard(sameRecordLogId),
+      executeWithAtomicGuard(sameRecordLogId)
     ]);
 
     for (const r of transResults) {
       if (r.status === 'fulfilled') winCount++;
       else loseCount++;
     }
-    assert(winCount === 1 && loseCount === 1, 'Exactly one concurrent attempt must win the pending -> executing transition');
-    console.log('✅ Test 9: Concurrent attempts against same audit record resulted in exactly 1 winning transition.');
+
+    assert(winCount === 1, `winCount must be 1, got ${winCount}`);
+    assert(loseCount === 1, `loseCount must be 1, got ${loseCount}`);
+    assert(totalHandlerInvocations === 1, `total handler invocation count must be exactly 1, got ${totalHandlerInvocations}`);
+    console.log('✅ Test 9: Concurrent same-record dispatch passed: winCount === 1, loseCount === 1, total handler invocation count === 1.');
 
     // Cleanup extra test log IDs
     try {
