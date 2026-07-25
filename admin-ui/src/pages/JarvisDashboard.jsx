@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Sparkles, Mail, Database, CheckCircle2, XCircle, Ban, History, ShieldAlert, ArrowRight, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Sparkles, Mail, Database, History, RefreshCw, Smartphone, ListTodo, Lock } from 'lucide-react';
 import { apiFetch } from '../api/client';
 
 export default function JarvisDashboard() {
