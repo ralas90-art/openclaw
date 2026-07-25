@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../api/client';
 
 export default function Operations() {
@@ -8,7 +8,7 @@ export default function Operations() {
   const [replayEventId, setReplayEventId] = useState(null);
   const [replayReason, setReplayReason] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [fRes, dRes] = await Promise.all([
         apiFetch('/api/admin/operations/failed-syncs'),
@@ -21,11 +21,20 @@ export default function Operations() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    let isMounted = true;
+    const loadOps = async () => {
+      if (isMounted) {
+        await fetchData();
+      }
+    };
+    loadOps();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchData]);
 
   const handleReplay = async () => {
     if (!replayEventId) return;
@@ -39,11 +48,12 @@ export default function Operations() {
         alert("Replay initiated.");
         setReplayEventId(null);
         setReplayReason('');
-        fetchData();
+        await fetchData();
       } else {
         alert("Error: " + result.error);
       }
     } catch (err) {
+      console.error(err);
       alert("Replay failed");
     }
   };

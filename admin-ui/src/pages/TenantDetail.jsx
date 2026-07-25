@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 
@@ -33,6 +33,7 @@ export default function TenantDetail() {
       const result = await res.json();
       alert(`Sync result: ${JSON.stringify(result.preflight)}`);
     } catch (err) {
+      console.error(err);
       alert("Test sync failed");
     } finally {
       setSyncing(false);

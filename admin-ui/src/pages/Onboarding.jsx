@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 
@@ -28,6 +28,7 @@ export default function Onboarding() {
         alert("Failed: " + result.error);
       }
     } catch (err) {
+      console.error(err);
       alert("Network error");
     } finally {
       setSaving(false);

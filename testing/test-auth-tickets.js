@@ -4,14 +4,6 @@ process.env.SKIP_MEMORY_EXPORT = 'true';
 const fs = require('fs');
 const path = require('path');
 
-function normalizePgUrl(urlStr) {
-  if (!urlStr) return '';
-  try {
-    const u = new URL(urlStr);
-    return `${u.protocol}//${u.username}:${u.password}@${u.hostname}:${u.port || 5432}${u.pathname}`;
-  } catch (e) {
-    return urlStr.trim();
-  }
 function getDbIdentity(urlStr) {
   if (!urlStr) return null;
   try {
@@ -161,17 +153,17 @@ async function runTests() {
     });
 
     assert(exchRes.status === 200, `Ticket exchange must return 200. Got ${exchRes.status}`);
-    const exchData = await exchRes.json();
-    assert(exchData.session_token && exchData.session_token.startsWith('srv_sess_'), 'Response must contain srv_sess_ session token');
-    const derivedToken = exchData.session_token;
-    console.log('  - Ticket exchange returned derived session token successfully.');
+    const setCookie = exchRes.headers.get('set-cookie');
+    assert(setCookie && setCookie.includes('jarvis_session_token='), 'Response set-cookie header must contain jarvis_session_token');
+    const cookieHeader = setCookie.split(';')[0];
+    console.log('  - Ticket exchange set HttpOnly jarvis_session_token cookie successfully.');
 
-    // B. Access protected endpoint with derived session token
+    // B. Access protected endpoint with cookie session token
     const projRes = await fetch(`${baseUrl}/projects`, {
-      headers: { 'Authorization': `Bearer ${derivedToken}` }
+      headers: { 'Cookie': cookieHeader }
     });
-    assert(projRes.status === 200, `Protected route /projects must accept derived token with 200. Got ${projRes.status}`);
-    console.log('  - Protected route /projects accepted derived session token.');
+    assert(projRes.status === 200, `Protected route /projects must accept cookie session token with 200. Got ${projRes.status}`);
+    console.log('  - Protected route /projects accepted jarvis_session_token cookie.');
 
     // C. Replaying ticket fails
     const replayRes = await fetch(`${baseUrl}/auth/exchange-ticket`, {
