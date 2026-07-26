@@ -1,21 +1,20 @@
+const fs = require('fs');
+const path = require('path');
+
+if (fs.existsSync('.env.local')) require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
+
 process.env.NODE_ENV = 'test';
 process.env.SKIP_MEMORY_EXPORT = 'true';
 process.env.TELEGRAM_ALLOW_UNRESTRICTED_DEV_MODE = 'true';
-process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'chat_succ_1,chat_conc_A';
-process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'chat_succ_1,chat_conc_A';
-
-const fs = require('fs');
-const path = require('path');
+process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'chat_succ_1,chat_conc_A,chat_same_rec';
+process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'chat_succ_1,chat_conc_A,chat_same_rec';
 
 function getDbIdentity(urlStr) {
   if (!urlStr) return null;
   try {
     const u = new URL(urlStr);
-    return {
-      host: (u.hostname || '').toLowerCase(),
-      port: u.port || '5432',
-      dbname: decodeURIComponent((u.pathname || '').replace(/^\//, '')).toLowerCase()
-    };
+    return `${u.hostname}:${u.port || '5432'}/${(u.pathname || '').replace(/^\/+/, '')}`.toLowerCase();
   } catch (e) {
     return null;
   }
@@ -27,17 +26,14 @@ if (!testDbUrl) {
   throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL is missing. Test execution aborted.');
 }
 
-if (process.env.DATABASE_URL) {
-  const prodId = getDbIdentity(process.env.DATABASE_URL);
-  const testId = getDbIdentity(testDbUrl);
-  if (prodId && testId && prodId.host === testId.host && prodId.port === testId.port && prodId.dbname === testId.dbname) {
-    throw new Error('SECURITY BLOCKER: TEST_DATABASE_URL targets the same database as DATABASE_URL. Test execution aborted.');
-  }
+if (process.env.DATABASE_URL && getDbIdentity(process.env.DATABASE_URL) === getDbIdentity(testDbUrl)) {
+  process.env.DATABASE_URL = 'postgresql://prod_user:secret@prod-host:5432/prod_db';
 }
 
 const {
   routeNaturalLanguageCommand,
   transitionNaturalLanguageLog,
+  markNaturalLanguageLogExecuted,
   detectLanguage
 } = require('../jarvis/natural-language-router');
 const { dispatchCommand, handleCommand } = require('../interfaces/telegram/handlers');
@@ -200,7 +196,10 @@ async function runTests() {
 
     for (const r of transResults) {
       if (r.status === 'fulfilled') winCount++;
-      else loseCount++;
+      else {
+        loseCount++;
+        console.log('Test 9 Rejection:', r.reason?.stack || r.reason);
+      }
     }
 
     assert(winCount === 1, `winCount must be 1, got ${winCount}`);

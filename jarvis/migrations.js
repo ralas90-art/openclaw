@@ -261,17 +261,45 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false;");
       await client.query("ALTER TABLE jarvis_mobile_uploads ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;");
 
-      // 14. Local Inventory & Feedback
+      // 14. Local Inventory & Feedback (Phase 4A Safe Level-1 Folder Inventory)
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_local_folders (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          folder_path TEXT UNIQUE NOT NULL,
+          safe_alias TEXT UNIQUE NOT NULL,
+          root_fingerprint VARCHAR(64) NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending',
+          approved_by TEXT,
           approved_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT NOW()
+          last_scanned_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
 
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS safe_alias TEXT;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS root_fingerprint VARCHAR(64);");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_by TEXT;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();");
+      await client.query("ALTER TABLE jarvis_local_folders ALTER COLUMN folder_path DROP NOT NULL;");
+      await client.query("CREATE UNIQUE INDEX IF NOT EXISTS ux_jarvis_local_folders_safe_alias ON jarvis_local_folders (safe_alias);");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_level1_folder_inventory (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          root_alias TEXT NOT NULL REFERENCES jarvis_local_folders(safe_alias) ON DELETE CASCADE,
+          folder_name TEXT NOT NULL,
+          relative_path TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT ux_level1_folder_alias_path UNIQUE (root_alias, relative_path)
+        );
+      `);
+
+      // Legacy file index table preserved for backward compatibility (do not drop in Phase 4A)
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_local_file_index (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -284,6 +312,7 @@ async function runMigrations() {
           indexed_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_brief_feedback (

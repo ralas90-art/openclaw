@@ -570,22 +570,29 @@ async function handleCommand(text, message) {
     return await handleJarvisFolders(filter, message);
   }
   if (command === '/jarvis_add_folder' || command === '/jarvisaddfolder') {
-    const folderPath = text.substring(command.length).trim();
-    return await handleJarvisAddFolder(folderPath, message);
+    const alias = text.substring(command.length).trim();
+    return await handleJarvisAddFolder(alias, message);
   }
   if (command === '/jarvis_approve_folder' || command === '/jarvisapprovefolder') {
     const idOrPath = text.substring(command.length).trim();
     return await handleJarvisApproveFolder(idOrPath, message);
   }
   if (command === '/jarvis_scan' || command === '/jarvisscan') {
-    return await handleJarvisScan(message);
+    const alias = text.substring(command.length).trim();
+    return await handleJarvisScan(alias, message);
+  }
+  if (command === '/jarvis_inventory' || command === '/jarvisinventory') {
+    const alias = text.substring(command.length).trim();
+    return await handleJarvisInventory(alias, message);
+  }
+  if (command === '/jarvis_revoke_folder' || command === '/jarvisrevokefolder') {
+    const alias = text.substring(command.length).trim();
+    return await handleJarvisRevokeFolder(alias, message);
   }
   if (command === '/jarvis_files' || command === '/jarvisfiles') {
-    const parts = text.trim().split(/\s+/);
-    const filter = parts[1];
-    const arg = parts[2];
-    return await handleJarvisFiles(filter, arg, message);
+    return await handleJarvisFiles(message);
   }
+
   if (command === '/jarvis_connectors' || command === '/jarvisconnectors') {
     return await handleJarvisConnectors(message);
   }
@@ -4836,20 +4843,14 @@ async function handleJarvisFolders(filter, message) {
     const folders = await localInventory.listLocalFolders(filter);
     if (folders.length === 0) {
       const filterDesc = filter ? ` (${filter})` : '';
-      return `📁 *Jarvis Local Folders*\n\nNo matching folders${filterDesc} registered in the database.`;
-    }
-    
-    let md = `📁 *Jarvis Local Folders*\n\n`;
-    const cleanFilter = filter ? filter.trim().toLowerCase() : null;
-    if (cleanFilter === 'pending') {
-      md = `📁 *Pending Local Folders*\n\n`;
-    } else if (cleanFilter === 'approved') {
-      md = `📁 *Approved Local Folders*\n\n`;
+      return `📁 *Jarvis Local Inventory Roots*\n\nNo matching configured inventory roots${filterDesc} found.`;
     }
 
+    let md = `📁 *Jarvis Local Inventory Roots*\n\n`;
     for (const f of folders) {
-      const status = f.approved ? '✅ Approved' : '⏳ Pending Approval';
-      md += `• *Path:* \`${f.folder_path}\`\n  *Status:* ${status}\n  *ID:* \`${f.id}\`\n\n`;
+      const statusIcon = f.status === 'approved' ? '✅ Approved' : (f.status === 'pending' ? '⏳ Pending Approval' : '❌ Revoked');
+      const lastScanned = f.last_scanned_at ? new Date(f.last_scanned_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC' : 'Never';
+      md += `• *Alias:* \`${f.safe_alias}\`\n  *Status:* ${statusIcon}\n  *Fingerprint Snippet:* \`${(f.root_fingerprint || '').substring(0, 12)}...\`\n  *Last Scanned:* ${lastScanned}\n\n`;
     }
     return md;
   } catch (err) {
@@ -4857,28 +4858,28 @@ async function handleJarvisFolders(filter, message) {
   }
 }
 
-async function handleJarvisAddFolder(folderPath, message) {
+async function handleJarvisAddFolder(alias, message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_add_folder', message);
   if (!permCheck.allowed) {
     return formatPermissionDenied('/jarvis_add_folder', permCheck.reason, message);
   }
 
-  if (!folderPath) {
-    return `❌ Error: Please specify a folder path. Example: \`/jarvis_add_folder C:/my-projects\``;
+  if (!alias) {
+    return `❌ Error: Please specify a configured root alias. Example: \`/jarvis_add_folder workspace_reports\``;
   }
 
   const localInventory = require('../../jarvis/local-inventory');
   try {
-    const folder = await localInventory.addLocalFolder(folderPath);
+    const res = await localInventory.addLocalFolder(alias, message);
     return [
-      `📁 *Folder Registered (Pending Approval)*`,
+      `📁 *Inventory Root Registered (Pending Approval)*`,
       ``,
-      `• *Path:* \`${folder.folder_path}\``,
-      `• *ID:* \`${folder.id}\``,
+      `• *Alias:* \`${res.alias}\``,
       `• *Status:* \`Pending Approval\``,
+      `• *Approval Request ID:* \`${res.approval_id}\``,
       ``,
-      `Use \`/jarvis_approve_folder ${folder.id}\` to approve this path for indexing.`
+      `Use \`/jarvis_approve ${res.approval_id}\` to approve this root for Level-1 inventory scanning.`
     ].join('\n');
   } catch (err) {
     return `❌ Error: ${err.message}`;
@@ -4892,110 +4893,95 @@ async function handleJarvisApproveFolder(idOrPath, message) {
     return formatPermissionDenied('/jarvis_approve_folder', permCheck.reason, message);
   }
 
-  if (!idOrPath) {
-    return `❌ Error: Please specify a folder ID or path to approve.`;
-  }
-
-  const localInventory = require('../../jarvis/local-inventory');
-  try {
-    const folder = await localInventory.approveLocalFolder(idOrPath);
-    return [
-      `✅ *Folder Approved for Indexing*`,
-      ``,
-      `• *Path:* \`${folder.folder_path}\``,
-      `• *ID:* \`${folder.id}\``,
-      `• *Status:* \`Approved\``,
-      ``,
-      `Use \`/jarvis_scan\` to scan files in approved directories.`
-    ].join('\n');
-  } catch (err) {
-    return `❌ Error: ${err.message}`;
-  }
+  return `⚠️ Direct folder approval is deprecated. Use \`/jarvis_approve <approval_id>\` to approve pending folder requests via the central approval queue.`;
 }
 
-async function handleJarvisScan(message) {
+async function handleJarvisScan(alias, message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_scan', message);
   if (!permCheck.allowed) {
     return formatPermissionDenied('/jarvis_scan', permCheck.reason, message);
   }
 
+  if (!alias) {
+    return `⚠️ Alias parameter required. Usage: \`/jarvis_scan <approved_alias>\``;
+  }
+
   const localInventory = require('../../jarvis/local-inventory');
   try {
-    const stats = await localInventory.scanApprovedFolders();
+    const res = await localInventory.scanApprovedFolders(alias, message);
     return [
-      `🔍 *File Inventory Scan Complete*`,
+      `🔍 *Level-1 Inventory Scan Complete*`,
       ``,
-      `• *Folders Scanned:* ${stats.foldersScanned}`,
-      `• *Files Indexed/Updated:* ${stats.filesIndexed}`,
-      `• *Stale File Indexes Removed:* ${stats.filesRemoved}`,
+      `• *Root Alias:* \`${res.alias}\``,
+      `• *Immediate Child Folders Indexed:* ${res.foldersIndexed}`,
+      `• *Status:* \`Completed\``,
       ``,
-      `⚠️ *Safety Notice:* Stale database index records for deleted/renamed files were removed, but no local files on your machine were modified, moved, opened, or deleted.`,
-      ``,
-      `Use \`/jarvis_files\` to list indexed files and check project suggestions.`
+      `Use \`/jarvis_inventory ${res.alias}\` to list level-1 child directories.`
     ].join('\n');
   } catch (err) {
     return `❌ Error: ${err.message}`;
   }
 }
 
-async function handleJarvisFiles(filter, arg, message) {
+async function handleJarvisInventory(alias, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_inventory', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_inventory', permCheck.reason, message);
+  }
+
+  if (!alias) {
+    return `❌ Error: Please specify an approved root alias. Usage: \`/jarvis_inventory <approved_alias>\``;
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const folders = await localInventory.getFolderInventory(alias);
+    if (folders.length === 0) {
+      return `📁 *Level-1 Folder Inventory for '${alias}'*\n\nNo active child directories found. Run \`/jarvis_scan ${alias}\` to refresh inventory.`;
+    }
+
+    let md = `📁 *Level-1 Folder Inventory for '${alias}'*\n\n`;
+    for (const f of folders) {
+      md += `• *Folder:* \`${f.folder_name}\` (Path: \`${f.relative_path}\`)\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisRevokeFolder(alias, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_revoke_folder', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_revoke_folder', permCheck.reason, message);
+  }
+
+  if (!alias) {
+    return `❌ Error: Please specify a root alias to revoke. Usage: \`/jarvis_revoke_folder <approved_alias>\``;
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  try {
+    const res = await localInventory.revokeLocalFolder(alias, message);
+    return `🚫 *Inventory Root Revoked*\n\nRoot alias \`${res.safe_alias}\` has been set to \`revoked\`. Scans are no longer permitted on this root.`;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisFiles(message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_files', message);
   if (!permCheck.allowed) {
     return formatPermissionDenied('/jarvis_files', permCheck.reason, message);
   }
 
-  const localInventory = require('../../jarvis/local-inventory');
-  try {
-    const suggestions = await localInventory.getFileSuggestions(filter || null, arg || null);
-    if (suggestions.length === 0) {
-      const filterDesc = filter ? ` with filter '${filter}'` : '';
-      const argDesc = arg ? ` and argument '${arg}'` : '';
-      return `📄 *Indexed Local Files*\n\nNo files found in the index${filterDesc}${argDesc}.`;
-    }
-
-    let md = `📄 *Indexed Local Files & Suggestions*\n\n`;
-    const cleanFilter = filter ? filter.trim().toLowerCase() : null;
-    const cleanArg = arg ? arg.trim().toLowerCase() : null;
-
-    if (cleanFilter === 'recent') {
-      md = `📄 *Recent Indexed Files*\n\n`;
-    } else if (cleanFilter === 'large') {
-      md = `📄 *Largest Indexed Files*\n\n`;
-    } else if (cleanFilter === 'by_type') {
-      md = `📄 *Indexed Files of Type: ${cleanArg}*\n\n`;
-    } else if (cleanFilter === 'unmatched') {
-      md = `📄 *Unmatched Indexed Files*\n\n`;
-    } else if (cleanFilter === 'project') {
-      md = `📄 *Indexed Files for Project: ${cleanArg}*\n\n`;
-    } else if (cleanFilter) {
-      md = `📄 *Indexed Files for Project: ${cleanFilter}*\n\n`;
-    }
-
-    const displayed = suggestions.slice(0, 15);
-    for (const s of displayed) {
-      const sizeKb = (s.size_bytes / 1024).toFixed(1);
-      const date = new Date(s.last_modified).toISOString().substring(0, 16).replace('T', ' ');
-      md += `• *${s.file_name}* (${sizeKb} KB, modified: _${date}_)\n`;
-      md += `  *Path:* \`${s.file_path}\`\n`;
-      if (s.suggested_project) {
-        md += `  *Suggested Project:* \`${s.suggested_project}\` (Reason: ${s.reason})\n`;
-      } else {
-        md += `  *Suggested Project:* \`None\`\n`;
-      }
-      md += `\n`;
-    }
-
-    if (suggestions.length > displayed.length) {
-      md += `_...and ${suggestions.length - displayed.length} more files._`;
-    }
-
-    return md;
-  } catch (err) {
-    return `❌ Error: ${err.message}`;
-  }
+  return `⚠️ Command Deprecated: File-level inventory indexing has been removed in Phase 4A. Use \`/jarvis_inventory <approved_alias>\` to view level-1 folder metadata.`;
 }
+
 
 async function handleJarvisConnectors(message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');

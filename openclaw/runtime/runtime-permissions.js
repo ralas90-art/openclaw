@@ -741,6 +741,30 @@ const COMMAND_PERMISSIONS = {
     capability: 'admin_maintenance',
     description: 'Read-only filesystem scan + Supabase index mutation. Writes index records but does not modify local files.'
   },
+  jarvis_inventory: {
+    commands: ['/jarvis_inventory'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View level-1 active child folder inventory for an approved root alias.'
+  },
+  jarvis_revoke_folder: {
+    commands: ['/jarvis_revoke_folder'],
+    tier: 'admin_maintenance',
+    category: 'system_maintenance',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'admin_maintenance',
+    description: 'Revoke approval for an inventory root alias.'
+  },
   jarvis_files: {
     commands: ['/jarvis_files'],
     tier: 'read_only',
@@ -1432,6 +1456,8 @@ function normalizeCommand(commandText) {
     'jarvisaddfolder': 'jarvis_add_folder',
     'jarvisapprovefolder': 'jarvis_approve_folder',
     'jarvisscan': 'jarvis_scan',
+    'jarvisinventory': 'jarvis_inventory',
+    'jarvisrevokefolder': 'jarvis_revoke_folder',
     'jarvisfiles': 'jarvis_files',
     'jarvisconnectors': 'jarvis_connectors',
     'jarvisemailsummary': 'jarvis_email_summary',

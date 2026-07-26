@@ -329,9 +329,30 @@ async function executeApprovedAction(approvalId, executor = 'admin') {
       };
       queueStore.saveQueue(queue);
       outputText = `✅ Hermes Dry-Run Queued: Registered dryrun job \`${jobId}\` for command: "${payload.recommended_command}".`;
+    } else if (req.action_type === 'approve_local_inventory_root') {
+      const safeAlias = payload.safe_alias;
+      const rootFingerprint = payload.root_fingerprint;
+      if (!safeAlias || !rootFingerprint) {
+        throw new Error('Invalid inventory root approval payload.');
+      }
+
+      const updateRows = await queryDb(
+        `UPDATE jarvis_local_folders
+         SET status = 'approved', approved_by = $1, approved_at = now(), updated_at = now()
+         WHERE safe_alias = $2 AND root_fingerprint = $3
+         RETURNING *;`,
+        [executor, safeAlias, rootFingerprint]
+      );
+
+      if (updateRows.length === 0) {
+        throw new Error(`Failed to approve root alias '${safeAlias}': Record not found or fingerprint mismatched.`);
+      }
+
+      outputText = `✅ Local Inventory Root Approved: Root alias '${safeAlias}' is now approved for Level-1 folder inventory scanning.`;
     } else {
       throw new Error(`Unsupported action type: ${req.action_type}`);
     }
+
 
     // Update request as executed
     await queryDb(
