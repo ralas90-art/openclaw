@@ -84,11 +84,74 @@ async function runTests() {
   const testSlug = `test-proj-${crypto.randomUUID()}`;
 
   try {
-    // Test 1: Idempotent Migrations
+    // Test 1: Idempotent Migrations on Fresh Database
     await runMigrations();
     console.log('✅ Test 1: First migration run passed.');
+
+    // Assert fresh schema does not contain legacy folder_path column
+    const freshColCheck = await queryDb(
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'jarvis_local_folders' AND column_name = 'folder_path';"
+    );
+    assert(freshColCheck.length === 0, 'Fresh schema MUST NOT contain legacy folder_path column');
+    console.log('✅ Test 1A: Fresh schema verified (folder_path absent).');
+
     await runMigrations();
     console.log('✅ Test 2: Second (idempotent) migration run passed.');
+
+    // Test 2B: Legacy Schema Migration Verification
+    console.log('- Testing legacy schema migration with folder_path NOT NULL...');
+    // Create temporary legacy table structure
+    await queryDb("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
+    await queryDb("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+    await queryDb(`
+      CREATE TABLE jarvis_local_folders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        folder_path TEXT NOT NULL UNIQUE,
+        approved BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // Insert synthetic legacy record
+    const legacyRes = await queryDb(
+      "INSERT INTO jarvis_local_folders (folder_path, approved) VALUES ('/legacy/prod/secret/path', true) RETURNING id;"
+    );
+    const legacyId = legacyRes[0].id;
+
+    // Run migration over legacy table
+    await runMigrations();
+
+    // Verify legacy column remains, NOT NULL is dropped
+    const legacyColCheck = await queryDb(
+      "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'jarvis_local_folders' AND column_name = 'folder_path';"
+    );
+    assert(legacyColCheck.length === 1, 'Legacy folder_path column MUST be preserved after migration');
+    assert(legacyColCheck[0].is_nullable === 'YES', 'Legacy folder_path NOT NULL constraint MUST be dropped');
+
+    // Verify legacy record is quarantined (safe_alias is null, root_fingerprint is null, status is pending default)
+    const legacyRowCheck = await queryDb("SELECT safe_alias, root_fingerprint, status FROM jarvis_local_folders WHERE id = $1;", [legacyId]);
+    assert(legacyRowCheck[0].safe_alias === null, 'Legacy path data MUST NOT be derived or copied into safe_alias');
+    assert(legacyRowCheck[0].root_fingerprint === null, 'Legacy path data MUST NOT be copied into root_fingerprint');
+    assert(legacyRowCheck[0].status === 'pending', 'Legacy record MUST remain pending/quarantined');
+
+    // Verify inserting new Phase 4A alias record without folder_path succeeds
+    await queryDb(
+      "INSERT INTO jarvis_local_folders (safe_alias, root_fingerprint, status) VALUES ('legacy_test_alias', 'abc123fingerprint', 'approved');"
+    );
+    console.log('✅ Test 2B: Legacy schema migration, constraint removal, and data quarantine verified.');
+
+    // Test 2C: Partially Migrated Schema Verification
+    console.log('- Testing partially migrated schema without folder_path...');
+    await queryDb("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
+    await queryDb("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+    await queryDb(`
+      CREATE TABLE jarvis_local_folders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        safe_alias TEXT UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending'
+      );
+    `);
+    await runMigrations();
+    console.log('✅ Test 2C: Partially migrated schema migration passed.');
 
     // Test 3: Real Concurrent Inserts using UUID randomized test project slug
     console.log(`- Registering dynamic isolated test project: '${testSlug}'...`);
@@ -120,6 +183,7 @@ async function runTests() {
     try {
       await queryDb("DELETE FROM jarvis_work_sessions WHERE project_slug = $1;", [testSlug]);
       await queryDb("DELETE FROM jarvis_projects WHERE slug = $1;", [testSlug]);
+      await queryDb("DELETE FROM jarvis_local_folders WHERE safe_alias = 'legacy_test_alias';");
     } catch (_) {}
     await closePool();
     console.log('✅ Test 4: Isolated test project & session data cleaned up cleanly in finally block.');

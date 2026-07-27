@@ -166,10 +166,61 @@ async function runMigrations() {
         );
       `);
 
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_blockers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_slug TEXT REFERENCES jarvis_projects(slug) ON DELETE SET NULL,
+          description TEXT NOT NULL,
+          priority TEXT DEFAULT 'normal',
+          status TEXT DEFAULT 'active',
+          steps_to_resolve TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          resolved_at TIMESTAMPTZ
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_next_actions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_slug TEXT REFERENCES jarvis_projects(slug) ON DELETE SET NULL,
+          action TEXT NOT NULL,
+          priority TEXT DEFAULT 'normal',
+          status TEXT DEFAULT 'pending',
+          recommended_command TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_decisions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_slug TEXT REFERENCES jarvis_projects(slug) ON DELETE SET NULL,
+          decision TEXT NOT NULL,
+          context TEXT,
+          rationale TEXT,
+          impact TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_completed_tasks (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_slug TEXT REFERENCES jarvis_projects(slug) ON DELETE SET NULL,
+          task_name TEXT NOT NULL,
+          outcome TEXT,
+          artifacts JSONB DEFAULT '[]',
+          completed_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
       // 12. jarvis_approval_requests & audit events
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_approval_requests (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          approval_type TEXT,
           project_slug TEXT NOT NULL,
           requested_action TEXT NOT NULL,
           risk_level TEXT NOT NULL DEFAULT 'medium',
@@ -180,11 +231,13 @@ async function runMigrations() {
           source_id TEXT,
           proposed_payload JSONB DEFAULT '{}',
           expires_at TIMESTAMPTZ,
+          requested_by TEXT,
           proposed_at TIMESTAMPTZ DEFAULT NOW(),
           rejected_at TIMESTAMPTZ,
           cancelled_at TIMESTAMPTZ,
           expired_at TIMESTAMPTZ,
           executed_by TEXT,
+          executed_at TIMESTAMPTZ,
           source_priority_id TEXT,
           action_result_summary TEXT,
           execution_error_summary TEXT,
@@ -203,8 +256,11 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS executed_by TEXT;");
+      await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS executed_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS source_priority_id TEXT;");
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS action_result_summary TEXT;");
+      await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS requested_by TEXT;");
+      await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS approval_type TEXT;");
       await client.query("ALTER TABLE jarvis_approval_requests ADD COLUMN IF NOT EXISTS execution_error_summary TEXT;");
 
       await client.query(`
@@ -213,11 +269,15 @@ async function runMigrations() {
           approval_id UUID NOT NULL,
           event_type TEXT NOT NULL,
           actor TEXT NOT NULL,
+          previous_status TEXT,
+          new_status TEXT,
           safe_summary TEXT,
           payload JSONB,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+      await client.query("ALTER TABLE jarvis_approval_audit_events ADD COLUMN IF NOT EXISTS previous_status TEXT;");
+      await client.query("ALTER TABLE jarvis_approval_audit_events ADD COLUMN IF NOT EXISTS new_status TEXT;");
 
       // 13. jarvis_connectors, tokens & sync logs
       await client.query(`
@@ -282,8 +342,15 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_by TEXT;");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();");
-      await client.query("ALTER TABLE jarvis_local_folders ALTER COLUMN folder_path DROP NOT NULL;");
+      const colCheck = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'jarvis_local_folders' AND column_name = 'folder_path'
+      `);
+      if (colCheck.rows.length > 0) {
+        await client.query("ALTER TABLE jarvis_local_folders ALTER COLUMN folder_path DROP NOT NULL;");
+      }
       await client.query("CREATE UNIQUE INDEX IF NOT EXISTS ux_jarvis_local_folders_safe_alias ON jarvis_local_folders (safe_alias);");
 
       await client.query(`

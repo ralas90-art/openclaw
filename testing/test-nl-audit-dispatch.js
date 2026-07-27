@@ -37,6 +37,7 @@ const {
   detectLanguage
 } = require('../jarvis/natural-language-router');
 const { dispatchCommand, handleCommand } = require('../interfaces/telegram/handlers');
+const { runMigrations } = require('../jarvis/migrations');
 const { queryDb } = require('../jarvis/db');
 
 const memoryFiles = [
@@ -75,6 +76,7 @@ function assert(condition, message) {
 
 async function runTests() {
   console.log('🧪 Starting NL Audit Lifecycle & Real Dispatcher Tests...\n');
+  await runMigrations();
 
   // Test 1: Language Detection
   assert(detectLanguage('que tengo pendiente hoy') === 'es', 'Spanish detection failed');
