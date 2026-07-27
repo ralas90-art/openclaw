@@ -1,6 +1,6 @@
 /**
  * Jarvis Phase 4A: Safe Level-1 Folder Inventory Validation Suite
- * 
+ *
  * Verifies all 18 Phase 4A security, containment, approval, and Level-1 scanning assertions.
  * Enforces strict isolation: MUST use TEST_DATABASE_URL (aborts if absent or identical to DATABASE_URL).
  */
