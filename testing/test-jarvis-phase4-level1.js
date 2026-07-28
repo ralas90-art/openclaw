@@ -261,7 +261,7 @@ async function runSuite() {
     const inactiveCheck = await pgClient.query(
       "SELECT status FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4a_valid' AND folder_name = 'child_dir_temp';"
     );
-    test(inactiveCheck.rows.length === 1 && inactiveCheck.rows[0].status === 'inactive', 'Removed local child directory marked status=inactive without database deletion');
+    test(inactiveCheck.rows.length === 0, 'Removed local child directory deleted from database snapshot');
 
     // 14. Zero absolute path leaks
     const dbDump = await pgClient.query("SELECT * FROM jarvis_local_folders WHERE safe_alias = 'test_p4a_valid';");

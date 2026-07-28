@@ -316,18 +316,16 @@ async function scanApprovedFolders(alias, reqMessage = null) {
         );
       }
 
-      // 2. Reconcile missing child folders (mark inactive for stale entries)
+      // 2. Reconcile missing child folders (delete removed entries for this root)
       if (childFolders.length > 0) {
         await client.query(
-          `UPDATE jarvis_level1_folder_inventory
-           SET status = 'inactive'
+          `DELETE FROM jarvis_level1_folder_inventory
            WHERE root_alias = $1 AND relative_path NOT IN (SELECT unnest($2::text[]));`,
           [alias, childFolders]
         );
       } else {
         await client.query(
-          `UPDATE jarvis_level1_folder_inventory
-           SET status = 'inactive'
+          `DELETE FROM jarvis_level1_folder_inventory
            WHERE root_alias = $1;`,
           [alias]
         );

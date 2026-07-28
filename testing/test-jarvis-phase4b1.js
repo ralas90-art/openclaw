@@ -239,6 +239,16 @@ async function runSuite() {
 
     test(foldersAfterReconcile.length === 1 && folderNames[0] === 'child_folder_renamed', 'Scenario E1: Renamed and deleted child directories reconciled cleanly');
 
+    // Raw database assertions for directory deletion and rename
+    const rawFolderRowsE = await pgClient.query(
+      "SELECT relative_path, root_alias, status FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4b1_root_a';"
+    );
+    test(!rawFolderRowsE.rows.some(r => r.relative_path === 'child_folder_2'), 'Scenario E2: Raw DB query proves deleted directory child_folder_2 has zero rows in jarvis_level1_folder_inventory');
+    test(!rawFolderRowsE.rows.some(r => r.relative_path === 'child_folder_1'), 'Scenario E3: Raw DB query proves old directory name child_folder_1 has zero rows in jarvis_level1_folder_inventory');
+    test(rawFolderRowsE.rows.filter(r => r.relative_path === 'child_folder_renamed').length === 1, 'Scenario E4: Raw DB query proves new directory name child_folder_renamed exists exactly once');
+    test(rawFolderRowsE.rows.length === 1, 'Scenario E5: Raw DB query proves exactly 1 directory row exists in jarvis_level1_folder_inventory for root');
+    test(rawFolderRowsE.rows.every(r => r.root_alias === 'test_p4b1_root_a'), 'Scenario E6: Raw DB query proves all remaining folder rows are scoped to test_p4b1_root_a');
+
     // -------------------------------------------------------------
     // SCENARIO F: Empty-Root Reconciliation
     // -------------------------------------------------------------
@@ -251,8 +261,18 @@ async function runSuite() {
     const emptyFiles = await localInventory.listIndexedFiles();
     const emptyFolders = await localInventory.getFolderInventory('test_p4b1_root_a');
 
-    test(emptyFiles.length === 0, 'Scenario F1: Empty root scan removes all derived file index rows');
-    test(emptyFolders.length === 0, 'Scenario F2: Empty root scan removes all derived folder inventory rows');
+    test(emptyFiles.length === 0, 'Scenario F1: Empty root scan removes all derived file index rows from listIndexedFiles');
+    test(emptyFolders.length === 0, 'Scenario F2: Empty root scan removes all derived folder inventory rows from getFolderInventory');
+
+    // Raw DB count assertions for empty root
+    const folderRecordA = await pgClient.query("SELECT id FROM jarvis_local_folders WHERE safe_alias = 'test_p4b1_root_a';");
+    const folderIdA = folderRecordA.rows[0].id;
+
+    const rawFileCountF = await pgClient.query("SELECT COUNT(*) FROM jarvis_local_file_index WHERE folder_id = $1;", [folderIdA]);
+    const rawFolderCountF = await pgClient.query("SELECT COUNT(*) FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", ['test_p4b1_root_a']);
+
+    test(parseInt(rawFileCountF.rows[0].count, 10) === 0, 'Scenario F3: Raw DB query SELECT COUNT(*) FROM jarvis_local_file_index returns 0 for empty root');
+    test(parseInt(rawFolderCountF.rows[0].count, 10) === 0, 'Scenario F4: Raw DB query SELECT COUNT(*) FROM jarvis_level1_folder_inventory returns 0 for empty root');
 
     // -------------------------------------------------------------
     // SCENARIO G: Cross-Root Isolation
@@ -260,30 +280,40 @@ async function runSuite() {
     console.log('\n--- Testing Scenario G: Cross-Root Isolation ---');
     await registerAndApprove('test_p4b1_root_b');
 
-    // Populate Root A and Root B with duplicate filename 'shared_file.txt'
+    // Populate Root A and Root B with duplicate filename 'shared_file.txt' and a child folder in Root B
     fs.writeFileSync(path.join(testSubdirA, 'shared_file.txt'), 'root A payload');
     fs.writeFileSync(path.join(testSubdirB, 'shared_file.txt'), 'root B payload');
+    fs.mkdirSync(path.join(testSubdirB, 'root_b_child_dir'), { recursive: true });
 
     const resA = await localInventory.scanApprovedFolders('test_p4b1_root_a', mockAdminMessage);
     const resB = await localInventory.scanApprovedFolders('test_p4b1_root_b', mockAdminMessage);
     const allCrossFiles = await localInventory.listIndexedFiles();
     test(allCrossFiles.length === 2, 'Scenario G1: Independent roots index same filename into distinct rows');
 
-    // Modify Root A and rescan
+    const rawRootBFoldersPre = await pgClient.query("SELECT * FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4b1_root_b';");
+    test(rawRootBFoldersPre.rows.length === 1 && rawRootBFoldersPre.rows[0].relative_path === 'root_b_child_dir', 'Scenario G2: Root B contains raw folder inventory row root_b_child_dir');
+
+    // Empty Root A completely and rescan
     fs.unlinkSync(path.join(testSubdirA, 'shared_file.txt'));
     await localInventory.scanApprovedFolders('test_p4b1_root_a', mockAdminMessage);
 
     const postIsoFiles = await localInventory.listIndexedFiles();
-    test(postIsoFiles.length === 1 && postIsoFiles[0].safe_alias === 'test_p4b1_root_b', 'Scenario G2: Reconciling Root A leaves Root B index completely untouched');
+    test(postIsoFiles.length === 1 && postIsoFiles[0].safe_alias === 'test_p4b1_root_b', 'Scenario G3: Reconciling Root A leaves Root B index completely untouched');
+
+    const rawRootBFoldersPost = await pgClient.query("SELECT * FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4b1_root_b';");
+    test(rawRootBFoldersPost.rows.length === 1 && JSON.stringify(rawRootBFoldersPre.rows) === JSON.stringify(rawRootBFoldersPost.rows), 'Scenario G4: Raw DB query proves emptying Root A leaves Root B raw folder inventory rows completely untouched');
 
     // -------------------------------------------------------------
     // SCENARIO H: Failed-Scan Transactional Rollback
     // -------------------------------------------------------------
     console.log('\n--- Testing Scenario H: Failed-Scan Transactional Rollback ---');
-    // Ensure Root B has 1 file currently
-    const rootBBeforeFail = await localInventory.listIndexedFiles();
+    const folderRecordB = await pgClient.query("SELECT id FROM jarvis_local_folders WHERE safe_alias = 'test_p4b1_root_b';");
+    const folderIdB = folderRecordB.rows[0].id;
 
-    // Force an error inside scan Approved Folders by mocking readdirSync failure
+    const rawFilesPreH = await pgClient.query("SELECT * FROM jarvis_local_file_index WHERE folder_id = $1;", [folderIdB]);
+    const rawFoldersPreH = await pgClient.query("SELECT * FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", ['test_p4b1_root_b']);
+
+    // Force an error inside scanApprovedFolders by mocking readdirSync failure
     const origReaddir = fs.readdirSync;
     fs.readdirSync = function() {
       throw new Error('Simulated filesystem I/O error during scan');
@@ -300,8 +330,11 @@ async function runSuite() {
     }
 
     test(scanFailedErr, 'Scenario H2: Scan fails closed');
-    const rootBAfterFail = await localInventory.listIndexedFiles();
-    test(JSON.stringify(rootBBeforeFail) === JSON.stringify(rootBAfterFail), 'Scenario H3: Failed scan preserves prior complete snapshot via transaction rollback');
+    const rawFilesPostH = await pgClient.query("SELECT * FROM jarvis_local_file_index WHERE folder_id = $1;", [folderIdB]);
+    const rawFoldersPostH = await pgClient.query("SELECT * FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", ['test_p4b1_root_b']);
+
+    test(JSON.stringify(rawFilesPreH.rows) === JSON.stringify(rawFilesPostH.rows), 'Scenario H3: Failed scan preserves prior raw file index rows via transaction rollback');
+    test(JSON.stringify(rawFoldersPreH.rows) === JSON.stringify(rawFoldersPostH.rows), 'Scenario H4: Failed scan preserves prior raw folder inventory rows via transaction rollback');
 
     // -------------------------------------------------------------
     // SCENARIO I: Transactional Revocation & Metadata Invalidation
@@ -309,11 +342,11 @@ async function runSuite() {
     console.log('\n--- Testing Scenario I: Transactional Revocation ---');
     await localInventory.revokeLocalFolder('test_p4b1_root_b', mockAdminMessage);
 
-    const revokedFiles = await localInventory.listIndexedFiles();
-    const revokedFolders = await localInventory.getFolderInventory('test_p4b1_root_b');
+    const rawRevokedFiles = await pgClient.query("SELECT COUNT(*) FROM jarvis_local_file_index WHERE folder_id = $1;", [folderIdB]);
+    const rawRevokedFolders = await pgClient.query("SELECT COUNT(*) FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4b1_root_b';");
 
-    test(revokedFiles.length === 0, 'Scenario I1: Revoking root purges derived file index entries');
-    test(revokedFolders.length === 0, 'Scenario I2: Revoking root purges derived folder inventory entries');
+    test(parseInt(rawRevokedFiles.rows[0].count, 10) === 0, 'Scenario I1: Raw DB query SELECT COUNT(*) FROM jarvis_local_file_index returns 0 for revoked root');
+    test(parseInt(rawRevokedFolders.rows[0].count, 10) === 0, 'Scenario I2: Raw DB query SELECT COUNT(*) FROM jarvis_level1_folder_inventory returns 0 for revoked root');
 
     let revokedScanBlocked = false;
     try {
@@ -334,9 +367,15 @@ async function runSuite() {
     // Reapprove root B via DB status update
     await pgClient.query("UPDATE jarvis_local_folders SET status = 'approved' WHERE safe_alias = 'test_p4b1_root_b';");
 
-    // Before rescanning, review queries must return empty
+    // Before rescanning, raw DB queries and review queries must return 0 rows
+    const rawReapprovedFilesPreScan = await pgClient.query("SELECT COUNT(*) FROM jarvis_local_file_index WHERE folder_id = $1;", [folderIdB]);
+    const rawReapprovedFoldersPreScan = await pgClient.query("SELECT COUNT(*) FROM jarvis_level1_folder_inventory WHERE root_alias = 'test_p4b1_root_b';");
+
+    test(parseInt(rawReapprovedFilesPreScan.rows[0].count, 10) === 0, 'Scenario J1a: Raw DB query SELECT COUNT(*) FROM jarvis_local_file_index returns 0 before rescan on reapproved root');
+    test(parseInt(rawReapprovedFoldersPreScan.rows[0].count, 10) === 0, 'Scenario J1b: Raw DB query SELECT COUNT(*) FROM jarvis_level1_folder_inventory returns 0 before rescan on reapproved root');
+
     const preScanReapprovedFiles = await localInventory.listIndexedFiles();
-    test(preScanReapprovedFiles.length === 0, 'Scenario J1: Reapproved root exhibits zero stale snapshot leakage before rescan');
+    test(preScanReapprovedFiles.length === 0, 'Scenario J2: Reapproved root exhibits zero stale snapshot leakage before rescan');
 
     // Add new file and rescan
     if (fs.existsSync(path.join(testSubdirB, 'shared_file.txt'))) {
