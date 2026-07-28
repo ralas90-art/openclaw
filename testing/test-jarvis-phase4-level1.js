@@ -280,7 +280,7 @@ async function runSuite() {
     test(tgInventory.includes('child_dir_a') && tgInventory.includes('child_dir_b'), '/jarvis_inventory output lists Level-1 child directories');
 
     const tgFiles = await handleCommand('/jarvis_files', mockMessage);
-    test(tgFiles.includes('Deprecated'), '/jarvis_files returns deprecation message');
+    test(tgFiles.includes('Recent Indexed Files') || tgFiles.includes('Indexed Files'), '/jarvis_files returns file review UX');
 
     const tgApproveOld = await handleCommand('/jarvis_approve_folder test_p4a_valid', mockMessage);
     test(tgApproveOld.includes('deprecated'), '/jarvis_approve_folder returns deprecation message');

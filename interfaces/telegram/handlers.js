@@ -590,7 +590,8 @@ async function handleCommand(text, message) {
     return await handleJarvisRevokeFolder(alias, message);
   }
   if (command === '/jarvis_files' || command === '/jarvisfiles') {
-    return await handleJarvisFiles(message);
+    const argsStr = text.substring(command.length).trim();
+    return await handleJarvisFiles(argsStr, message);
   }
 
   if (command === '/jarvis_connectors' || command === '/jarvisconnectors') {
@@ -4831,6 +4832,20 @@ async function handleJarvisArchiveProcessed(message) {
   }
 }
 
+function escapeMarkdown(text) {
+  if (!text) return '';
+  return String(text).replace(/[_*`\[\]]/g, '\\$&');
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (i === 0) return `${bytes} B`;
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
 async function handleJarvisFolders(filter, message) {
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_folders', message);
@@ -4839,18 +4854,29 @@ async function handleJarvisFolders(filter, message) {
   }
 
   const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
   try {
     const folders = await localInventory.listLocalFolders(filter);
+    const cleanFilter = filter ? filter.trim().toLowerCase() : null;
+    let title = '📁 *Jarvis Local Inventory Roots*';
+    if (cleanFilter === 'pending') title = '📁 *Pending Local Folders*';
+    else if (cleanFilter === 'approved') title = '📁 *Approved Local Folders*';
+    else if (cleanFilter === 'revoked') title = '📁 *Revoked Local Folders*';
+
     if (folders.length === 0) {
-      const filterDesc = filter ? ` (${filter})` : '';
-      return `📁 *Jarvis Local Inventory Roots*\n\nNo matching configured inventory roots${filterDesc} found.`;
+      return `${title}\n\nNo matching folders found.`;
     }
 
-    let md = `📁 *Jarvis Local Inventory Roots*\n\n`;
+    let md = `${title}\n\n`;
     for (const f of folders) {
       const statusIcon = f.status === 'approved' ? '✅ Approved' : (f.status === 'pending' ? '⏳ Pending Approval' : '❌ Revoked');
       const lastScanned = f.last_scanned_at ? new Date(f.last_scanned_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC' : 'Never';
-      md += `• *Alias:* \`${f.safe_alias}\`\n  *Status:* ${statusIcon}\n  *Fingerprint Snippet:* \`${(f.root_fingerprint || '').substring(0, 12)}...\`\n  *Last Scanned:* ${lastScanned}\n\n`;
+      const alias = f.safe_alias;
+      const fpSnippet = (f.root_fingerprint || '').substring(0, 12);
+      md += `• *Alias:* \`${alias}\`\n  *Status:* ${statusIcon}\n  *Folder ID:* \`${f.id}\`\n  *Fingerprint Snippet:* \`${fpSnippet}...\`\n  *Last Scanned:* ${lastScanned}\n\n`;
     }
     return md;
   } catch (err) {
@@ -4972,14 +4998,89 @@ async function handleJarvisRevokeFolder(alias, message) {
   }
 }
 
-async function handleJarvisFiles(message) {
+async function handleJarvisFiles(argsStr, message) {
+  if (argsStr && typeof argsStr === 'object' && !message) {
+    message = argsStr;
+    argsStr = '';
+  }
+
   const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
   const permCheck = requireCommandPermission('/jarvis_files', message);
   if (!permCheck.allowed) {
     return formatPermissionDenied('/jarvis_files', permCheck.reason, message);
   }
 
-  return `⚠️ Command Deprecated: File-level inventory indexing has been removed in Phase 4A. Use \`/jarvis_inventory <approved_alias>\` to view level-1 folder metadata.`;
+  const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
+  const parts = typeof argsStr === 'string' ? argsStr.trim().split(/\s+/).filter(Boolean) : [];
+  const subCmd = parts[0] ? parts[0].toLowerCase() : 'recent';
+
+  let filterType = 'recent';
+  let extension = null;
+  let projectSlug = null;
+
+  const knownSubCmds = ['recent', 'large', 'by_type', 'unmatched', 'project'];
+
+  if (subCmd === 'recent') {
+    filterType = 'recent';
+  } else if (subCmd === 'large') {
+    filterType = 'large';
+  } else if (subCmd === 'by_type') {
+    filterType = 'by_type';
+    extension = parts[1];
+    if (!extension) {
+      return `❌ Error: Missing extension for by_type filter. Usage: \`/jarvis_files by_type <extension>\``;
+    }
+  } else if (subCmd === 'unmatched') {
+    filterType = 'unmatched';
+  } else if (subCmd === 'project') {
+    filterType = 'project';
+    projectSlug = parts[1];
+    if (!projectSlug) {
+      return `❌ Error: Missing project slug for project filter. Usage: \`/jarvis_files project <project_slug>\``;
+    }
+  } else if (!knownSubCmds.includes(subCmd)) {
+    filterType = 'project';
+    projectSlug = subCmd;
+  }
+
+  try {
+    const files = await localInventory.listIndexedFiles({
+      filterType,
+      extension,
+      projectSlug,
+      limit: 15
+    });
+
+    let title = '📄 *Recent Indexed Files*';
+    if (filterType === 'large') title = '📄 *Largest Indexed Files*';
+    else if (filterType === 'by_type') title = `📄 *Indexed Files of Type: ${escapeMarkdown(extension.replace(/^\.+/, ''))}*`;
+    else if (filterType === 'unmatched') title = '📄 *Unmatched Indexed Files*';
+    else if (filterType === 'project') title = `📄 *Indexed Files for Project: ${escapeMarkdown(projectSlug)}*`;
+
+    if (files.length === 0) {
+      return `${title}\n\nNo matching indexed files found.`;
+    }
+
+    let md = `${title}\n\n`;
+    for (const f of files) {
+      const fileName = f.file_name;
+      const alias = f.safe_alias;
+      const ext = f.file_extension;
+      const sizeStr = formatBytes(f.file_size_bytes);
+      const relPath = f.relative_path;
+      const projStr = f.suggested_project ? `\`${f.suggested_project}\` (${escapeMarkdown(f.match_reason)})` : `\`unmatched\``;
+
+      md += `• *File:* \`${fileName}\`\n  *Size:* \`${sizeStr}\` | *Type:* \`${ext}\`\n  *Alias:* \`${alias}\`\n  *Project:* ${projStr}\n  *Path:* \`${relPath}\`\n\n`;
+    }
+
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
 }
 
 

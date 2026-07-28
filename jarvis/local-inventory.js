@@ -190,10 +190,14 @@ async function listLocalFolders(filter = null) {
   }
 
   const cleanFilter = filter ? filter.trim().toLowerCase() : null;
+  if (cleanFilter && !['pending', 'approved', 'revoked'].includes(cleanFilter)) {
+    throw new Error(`Invalid folder status filter '${filter}'. Valid options: pending, approved, revoked.`);
+  }
+
   let sql = "SELECT id, safe_alias, status, root_fingerprint, approved_by, approved_at, last_scanned_at, created_at, updated_at FROM jarvis_local_folders";
   let params = [];
 
-  if (cleanFilter === 'pending' || cleanFilter === 'approved' || cleanFilter === 'revoked') {
+  if (cleanFilter) {
     sql += " WHERE status = $1 ORDER BY created_at DESC;";
     params = [cleanFilter];
   } else {
@@ -394,6 +398,149 @@ async function revokeLocalFolder(alias, reqMessage = null) {
 }
 
 /**
+ * Sanitizes file path for display by removing absolute root prefixes and drive letters
+ */
+function sanitizePathForDisplay(filePath, workspaceRoot) {
+  if (!filePath) return '';
+  let cleaned = String(filePath).replace(/\\/g, '/');
+  if (workspaceRoot) {
+    const normRoot = String(workspaceRoot).replace(/\\/g, '/');
+    if (cleaned.startsWith(normRoot)) {
+      cleaned = cleaned.substring(normRoot.length).replace(/^\/+/, '');
+    }
+  }
+  cleaned = cleaned.replace(/^[a-zA-Z]:[/\\]/, '');
+  return cleaned.replace(/^\/+/, '');
+}
+
+/**
+ * Matches filename and relative path against active project slugs using boundary-aware logic
+ */
+function matchProjectSlug(fileName, relativeOrFilePath, activeSlugs = []) {
+  if (!fileName && !relativeOrFilePath) return { slug: null, reason: 'Unmatched' };
+  const target = `${relativeOrFilePath || ''}/${fileName || ''}`.toLowerCase();
+
+  let bestSlug = null;
+  for (const slug of activeSlugs) {
+    if (!slug) continue;
+    const normSlug = slug.toLowerCase();
+    const escaped = normSlug.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    const regex = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
+    if (regex.test(target)) {
+      if (!bestSlug || normSlug.length > bestSlug.length) {
+        bestSlug = normSlug;
+      }
+    }
+  }
+
+  if (bestSlug) {
+    return { slug: bestSlug, reason: `Matched project slug '${bestSlug}'` };
+  }
+  return { slug: null, reason: 'Unmatched' };
+}
+
+/**
+ * Phase 4B: Queries previously stored metadata from local inventory index (Zero filesystem access)
+ */
+async function listIndexedFiles(options = {}) {
+  if (!isInventoryEnabled()) {
+    throw new Error('Local inventory feature is disabled (JARVIS_LOCAL_INVENTORY_ENABLED=false).');
+  }
+
+  const filterType = options.filterType ? options.filterType.trim().toLowerCase() : 'recent';
+  const limit = Math.min(Math.max(parseInt(options.limit, 10) || 15, 1), 100);
+
+  let extension = null;
+  if (filterType === 'by_type') {
+    if (!options.extension || typeof options.extension !== 'string' || !options.extension.trim()) {
+      throw new Error('Extension parameter is required for by_type filter.');
+    }
+    extension = options.extension.trim().toLowerCase().replace(/^\.+/, '');
+    if (!/^[a-zA-Z0-9_-]+$/.test(extension)) {
+      throw new Error('Invalid extension format.');
+    }
+  }
+
+  let projectSlug = null;
+  if (filterType === 'project') {
+    if (!options.projectSlug || typeof options.projectSlug !== 'string' || !options.projectSlug.trim()) {
+      throw new Error('Project slug parameter is required for project filter.');
+    }
+    projectSlug = options.projectSlug.trim().toLowerCase();
+    if (!/^[a-zA-Z0-9_-]+$/.test(projectSlug)) {
+      throw new Error('Invalid project slug format.');
+    }
+  }
+
+  let activeSlugs = [];
+  try {
+    const projRows = await queryDb("SELECT slug FROM jarvis_projects WHERE status = 'active';");
+    activeSlugs = projRows.map(r => r.slug.toLowerCase());
+  } catch (err) {}
+
+  if (!activeSlugs.includes('septivolt')) activeSlugs.push('septivolt');
+  if (!activeSlugs.includes('cresca-os')) activeSlugs.push('cresca-os');
+  if (!activeSlugs.includes('g-g-cleaning')) activeSlugs.push('g-g-cleaning');
+  if (!activeSlugs.includes('openclaw')) activeSlugs.push('openclaw');
+
+  let sql = `
+    SELECT
+      i.id,
+      i.folder_id,
+      i.file_name,
+      i.file_extension,
+      i.file_size_bytes,
+      i.modified_at,
+      i.indexed_at,
+      COALESCE(i.relative_path, i.file_path) as relative_path,
+      f.safe_alias
+    FROM jarvis_local_file_index i
+    JOIN jarvis_local_folders f ON i.folder_id = f.id
+  `;
+  const params = [];
+
+  if (filterType === 'by_type') {
+    sql += ` WHERE LOWER(TRIM(LEADING '.' FROM i.file_extension)) = $1`;
+    params.push(extension);
+  }
+
+  if (filterType === 'large') {
+    sql += ` ORDER BY i.file_size_bytes DESC, i.file_name ASC, i.id ASC`;
+  } else {
+    sql += ` ORDER BY COALESCE(i.modified_at, i.indexed_at) DESC, i.file_name ASC, i.id ASC`;
+  }
+
+  const rawRows = await queryDb(sql, params);
+  const workspaceRoot = getWorkspaceRoot();
+
+  const processed = rawRows.map(row => {
+    const sanitizedRelPath = sanitizePathForDisplay(row.relative_path, workspaceRoot);
+    const matchRes = matchProjectSlug(row.file_name, sanitizedRelPath, activeSlugs);
+    return {
+      id: row.id,
+      safe_alias: row.safe_alias,
+      file_name: row.file_name,
+      file_extension: (row.file_extension || '').replace(/^\.+/, '').toLowerCase(),
+      file_size_bytes: Number(row.file_size_bytes || 0),
+      modified_at: row.modified_at || row.indexed_at,
+      indexed_at: row.indexed_at,
+      relative_path: sanitizedRelPath,
+      suggested_project: matchRes.slug,
+      match_reason: matchRes.reason
+    };
+  });
+
+  let filtered = processed;
+  if (filterType === 'unmatched') {
+    filtered = processed.filter(item => item.suggested_project === null);
+  } else if (filterType === 'project') {
+    filtered = processed.filter(item => item.suggested_project === projectSlug);
+  }
+
+  return filtered.slice(0, limit);
+}
+
+/**
  * Deprecated file-level index helper
  */
 async function getFileSuggestions() {
@@ -414,5 +561,8 @@ module.exports = {
   scanApprovedFolders,
   getFolderInventory,
   revokeLocalFolder,
-  getFileSuggestions
+  getFileSuggestions,
+  listIndexedFiles,
+  sanitizePathForDisplay,
+  matchProjectSlug
 };

@@ -379,6 +379,14 @@ async function runMigrations() {
           indexed_at TIMESTAMPTZ DEFAULT NOW()
         );
       `);
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS file_path TEXT;");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS file_name TEXT;");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS file_extension TEXT;");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS modified_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS indexed_at TIMESTAMPTZ DEFAULT NOW();");
+      await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS relative_path TEXT;");
+
 
 
       await client.query(`
