@@ -257,25 +257,38 @@ async function scanApprovedFolders(alias, reqMessage = null) {
     }
 
     const childFolders = [];
+    const childFiles = [];
 
     for (const dirent of dirents) {
       // 1. Skip symlinks
       if (dirent.isSymbolicLink()) continue;
 
-      // 2. Ignore non-directories (files strictly ignored!)
-      if (!dirent.isDirectory()) continue;
-
-      // 3. Skip ignored system directories
+      // 2. Skip ignored system directories
       if (IGNORE_DIRECTORIES.includes(dirent.name)) continue;
 
-      childFolders.push(dirent.name);
+      if (dirent.isDirectory()) {
+        childFolders.push(dirent.name);
+      } else if (dirent.isFile()) {
+        try {
+          const filePath = path.join(canonicalPath, dirent.name);
+          const stat = fs.statSync(filePath);
+          const ext = path.extname(dirent.name).replace(/^\.+/, '').toLowerCase();
+          childFiles.push({
+            name: dirent.name,
+            extension: ext,
+            size: stat.size,
+            mtime: stat.mtime,
+            relativePath: dirent.name
+          });
+        } catch (err) {}
+      }
     }
 
     if (childFolders.length > MAX_CHILD_FOLDERS) {
       throw new Error(`Scan aborted: Root alias '${alias}' contains ${childFolders.length} child directories, exceeding maximum limit of ${MAX_CHILD_FOLDERS}.`);
     }
 
-    // Persist Level-1 child inventory in a database transaction
+    // Persist Level-1 child inventory and file index in a database transaction
     await withTransaction(async (client) => {
       // 1. Upsert immediate child folders
       for (const folderName of childFolders) {
@@ -306,7 +319,41 @@ async function scanApprovedFolders(alias, reqMessage = null) {
         );
       }
 
-      // 3. Update last_scanned_at on root record
+      // 3. Upsert immediate Level-1 files into jarvis_local_file_index
+      for (const file of childFiles) {
+        const safeRelPath = `${alias}/${file.relativePath}`;
+        await client.query(
+          `INSERT INTO jarvis_local_file_index (
+             folder_id, file_path, relative_path, file_name, file_extension, file_size_bytes, modified_at, indexed_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (file_path) DO UPDATE SET
+             relative_path = EXCLUDED.relative_path,
+             file_name = EXCLUDED.file_name,
+             file_extension = EXCLUDED.file_extension,
+             file_size_bytes = EXCLUDED.file_size_bytes,
+             modified_at = EXCLUDED.modified_at,
+             indexed_at = NOW();`,
+          [folderRecord.id, safeRelPath, file.relativePath, file.name, file.extension, file.size, file.mtime]
+        );
+      }
+
+      // 4. Delete removed files for this root folder
+      if (childFiles.length > 0) {
+        const currentFilePaths = childFiles.map(f => `${alias}/${f.relativePath}`);
+        await client.query(
+          `DELETE FROM jarvis_local_file_index
+           WHERE folder_id = $1 AND NOT (file_path = ANY($2::text[]));`,
+          [folderRecord.id, currentFilePaths]
+        );
+      } else {
+        await client.query(
+          `DELETE FROM jarvis_local_file_index
+           WHERE folder_id = $1;`,
+          [folderRecord.id]
+        );
+      }
+
+      // 5. Update last_scanned_at on root record
       await client.query(
         "UPDATE jarvis_local_folders SET last_scanned_at = NOW(), updated_at = NOW() WHERE safe_alias = $1;",
         [alias]
@@ -401,16 +448,47 @@ async function revokeLocalFolder(alias, reqMessage = null) {
  * Sanitizes file path for display by removing absolute root prefixes and drive letters
  */
 function sanitizePathForDisplay(filePath, workspaceRoot) {
-  if (!filePath) return '';
-  let cleaned = String(filePath).replace(/\\/g, '/');
+  if (!filePath || typeof filePath !== 'string') return '';
+
+  let cleaned = filePath.replace(/\\/g, '/');
+
   if (workspaceRoot) {
     const normRoot = String(workspaceRoot).replace(/\\/g, '/');
     if (cleaned.startsWith(normRoot)) {
-      cleaned = cleaned.substring(normRoot.length).replace(/^\/+/, '');
+      cleaned = cleaned.substring(normRoot.length);
     }
   }
-  cleaned = cleaned.replace(/^[a-zA-Z]:[/\\]/, '');
-  return cleaned.replace(/^\/+/, '');
+
+  // Remove drive letters (e.g., C:, D:)
+  cleaned = cleaned.replace(/^[a-zA-Z]:/, '');
+
+  // Remove UNC network share prefixes (e.g. //server/share/)
+  cleaned = cleaned.replace(/^\/\/[^/]+\/[^/]+\//, '/');
+
+  // Filter path traversal segments (.. or .)
+  cleaned = cleaned.split('/')
+    .filter(segment => segment !== '..' && segment !== '.' && segment !== '')
+    .join('/');
+
+  // Redact known hostile / system directory prefixes if path remains absolute or unsafe
+  const forbiddenPrefixes = ['etc/', 'home/', 'users/', 'var/', 'usr/', 'tmp/', 'private/', 'windows/', 'system32/'];
+  const lowerCleaned = cleaned.toLowerCase();
+  for (const prefix of forbiddenPrefixes) {
+    if (lowerCleaned.startsWith(prefix) || lowerCleaned.includes('/' + prefix)) {
+      cleaned = path.posix.basename(cleaned);
+      break;
+    }
+  }
+
+  if (path.isAbsolute(filePath) && !cleaned) {
+    cleaned = path.posix.basename(filePath.replace(/\\/g, '/'));
+  }
+
+  if (!cleaned) {
+    cleaned = path.posix.basename(filePath.replace(/\\/g, '/'));
+  }
+
+  return cleaned;
 }
 
 /**
