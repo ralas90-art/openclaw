@@ -290,6 +290,20 @@ async function scanApprovedFolders(alias, reqMessage = null) {
 
     // Persist Level-1 child inventory and file index in a database transaction
     await withTransaction(async (client) => {
+      const lockHash = crypto.createHash('sha256').update(`jarvis_scan_${alias}`).digest();
+      const lockKey = lockHash.readInt32BE(0);
+      await client.query("SELECT pg_advisory_xact_lock($1);", [lockKey]);
+
+      // Re-verify root approval status under transaction lock
+      const lockRows = await client.query(
+        "SELECT * FROM jarvis_local_folders WHERE safe_alias = $1 FOR UPDATE;",
+        [alias]
+      );
+      if (lockRows.rows.length === 0 || lockRows.rows[0].status !== 'approved') {
+        throw new Error(`Root alias '${alias}' is not approved (Current status: '${lockRows.rows[0]?.status || 'unknown'}'). Scan aborted.`);
+      }
+      const currentFolderRecord = lockRows.rows[0];
+
       // 1. Upsert immediate child folders
       for (const folderName of childFolders) {
         await client.query(
@@ -302,12 +316,12 @@ async function scanApprovedFolders(alias, reqMessage = null) {
         );
       }
 
-      // 2. Mark missing folders inactive
+      // 2. Reconcile missing child folders (mark inactive for stale entries)
       if (childFolders.length > 0) {
         await client.query(
           `UPDATE jarvis_level1_folder_inventory
            SET status = 'inactive'
-           WHERE root_alias = $1 AND NOT (relative_path = ANY($2::text[]));`,
+           WHERE root_alias = $1 AND relative_path NOT IN (SELECT unnest($2::text[]));`,
           [alias, childFolders]
         );
       } else {
@@ -327,13 +341,14 @@ async function scanApprovedFolders(alias, reqMessage = null) {
              folder_id, file_path, relative_path, file_name, file_extension, file_size_bytes, modified_at, indexed_at
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
            ON CONFLICT (file_path) DO UPDATE SET
+             folder_id = EXCLUDED.folder_id,
              relative_path = EXCLUDED.relative_path,
              file_name = EXCLUDED.file_name,
              file_extension = EXCLUDED.file_extension,
              file_size_bytes = EXCLUDED.file_size_bytes,
              modified_at = EXCLUDED.modified_at,
              indexed_at = NOW();`,
-          [folderRecord.id, safeRelPath, file.relativePath, file.name, file.extension, file.size, file.mtime]
+          [currentFolderRecord.id, safeRelPath, file.relativePath, file.name, file.extension, file.size, file.mtime]
         );
       }
 
@@ -342,14 +357,14 @@ async function scanApprovedFolders(alias, reqMessage = null) {
         const currentFilePaths = childFiles.map(f => `${alias}/${f.relativePath}`);
         await client.query(
           `DELETE FROM jarvis_local_file_index
-           WHERE folder_id = $1 AND NOT (file_path = ANY($2::text[]));`,
-          [folderRecord.id, currentFilePaths]
+           WHERE folder_id = $1 AND file_path NOT IN (SELECT unnest($2::text[]));`,
+          [currentFolderRecord.id, currentFilePaths]
         );
       } else {
         await client.query(
           `DELETE FROM jarvis_local_file_index
            WHERE folder_id = $1;`,
-          [folderRecord.id]
+          [currentFolderRecord.id]
         );
       }
 
@@ -395,6 +410,14 @@ async function getFolderInventory(alias) {
     throw new Error('Alias parameter is required.');
   }
 
+  const folderCheck = await queryDb(
+    "SELECT status FROM jarvis_local_folders WHERE safe_alias = $1;",
+    [alias]
+  );
+  if (folderCheck.length === 0 || folderCheck[0].status !== 'approved') {
+    return [];
+  }
+
   const rows = await queryDb(
     `SELECT folder_name, relative_path, status, first_seen_at, last_seen_at
      FROM jarvis_level1_folder_inventory
@@ -420,17 +443,32 @@ async function revokeLocalFolder(alias, reqMessage = null) {
 
   const actor = normalizeClientChatId(reqMessage);
 
-  const rows = await queryDb(
-    `UPDATE jarvis_local_folders
-     SET status = 'revoked', updated_at = NOW()
-     WHERE safe_alias = $1
-     RETURNING id, safe_alias, status, root_fingerprint, updated_at;`,
-    [alias]
-  );
+  const lockHash = crypto.createHash('sha256').update(`jarvis_scan_${alias}`).digest();
+  const lockKey = lockHash.readInt32BE(0);
 
-  if (rows.length === 0) {
-    throw new Error(`Root alias '${alias}' not found.`);
-  }
+  const folderRecord = await withTransaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock($1);", [lockKey]);
+
+    const rows = await client.query(
+      `UPDATE jarvis_local_folders
+       SET status = 'revoked', updated_at = NOW()
+       WHERE safe_alias = $1
+       RETURNING id, safe_alias, status, root_fingerprint, updated_at;`,
+      [alias]
+    );
+
+    if (rows.rows.length === 0) {
+      throw new Error(`Root alias '${alias}' not found.`);
+    }
+
+    const rec = rows.rows[0];
+
+    // Purge derived inventory metadata for this root in the same transaction
+    await client.query("DELETE FROM jarvis_local_file_index WHERE folder_id = $1;", [rec.id]);
+    await client.query("DELETE FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", [alias]);
+
+    return rec;
+  });
 
   // Audit event
   try {
@@ -441,7 +479,7 @@ async function revokeLocalFolder(alias, reqMessage = null) {
     );
   } catch (err) {}
 
-  return rows[0];
+  return folderRecord;
 }
 
 /**
@@ -574,11 +612,12 @@ async function listIndexedFiles(options = {}) {
       f.safe_alias
     FROM jarvis_local_file_index i
     JOIN jarvis_local_folders f ON i.folder_id = f.id
+    WHERE f.status = 'approved'
   `;
   const params = [];
 
   if (filterType === 'by_type') {
-    sql += ` WHERE LOWER(TRIM(LEADING '.' FROM i.file_extension)) = $1`;
+    sql += ` AND LOWER(TRIM(LEADING '.' FROM i.file_extension)) = $1`;
     params.push(extension);
   }
 
