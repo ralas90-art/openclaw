@@ -777,6 +777,42 @@ const COMMAND_PERMISSIONS = {
     capability: 'read_runtime',
     description: 'List indexed local files and mapping suggestions.'
   },
+  jarvis_scan_recursive: {
+    commands: ['/jarvis_scan_recursive'],
+    tier: 'state_mutation',
+    category: 'system_maintenance',
+    requiresAdmin: true,
+    mutatesState: true,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'admin_maintenance',
+    description: 'Perform bounded recursive metadata scan for an approved root alias.'
+  },
+  jarvis_find_files: {
+    commands: ['/jarvis_find_files'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'Search indexed relative file paths and names by metadata query.'
+  },
+  jarvis_scan_status: {
+    commands: ['/jarvis_scan_status'],
+    tier: 'read_only',
+    category: 'runtime_visibility',
+    requiresAdmin: true,
+    mutatesState: false,
+    generatesOutput: false,
+    publishesExternally: false,
+    externalAction: false,
+    capability: 'read_runtime',
+    description: 'View metadata scan status and statistics for an approved root alias.'
+  },
   jarvis_connectors: {
     commands: ['/jarvis_connectors'],
     tier: 'read_only',
@@ -1459,6 +1495,9 @@ function normalizeCommand(commandText) {
     'jarvisinventory': 'jarvis_inventory',
     'jarvisrevokefolder': 'jarvis_revoke_folder',
     'jarvisfiles': 'jarvis_files',
+    'jarvisscanrecursive': 'jarvis_scan_recursive',
+    'jarvisfindfiles': 'jarvis_find_files',
+    'jarvisscanstatus': 'jarvis_scan_status',
     'jarvisconnectors': 'jarvis_connectors',
     'jarvisemailsummary': 'jarvis_email_summary',
     'jarvisdriverecent': 'jarvis_drive_recent',

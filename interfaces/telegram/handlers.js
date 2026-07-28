@@ -593,6 +593,18 @@ async function handleCommand(text, message) {
     const argsStr = text.substring(command.length).trim();
     return await handleJarvisFiles(argsStr, message);
   }
+  if (command === '/jarvis_scan_recursive' || command === '/jarvisscanrecursive') {
+    const argsStr = text.substring(command.length).trim();
+    return await handleJarvisScanRecursive(argsStr, message);
+  }
+  if (command === '/jarvis_find_files' || command === '/jarvisfindfiles') {
+    const argsStr = text.substring(command.length).trim();
+    return await handleJarvisFindFiles(argsStr, message);
+  }
+  if (command === '/jarvis_scan_status' || command === '/jarvisscanstatus') {
+    const alias = text.substring(command.length).trim();
+    return await handleJarvisScanStatus(alias, message);
+  }
 
   if (command === '/jarvis_connectors' || command === '/jarvisconnectors') {
     return await handleJarvisConnectors(message);
@@ -5078,6 +5090,117 @@ async function handleJarvisFiles(argsStr, message) {
     }
 
     return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisScanRecursive(argsStr, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_scan_recursive', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_scan_recursive', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
+  const parts = typeof argsStr === 'string' ? argsStr.trim().split(/\s+/).filter(Boolean) : [];
+  const alias = parts[0];
+  const confirmToken = parts[1];
+
+  if (!alias || confirmToken !== 'confirm') {
+    return `⚠️ Alias and confirmation token required. Usage: \`/jarvis_scan_recursive <approved_alias> confirm\``;
+  }
+
+  try {
+    const res = await localInventory.scanApprovedFoldersRecursive(alias, message);
+    return [
+      `🔍 *Recursive Metadata Scan Complete*`,
+      ``,
+      `• *Root Alias:* \`${res.alias}\``,
+      `• *Files Indexed:* ${res.filesIndexed}`,
+      `• *Total Entries Examined:* ${res.totalExamined}`,
+      `• *Status:* \`Completed\``,
+      ``,
+      `Use \`/jarvis_find_files ${res.alias} <query>\` to search indexed files.`
+    ].join('\n');
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisFindFiles(argsStr, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_find_files', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_find_files', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
+  const parts = typeof argsStr === 'string' ? argsStr.trim().split(/\s+/).filter(Boolean) : [];
+  const alias = parts[0];
+  const queryStr = parts.slice(1).join(' ');
+
+  if (!alias || !queryStr) {
+    return `❌ Usage: \`/jarvis_find_files <approved_alias> <query>\``;
+  }
+
+  try {
+    const files = await localInventory.findIndexedFiles(alias, queryStr);
+    if (files.length === 0) {
+      return `🔎 *Metadata Search Results for '${alias}'*\nQuery: \`${escapeMarkdown(queryStr)}\`\n\nNo matching files found.`;
+    }
+
+    let md = `🔎 *Metadata Search Results for '${alias}'*\nQuery: \`${escapeMarkdown(queryStr)}\`\n\n`;
+    for (const f of files) {
+      const sizeKb = (f.file_size_bytes / 1024).toFixed(1);
+      md += `• *File:* \`${f.file_name}\` (Path: \`${f.relative_path}\` | Depth: \`${f.depth}\` | Size: \`${sizeKb} KB\`)\n`;
+    }
+    return md;
+  } catch (err) {
+    return `❌ Error: ${err.message}`;
+  }
+}
+
+async function handleJarvisScanStatus(alias, message) {
+  const { requireCommandPermission, formatPermissionDenied } = require('../../openclaw/runtime/runtime-permissions');
+  const permCheck = requireCommandPermission('/jarvis_scan_status', message);
+  if (!permCheck.allowed) {
+    return formatPermissionDenied('/jarvis_scan_status', permCheck.reason, message);
+  }
+
+  const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
+  if (!alias || typeof alias !== 'string' || !alias.trim()) {
+    return `❌ Usage: \`/jarvis_scan_status <approved_alias>\``;
+  }
+
+  try {
+    const status = await localInventory.getRecursiveScanStatus(alias.trim());
+    const lastScannedL1 = status.last_scanned_at ? new Date(status.last_scanned_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC' : 'Never';
+    const lastScannedRec = status.last_recursive_scanned_at ? new Date(status.last_recursive_scanned_at).toISOString().replace('T', ' ').substring(0, 19) + ' UTC' : 'Never';
+    const statusIcon = status.status === 'approved' ? '✅ Approved' : (status.status === 'pending' ? '⏳ Pending Approval' : '❌ Revoked');
+
+    return [
+      `📊 *Recursive Metadata Scan Status*`,
+      ``,
+      `• *Root Alias:* \`${status.root_alias}\``,
+      `• *Approval Status:* ${statusIcon}`,
+      `• *Indexed Files Count:* \`${status.indexed_file_count}\``,
+      `• *Last Level-1 Scan:* ${lastScannedL1}`,
+      `• *Last Recursive Scan:* ${lastScannedRec}`,
+      `• *State:* \`${status.never_scanned ? 'Never Scanned' : 'Indexed'}\``
+    ].join('\n');
   } catch (err) {
     return `❌ Error: ${err.message}`;
   }

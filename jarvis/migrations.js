@@ -387,6 +387,28 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS indexed_at TIMESTAMPTZ DEFAULT NOW();");
       await client.query("ALTER TABLE jarvis_local_file_index ADD COLUMN IF NOT EXISTS relative_path TEXT;");
 
+      // Phase 4C.0 Bounded Recursive Metadata Search index table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_recursive_file_index (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          folder_id UUID REFERENCES jarvis_local_folders(id) ON DELETE CASCADE,
+          root_alias TEXT NOT NULL,
+          file_path TEXT UNIQUE NOT NULL,
+          relative_path TEXT NOT NULL,
+          file_name TEXT NOT NULL,
+          file_extension TEXT,
+          file_size_bytes BIGINT,
+          depth INTEGER NOT NULL DEFAULT 1,
+          modified_at TIMESTAMPTZ,
+          indexed_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS last_recursive_scanned_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_recursive_file_index ADD COLUMN IF NOT EXISTS root_alias TEXT;");
+      await client.query("ALTER TABLE jarvis_recursive_file_index ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 1;");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_recursive_file_alias ON jarvis_recursive_file_index (root_alias);");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_recursive_file_ext ON jarvis_recursive_file_index (file_extension);");
+
 
 
       await client.query(`

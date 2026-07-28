@@ -99,6 +99,18 @@ async function runTests() {
     assert(freshColCheck.length === 0, 'Fresh schema MUST NOT contain legacy folder_path column');
     console.log('✅ Test 1A: Fresh schema verified (folder_path absent).');
 
+    // Assert Phase 4C.0 jarvis_recursive_file_index table and last_recursive_scanned_at column exist
+    const recursiveTableCheck = await queryDb(
+      "SELECT 1 FROM information_schema.tables WHERE table_name = 'jarvis_recursive_file_index';"
+    );
+    assert(recursiveTableCheck.length === 1, 'Phase 4C.0 jarvis_recursive_file_index table MUST exist');
+
+    const recursiveColCheck = await queryDb(
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'jarvis_local_folders' AND column_name = 'last_recursive_scanned_at';"
+    );
+    assert(recursiveColCheck.length === 1, 'Phase 4C.0 last_recursive_scanned_at column MUST exist on jarvis_local_folders');
+    console.log('✅ Test 1B: Phase 4C.0 recursive index schema verified.');
+
     await runMigrations();
     console.log('✅ Test 2: Second (idempotent) migration run passed.');
 

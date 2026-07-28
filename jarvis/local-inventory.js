@@ -464,6 +464,7 @@ async function revokeLocalFolder(alias, reqMessage = null) {
     // Purge derived inventory metadata for this root in the same transaction
     await client.query("DELETE FROM jarvis_local_file_index WHERE folder_id = $1;", [rec.id]);
     await client.query("DELETE FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", [alias]);
+    await client.query("DELETE FROM jarvis_recursive_file_index WHERE root_alias = $1;", [alias]);
 
     return rec;
   });
@@ -665,6 +666,344 @@ async function getFileSuggestions() {
   };
 }
 
+const IGNORE_RECURSIVE_DIRECTORIES = [
+  '.git', 'node_modules', 'dist', 'build', '.next', 'coverage',
+  '.venv', 'venv', 'vendor', 'tmp', '.cache', '.gemini'
+];
+const MAX_RECURSIVE_DEPTH = 10;
+const MAX_RECURSIVE_ENTRIES = 10000;
+const MAX_RELATIVE_PATH_LENGTH = 1024;
+const MAX_SEARCH_QUERY_LENGTH = 100;
+const MAX_SEARCH_RESULTS = 20;
+
+/**
+ * Executes a bounded recursive file-metadata scan on an approved root alias
+ */
+async function scanApprovedFoldersRecursive(alias, reqMessage = null) {
+  if (!isInventoryEnabled()) {
+    throw new Error('Local inventory feature is disabled (JARVIS_LOCAL_INVENTORY_ENABLED=false).');
+  }
+
+  if (!alias || typeof alias !== 'string') {
+    throw new Error('Alias parameter is required. Usage: /jarvis_scan_recursive <approved_alias> confirm');
+  }
+
+  const actor = normalizeClientChatId(reqMessage);
+  const { canonicalPath, fingerprint } = resolveSafeRoot(alias);
+
+  // Check registration and approval status
+  const rows = await queryDb(
+    "SELECT * FROM jarvis_local_folders WHERE safe_alias = $1;",
+    [alias]
+  );
+  if (rows.length === 0) {
+    throw new Error(`Root alias '${alias}' is not registered. Run /jarvis_add_folder ${alias} first.`);
+  }
+
+  const folderRecord = rows[0];
+  if (folderRecord.status !== 'approved') {
+    throw new Error(`Root alias '${alias}' is not approved (Current status: '${folderRecord.status}'). Must be approved via central queue.`);
+  }
+
+  if (folderRecord.root_fingerprint !== fingerprint) {
+    throw new Error(`Root alias '${alias}' approval fingerprint mismatch. Server configuration path changed; re-approval required.`);
+  }
+
+  // Single active scan lock per root
+  if (activeScans.has(alias)) {
+    throw new Error(`Scan already in progress for root alias '${alias}'. Concurrent scans are prohibited.`);
+  }
+
+  activeScans.add(alias);
+
+  try {
+    const workspaceRoot = getWorkspaceRoot();
+    const canonicalWorkspace = fs.realpathSync(workspaceRoot);
+
+    const collectedFiles = [];
+    let totalExaminedEntries = 0;
+
+    // Helper recursive function
+    function traverse(currentDir, currentDepth) {
+      if (currentDepth > MAX_RECURSIVE_DEPTH) {
+        return; // Bounded depth limit
+      }
+
+      let dirents;
+      try {
+        dirents = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch (err) {
+        throw new Error(`Failed to read directory for root alias '${alias}': ${err.message}`);
+      }
+
+      for (const dirent of dirents) {
+        totalExaminedEntries++;
+        if (totalExaminedEntries > MAX_RECURSIVE_ENTRIES) {
+          throw new Error(`Scan aborted: Examined entry count for root alias '${alias}' exceeded maximum limit of ${MAX_RECURSIVE_ENTRIES}.`);
+        }
+
+        // 1. Skip symlinks, junctions, shortcuts
+        if (dirent.isSymbolicLink()) continue;
+
+        const entryName = dirent.name;
+
+        // 2. Skip hidden files and directories (starting with '.')
+        if (entryName.startsWith('.')) continue;
+
+        // 3. Skip ignored directories
+        if (dirent.isDirectory() && IGNORE_RECURSIVE_DIRECTORIES.includes(entryName.toLowerCase())) {
+          continue;
+        }
+
+        const fullPath = path.join(currentDir, entryName);
+
+        // Path safety & containment check
+        let realPath;
+        try {
+          realPath = fs.realpathSync(fullPath);
+        } catch (err) {
+          continue; // Skip inaccessible or broken entries
+        }
+
+        const isContained = realPath === canonicalWorkspace || realPath.startsWith(canonicalWorkspace + path.sep);
+        if (!isContained) {
+          throw new Error(`Security Exception: Traversal target '${entryName}' resolves outside verified workspace boundary.`);
+        }
+
+        // Additional lstat verification to ensure no symlinks/junctions were followed by realpathSync
+        try {
+          const lstat = fs.lstatSync(fullPath);
+          if (lstat.isSymbolicLink()) continue;
+        } catch (err) {
+          continue;
+        }
+
+        // Calculate relative path from canonical root
+        const relFromRoot = path.relative(canonicalPath, realPath).replace(/\\/g, '/');
+
+        // Path validation: no traversal, no NUL bytes, no control chars, max length
+        if (relFromRoot.includes('\0') || relFromRoot.includes('..') || relFromRoot.length > MAX_RELATIVE_PATH_LENGTH || /[\x00-\x1F\x7F]/.test(relFromRoot)) {
+          continue;
+        }
+
+        if (dirent.isDirectory()) {
+          traverse(realPath, currentDepth + 1);
+        } else if (dirent.isFile()) {
+          try {
+            const stat = fs.statSync(realPath);
+            const ext = path.extname(entryName).replace(/^\.+/, '').toLowerCase();
+            collectedFiles.push({
+              name: entryName,
+              extension: ext,
+              size: stat.size,
+              mtime: stat.mtime,
+              relativePath: relFromRoot,
+              depth: currentDepth
+            });
+          } catch (err) {}
+        }
+      }
+    }
+
+    traverse(canonicalPath, 1);
+
+    // Persist recursive file index in a database transaction
+    await withTransaction(async (client) => {
+      const lockHash = crypto.createHash('sha256').update(`jarvis_scan_${alias}`).digest();
+      const lockKey = lockHash.readInt32BE(0);
+      await client.query("SELECT pg_advisory_xact_lock($1);", [lockKey]);
+
+      // Re-verify root approval status under transaction lock
+      const lockRows = await client.query(
+        "SELECT * FROM jarvis_local_folders WHERE safe_alias = $1 FOR UPDATE;",
+        [alias]
+      );
+      if (lockRows.rows.length === 0 || lockRows.rows[0].status !== 'approved') {
+        throw new Error(`Root alias '${alias}' is not approved (Current status: '${lockRows.rows[0]?.status || 'unknown'}'). Scan aborted.`);
+      }
+      const currentFolderRecord = lockRows.rows[0];
+
+      // 1. Upsert recursive files into jarvis_recursive_file_index
+      for (const file of collectedFiles) {
+        const safeFilePath = `${alias}/${file.relativePath}`;
+        await client.query(
+          `INSERT INTO jarvis_recursive_file_index (
+             folder_id, root_alias, file_path, relative_path, file_name, file_extension, file_size_bytes, depth, modified_at, indexed_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+           ON CONFLICT (file_path) DO UPDATE SET
+             folder_id = EXCLUDED.folder_id,
+             root_alias = EXCLUDED.root_alias,
+             relative_path = EXCLUDED.relative_path,
+             file_name = EXCLUDED.file_name,
+             file_extension = EXCLUDED.file_extension,
+             file_size_bytes = EXCLUDED.file_size_bytes,
+             depth = EXCLUDED.depth,
+             modified_at = EXCLUDED.modified_at,
+             indexed_at = NOW();`,
+          [
+            currentFolderRecord.id,
+            alias,
+            safeFilePath,
+            file.relativePath,
+            file.name,
+            file.extension,
+            file.size,
+            file.depth,
+            file.mtime
+          ]
+        );
+      }
+
+      // 2. Reconcile missing recursive files for this root alias
+      if (collectedFiles.length > 0) {
+        const currentFilePaths = collectedFiles.map(f => `${alias}/${f.relativePath}`);
+        await client.query(
+          `DELETE FROM jarvis_recursive_file_index
+           WHERE root_alias = $1 AND file_path NOT IN (SELECT unnest($2::text[]));`,
+          [alias, currentFilePaths]
+        );
+      } else {
+        await client.query(
+          `DELETE FROM jarvis_recursive_file_index
+           WHERE root_alias = $1;`,
+          [alias]
+        );
+      }
+
+      // 3. Update last_recursive_scanned_at on root record
+      await client.query(
+        "UPDATE jarvis_local_folders SET last_recursive_scanned_at = NOW(), updated_at = NOW() WHERE safe_alias = $1;",
+        [alias]
+      );
+    });
+
+    // Record audit event
+    try {
+      await queryDb(
+        `INSERT INTO jarvis_audit_logs (actor, action, payload)
+         VALUES ($1, $2, $3);`,
+        [actor, 'scan_recursive_inventory', JSON.stringify({ root_alias: alias, filesIndexed: collectedFiles.length, totalExamined: totalExaminedEntries, outcome: 'success' })]
+      );
+    } catch (err) {}
+
+    return {
+      success: true,
+      alias,
+      filesIndexed: collectedFiles.length,
+      totalExamined: totalExaminedEntries,
+      status: 'completed'
+    };
+
+  } finally {
+    activeScans.delete(alias);
+  }
+}
+
+/**
+ * Searches indexed file metadata across relative path, filename, extension, and root alias
+ */
+async function findIndexedFiles(alias, queryStr, options = {}) {
+  if (!isInventoryEnabled()) {
+    throw new Error('Local inventory feature is disabled (JARVIS_LOCAL_INVENTORY_ENABLED=false).');
+  }
+
+  if (!alias || typeof alias !== 'string') {
+    throw new Error('Alias parameter is required. Usage: /jarvis_find_files <approved_alias> <query>');
+  }
+
+  if (!queryStr || typeof queryStr !== 'string' || !queryStr.trim()) {
+    throw new Error('Query parameter is required.');
+  }
+
+  const cleanQuery = queryStr.trim();
+  if (cleanQuery.length > MAX_SEARCH_QUERY_LENGTH) {
+    throw new Error(`Query parameter exceeds maximum length of ${MAX_SEARCH_QUERY_LENGTH} characters.`);
+  }
+
+  if (cleanQuery.includes('\0') || /[\x00-\x1F\x7F]/.test(cleanQuery)) {
+    throw new Error('Invalid query string.');
+  }
+
+  // Verify approved status of root alias
+  const folderCheck = await queryDb(
+    "SELECT status FROM jarvis_local_folders WHERE safe_alias = $1;",
+    [alias]
+  );
+  if (folderCheck.length === 0 || folderCheck[0].status !== 'approved') {
+    return [];
+  }
+
+  // Escape SQL ILIKE wildcards (% _ \) to treat query string as literal search input
+  const escapedQuery = cleanQuery.replace(/[%_\\]/g, '\\$&');
+  const searchPattern = `%${escapedQuery}%`;
+
+  const limit = Math.min(Math.max(parseInt(options.limit, 10) || MAX_SEARCH_RESULTS, 1), MAX_SEARCH_RESULTS);
+
+  const rows = await queryDb(
+    `SELECT
+       id, root_alias, relative_path, file_name, file_extension, file_size_bytes, depth, modified_at, indexed_at
+     FROM jarvis_recursive_file_index
+     WHERE root_alias = $1
+       AND (
+         file_name ILIKE $2 ESCAPE '\\'
+         OR relative_path ILIKE $2 ESCAPE '\\'
+         OR file_extension ILIKE $2 ESCAPE '\\'
+       )
+     ORDER BY file_name ASC, relative_path ASC, id ASC
+     LIMIT $3;`,
+    [alias, searchPattern, limit]
+  );
+
+  const workspaceRoot = getWorkspaceRoot();
+
+  return rows.map(r => ({
+    id: r.id,
+    root_alias: r.root_alias,
+    file_name: r.file_name,
+    file_extension: (r.file_extension || '').replace(/^\.+/, '').toLowerCase(),
+    file_size_bytes: Number(r.file_size_bytes || 0),
+    depth: r.depth,
+    relative_path: sanitizePathForDisplay(r.relative_path, workspaceRoot),
+    modified_at: r.modified_at || r.indexed_at
+  }));
+}
+
+/**
+ * Gets recursive scan status and file count for an approved root alias
+ */
+async function getRecursiveScanStatus(alias) {
+  if (!isInventoryEnabled()) {
+    throw new Error('Local inventory feature is disabled (JARVIS_LOCAL_INVENTORY_ENABLED=false).');
+  }
+
+  if (!alias || typeof alias !== 'string') {
+    throw new Error('Alias parameter is required. Usage: /jarvis_scan_status <approved_alias>');
+  }
+
+  const folderRows = await queryDb(
+    "SELECT id, safe_alias, status, last_scanned_at, last_recursive_scanned_at, created_at FROM jarvis_local_folders WHERE safe_alias = $1;",
+    [alias]
+  );
+  if (folderRows.length === 0) {
+    throw new Error(`Root alias '${alias}' is not registered.`);
+  }
+
+  const folder = folderRows[0];
+  const countRows = await queryDb(
+    "SELECT COUNT(*)::integer as count FROM jarvis_recursive_file_index WHERE root_alias = $1;",
+    [alias]
+  );
+
+  return {
+    root_alias: folder.safe_alias,
+    status: folder.status,
+    last_scanned_at: folder.last_scanned_at,
+    last_recursive_scanned_at: folder.last_recursive_scanned_at,
+    indexed_file_count: countRows[0].count,
+    never_scanned: !folder.last_recursive_scanned_at
+  };
+}
+
 module.exports = {
   isInventoryEnabled,
   getWorkspaceRoot,
@@ -674,10 +1013,13 @@ module.exports = {
   approveLocalFolder,
   listLocalFolders,
   scanApprovedFolders,
+  scanApprovedFoldersRecursive,
   getFolderInventory,
   revokeLocalFolder,
   getFileSuggestions,
   listIndexedFiles,
+  findIndexedFiles,
+  getRecursiveScanStatus,
   sanitizePathForDisplay,
   matchProjectSlug
 };
