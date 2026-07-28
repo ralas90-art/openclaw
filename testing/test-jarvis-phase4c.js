@@ -1,34 +1,37 @@
 /**
  * OpenClaw / Jarvis Phase 4C.0 — Bounded Recursive Metadata Search Test Suite
- * 
+ *
  * Tests:
  * 1. Disabled feature flag responses
  * 2. Unauthorized Telegram user rejection
  * 3. Invalid alias handling
  * 4. Unapproved / revoked alias protection
  * 5. Multi-depth nested discovery & depth recording (depth 1, 2, 3)
- * 6. Bounded depth limit (max 10)
- * 7. Bounded entry limit (10,000 max)
- * 8. Max relative path length limit (1024 chars)
+ * 6. Fail-closed depth limit (max 10)
+ * 7. Fail-closed entry limit (10,000 max)
+ * 8. Fail-closed relative path length limit (1024 chars)
  * 9. Hidden file/directory exclusion (.git, .env, dotfiles)
- * 10. Dependency/generated directory exclusion (node_modules, dist, build, etc.)
- * 11. Symlink file and directory exclusion
- * 12. Canonical path-containment enforcement
- * 13. Nested file deletion, rename, and metadata reconciliation
- * 14. Empty-root reconciliation (0 raw DB rows)
- * 15. Cross-root isolation
- * 16. Failed-scan transactional rollback
- * 17. Revocation purging of jarvis_recursive_file_index
- * 18. Reapproval zero-state before rescan
- * 19. Filename, relative-path, extension, and case-insensitive search
- * 20. Query validation, SQL injection resistance, wildcard escaping (% _ \)
- * 21. Result limits (max 20) and deterministic ordering
- * 22. Confirmation token enforcement ('confirm')
- * 23. Zero absolute path leakage in search and status responses
- * 24. Level-1 compatibility (/jarvis_folders, /jarvis_files, /jarvis_inventory)
- * 25. Level-1 scanApprovedFolders non-recursion
- * 26. ZERO file-content read or open calls (monitored via runtime spies)
- * 
+ * 10. Sensitive credential file & private key exclusion (credentials.json, id_rsa, *.pem, *.key, etc.)
+ * 11. Ordinary file preservation (keyboard_shortcut.js, secret_recipe.doc, etc.)
+ * 12. Dependency/generated directory exclusion (node_modules, dist, build, etc.)
+ * 13. Symlink file and directory exclusion
+ * 14. Canonical path-containment enforcement
+ * 15. Nested file deletion, rename, and metadata reconciliation
+ * 16. Empty-root reconciliation (0 raw DB rows)
+ * 17. Cross-root isolation
+ * 18. Failed-scan transactional rollback
+ * 19. Scan-versus-revocation deterministic interleaving safety
+ * 20. Revocation purging of jarvis_recursive_file_index
+ * 21. Reapproval zero-state before rescan
+ * 22. Filename, relative-path, extension, and case-insensitive search
+ * 23. Query validation, SQL injection resistance, wildcard escaping (% _ \)
+ * 24. Result limits (max 20) and deterministic ordering
+ * 25. Confirmation token enforcement ('confirm')
+ * 26. Zero absolute path leakage in search and status responses
+ * 27. Level-1 compatibility (/jarvis_folders, /jarvis_files, /jarvis_inventory)
+ * 28. Level-1 scanApprovedFolders non-recursion
+ * 29. ZERO file-content read or open calls (monitored via runtime spies)
+ *
  * Uses isolated test database and temporary workspace directories.
  */
 
@@ -204,23 +207,51 @@ async function runSuite() {
     await queryDb("UPDATE jarvis_local_folders SET status = 'approved' WHERE safe_alias = 'test_p4c_root_a';");
 
     // -------------------------------------------------------------
-    // Scenario 4: Multi-Depth Directory Structure Scanning
+    // Scenario 4: Multi-Depth Directory Structure & Sensitive File Filtering
     // -------------------------------------------------------------
     // Create directory tree:
     // root_a/
     //   ├── level1_file.pdf
-    //   ├── .hidden_file.txt (should be excluded)
-    //   ├── .git/ (should be excluded)
-    //   │     └── config
-    //   ├── node_modules/ (should be excluded)
-    //   │     └── package.json
-    //   └── sub_folder_1/ (depth 1 dir)
-    //         ├── level2_file.txt (depth 2 file)
-    //         └── nested_sub_folder/ (depth 2 dir)
-    //               └── level3_file.doc (depth 3 file)
+    //   ├── .hidden_file.txt (excluded)
+    //   ├── .git/ (excluded)
+    //   ├── node_modules/ (excluded)
+    //   ├── credentials.json (sensitive credential file - excluded)
+    //   ├── CREDENTIALS.JSON (case-insensitive sensitive credential file - excluded)
+    //   ├── secrets.yml (sensitive credential file - excluded)
+    //   ├── service-account-key.json (sensitive credential file - excluded)
+    //   ├── service_account_prod.json (sensitive credential file - excluded)
+    //   ├── id_rsa (sensitive private key - excluded)
+    //   ├── server.key (sensitive key ext - excluded)
+    //   ├── cert.pem (sensitive pem ext - excluded)
+    //   ├── keystore.pfx (sensitive pfx ext - excluded)
+    //   ├── app.keystore (sensitive keystore ext - excluded)
+    //   ├── keyboard_shortcut.js (ordinary file containing 'key' word - INCLUDED)
+    //   ├── secret_recipe.doc (ordinary file containing 'secret' word - INCLUDED)
+    //   ├── credential_info_guide.pdf (ordinary file containing 'credential' word - INCLUDED)
+    //   └── sub_folder_1/
+    //         ├── level2_file.txt
+    //         └── nested_sub_folder/
+    //               └── level3_file.doc
 
     fs.writeFileSync(path.join(rootADir, 'level1_file.pdf'), 'PDF Content Demo 100 bytes');
     fs.writeFileSync(path.join(rootADir, '.hidden_file.txt'), 'Hidden File Content');
+
+    // Sensitive credential files (MUST BE EXCLUDED)
+    fs.writeFileSync(path.join(rootADir, 'credentials.json'), '{"secret": "123"}');
+    fs.writeFileSync(path.join(rootADir, 'CREDENTIALS.JSON'), '{"secret": "123"}');
+    fs.writeFileSync(path.join(rootADir, 'secrets.yml'), 'secret: 123');
+    fs.writeFileSync(path.join(rootADir, 'service-account-key.json'), '{}');
+    fs.writeFileSync(path.join(rootADir, 'service_account_prod.json'), '{}');
+    fs.writeFileSync(path.join(rootADir, 'id_rsa'), 'PRIVATE KEY');
+    fs.writeFileSync(path.join(rootADir, 'server.key'), 'PRIVATE KEY');
+    fs.writeFileSync(path.join(rootADir, 'cert.pem'), 'CERTIFICATE');
+    fs.writeFileSync(path.join(rootADir, 'keystore.pfx'), 'KEYSTORE');
+    fs.writeFileSync(path.join(rootADir, 'app.keystore'), 'KEYSTORE');
+
+    // Ordinary business files containing keywords (MUST BE INCLUDED)
+    fs.writeFileSync(path.join(rootADir, 'keyboard_shortcut.js'), 'console.log("key");');
+    fs.writeFileSync(path.join(rootADir, 'secret_recipe.doc'), 'Recipe Document');
+    fs.writeFileSync(path.join(rootADir, 'credential_info_guide.pdf'), 'Guide PDF');
 
     const gitDir = path.join(rootADir, '.git');
     fs.mkdirSync(gitDir, { recursive: true });
@@ -246,13 +277,13 @@ async function runSuite() {
 
     // Execute recursive scan
     const scanRes = await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
-    test(scanRes.success === true && scanRes.filesIndexed === 3, 'Scenario 4a: Recursive scan indexes exactly 3 valid non-hidden files');
+    test(scanRes.success === true && scanRes.filesIndexed === 6, 'Scenario 4a: Recursive scan indexes 6 valid files (excluding sensitive credentials & dotfiles)');
 
     // Verify raw DB rows in jarvis_recursive_file_index
     const dbFiles = await queryDb(
       "SELECT relative_path, file_name, file_extension, depth FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a' ORDER BY relative_path ASC;"
     );
-    test(dbFiles.length === 3, 'Scenario 4b: Raw DB query returns exactly 3 rows in jarvis_recursive_file_index');
+    test(dbFiles.length === 6, 'Scenario 4b: Raw DB query returns exactly 6 rows in jarvis_recursive_file_index');
 
     const fLevel1 = dbFiles.find(f => f.file_name === 'level1_file.pdf');
     test(fLevel1 && fLevel1.depth === 1 && fLevel1.relative_path === 'level1_file.pdf', 'Scenario 4c: level1_file.pdf has depth = 1');
@@ -263,58 +294,95 @@ async function runSuite() {
     const fLevel3 = dbFiles.find(f => f.file_name === 'level3_file.doc');
     test(fLevel3 && fLevel3.depth === 3 && fLevel3.relative_path === 'sub_folder_1/nested_sub_folder/level3_file.doc', 'Scenario 4e: level3_file.doc has depth = 3');
 
-    // Verify exclusions: zero hidden files, zero .git, zero node_modules, zero symlinks
-    const dbAllPaths = dbFiles.map(f => f.relative_path);
-    test(!dbAllPaths.some(p => p.includes('.hidden_file') || p.includes('.git') || p.includes('node_modules') || p.includes('symlink')), 'Scenario 4f: Hidden files, .git, node_modules, and symlinks excluded from raw DB');
+    // Assert sensitive credential files are 100% EXCLUDED
+    const dbAllPaths = dbFiles.map(f => f.file_name.toLowerCase());
+    const sensitiveCheck = dbAllPaths.some(name =>
+      name === 'credentials.json' || name === 'secrets.yml' || name === 'id_rsa' || name === 'server.key' || name === 'cert.pem' || name.startsWith('service-account')
+    );
+    test(!sensitiveCheck, 'Scenario 4f: Sensitive credential files (credentials.json, id_rsa, *.pem, *.key, etc.) strictly excluded from raw DB');
+
+    // Assert ordinary business files containing keywords are INCLUDED
+    const ordinaryCheck = dbFiles.some(f => f.file_name === 'keyboard_shortcut.js') &&
+                          dbFiles.some(f => f.file_name === 'secret_recipe.doc') &&
+                          dbFiles.some(f => f.file_name === 'credential_info_guide.pdf');
+    test(ordinaryCheck === true, 'Scenario 4g: Ordinary business files containing keywords (keyboard_shortcut.js, secret_recipe.doc) are preserved normally');
 
     // -------------------------------------------------------------
-    // Scenario 5: Scan Status Command
+    // Scenario 5: Fail-Closed Depth & Resource Limits
+    // -------------------------------------------------------------
+    // Create nested directory at depth 11: root_a/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/deep.txt
+    let deepDirPath = rootADir;
+    for (let i = 1; i <= 11; i++) {
+      deepDirPath = path.join(deepDirPath, `d${i}`);
+      fs.mkdirSync(deepDirPath, { recursive: true });
+    }
+    fs.writeFileSync(path.join(deepDirPath, 'deep.txt'), 'Deep file content');
+
+    let depthErrorCaught = false;
+    try {
+      await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
+    } catch (err) {
+      depthErrorCaught = err.message.includes('Maximum recursion depth of 10 exceeded');
+    }
+    test(depthErrorCaught === true, 'Scenario 5a: Exceeding maximum recursion depth (10) throws fail-closed error');
+
+    // Verify snapshot preserved after depth limit failure
+    const dbPostDepthFail = await queryDb(
+      "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
+    );
+    test(dbPostDepthFail[0].c === 6, 'Scenario 5b: Fail-closed depth limit abort preserves prior complete snapshot');
+
+    // Clean deep directory
+    fs.rmSync(path.join(rootADir, 'd1'), { recursive: true, force: true });
+
+    // -------------------------------------------------------------
+    // Scenario 6: Scan Status Command
     // -------------------------------------------------------------
     const statusObj = await localInventory.getRecursiveScanStatus('test_p4c_root_a');
-    test(statusObj.indexed_file_count === 3 && statusObj.status === 'approved' && statusObj.never_scanned === false, 'Scenario 5a: getRecursiveScanStatus reports 3 indexed files');
+    test(statusObj.indexed_file_count === 6 && statusObj.status === 'approved' && statusObj.never_scanned === false, 'Scenario 6a: getRecursiveScanStatus reports 6 indexed files');
 
     const statusTgRes = await handleCommand('/jarvis_scan_status test_p4c_root_a', mockAdminMessage);
-    test(getText(statusTgRes).includes('3') && getText(statusTgRes).includes('Approved') && !getText(statusTgRes).includes(workspaceRoot), 'Scenario 5b: /jarvis_scan_status Telegram response sanitized');
+    test(getText(statusTgRes).includes('6') && getText(statusTgRes).includes('Approved') && !getText(statusTgRes).includes(workspaceRoot), 'Scenario 6b: /jarvis_scan_status Telegram response sanitized');
 
     // -------------------------------------------------------------
-    // Scenario 6: Metadata Search (/jarvis_find_files)
+    // Scenario 7: Metadata Search (/jarvis_find_files)
     // -------------------------------------------------------------
     // Filename search
     const findFilename = await localInventory.findIndexedFiles('test_p4c_root_a', 'level2');
-    test(findFilename.length === 1 && findFilename[0].file_name === 'level2_file.txt', 'Scenario 6a: Search by filename substring finds level2_file.txt');
+    test(findFilename.length === 1 && findFilename[0].file_name === 'level2_file.txt', 'Scenario 7a: Search by filename substring finds level2_file.txt');
 
     // Relative path search
     const findRelPath = await localInventory.findIndexedFiles('test_p4c_root_a', 'sub_folder_1/nested_sub_folder');
-    test(findRelPath.length === 1 && findRelPath[0].file_name === 'level3_file.doc', 'Scenario 6b: Search by relative path substring finds level3_file.doc');
+    test(findRelPath.length === 1 && findRelPath[0].file_name === 'level3_file.doc', 'Scenario 7b: Search by relative path substring finds level3_file.doc');
 
     // Case-insensitive search
     const findCase = await localInventory.findIndexedFiles('test_p4c_root_a', 'LEVEL1_FILE');
-    test(findCase.length === 1 && findCase[0].file_name === 'level1_file.pdf', 'Scenario 6c: Search is case-insensitive');
+    test(findCase.length === 1 && findCase[0].file_name === 'level1_file.pdf', 'Scenario 7c: Search is case-insensitive');
 
     // Extension search
     const findExt = await localInventory.findIndexedFiles('test_p4c_root_a', 'pdf');
-    test(findExt.length === 1 && findExt[0].file_name === 'level1_file.pdf', 'Scenario 6d: Search by extension finds level1_file.pdf');
+    test(findExt.length >= 1 && findExt.some(f => f.file_name === 'level1_file.pdf'), 'Scenario 7d: Search by extension finds level1_file.pdf');
 
     // Wildcard character escaping (% _ \)
     const findWildcard1 = await localInventory.findIndexedFiles('test_p4c_root_a', '%');
-    test(findWildcard1.length === 0, 'Scenario 6e: Search wildcard % escaped as literal string');
+    test(findWildcard1.length === 0, 'Scenario 7e: Search wildcard % escaped as literal string');
 
     const findWildcard2 = await localInventory.findIndexedFiles('test_p4c_root_a', 'l_v');
-    test(findWildcard2.length === 0, 'Scenario 6f: Search wildcard _ escaped as literal string');
+    test(findWildcard2.length === 0, 'Scenario 7f: Search wildcard _ escaped as literal string');
 
     // SQL Injection resistance
     const findSqlInj = await localInventory.findIndexedFiles('test_p4c_root_a', "' OR '1'='1");
-    test(findSqlInj.length === 0, 'Scenario 6g: SQL injection string handled safely with 0 matches');
+    test(findSqlInj.length === 0, 'Scenario 7g: SQL injection string handled safely with 0 matches');
 
     const dbCheckIntact = await queryDb("SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index;");
-    test(dbCheckIntact[0].c === 3, 'Scenario 6h: Database table intact after injection attempt');
+    test(dbCheckIntact[0].c === 6, 'Scenario 7h: Database table intact after injection attempt');
 
     // Telegram command search
     const findTgRes = await handleCommand('/jarvis_find_files test_p4c_root_a level2', mockAdminMessage);
-    test(getText(findTgRes).includes('level2_file.txt') && !getText(findTgRes).includes(workspaceRoot), 'Scenario 6i: /jarvis_find_files Telegram response formatted & sanitized');
+    test(getText(findTgRes).includes('level2_file.txt') && !getText(findTgRes).includes(workspaceRoot), 'Scenario 7i: /jarvis_find_files Telegram response formatted & sanitized');
 
     // -------------------------------------------------------------
-    // Scenario 7: Metadata Update Reconciliation
+    // Scenario 8: Metadata Update Reconciliation
     // -------------------------------------------------------------
     // Update mtime and size of level1_file.pdf
     const p1 = path.join(rootADir, 'level1_file.pdf');
@@ -326,10 +394,10 @@ async function runSuite() {
     const dbFilesPostUpdate = await queryDb(
       "SELECT file_name, file_size_bytes FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a' AND file_name = 'level1_file.pdf';"
     );
-    test(dbFilesPostUpdate.length === 1 && Number(dbFilesPostUpdate[0].file_size_bytes) === newStat.size, 'Scenario 7: File metadata updated in place in database snapshot');
+    test(dbFilesPostUpdate.length === 1 && Number(dbFilesPostUpdate[0].file_size_bytes) === newStat.size, 'Scenario 8: File metadata updated in place in database snapshot');
 
     // -------------------------------------------------------------
-    // Scenario 8: Nested File Rename Reconciliation
+    // Scenario 9: Nested File Rename Reconciliation
     // -------------------------------------------------------------
     const oldPath = path.join(nestedSubDir, 'level3_file.doc');
     const newPath = path.join(nestedSubDir, 'level3_renamed.doc');
@@ -340,15 +408,15 @@ async function runSuite() {
     const oldCheck = await queryDb(
       "SELECT relative_path FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a' AND file_name = 'level3_file.doc';"
     );
-    test(oldCheck.length === 0, 'Scenario 8a: Renamed file old name deleted from jarvis_recursive_file_index');
+    test(oldCheck.length === 0, 'Scenario 9a: Renamed file old name deleted from jarvis_recursive_file_index');
 
     const newCheck = await queryDb(
       "SELECT relative_path FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a' AND file_name = 'level3_renamed.doc';"
     );
-    test(newCheck.length === 1 && newCheck[0].relative_path === 'sub_folder_1/nested_sub_folder/level3_renamed.doc', 'Scenario 8b: Renamed file new name present in jarvis_recursive_file_index');
+    test(newCheck.length === 1 && newCheck[0].relative_path === 'sub_folder_1/nested_sub_folder/level3_renamed.doc', 'Scenario 9b: Renamed file new name present in jarvis_recursive_file_index');
 
     // -------------------------------------------------------------
-    // Scenario 9: Nested File Deletion Reconciliation
+    // Scenario 10: Nested File Deletion Reconciliation
     // -------------------------------------------------------------
     fs.unlinkSync(newPath);
 
@@ -357,29 +425,32 @@ async function runSuite() {
     const delCheck = await queryDb(
       "SELECT relative_path FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a' AND file_name = 'level3_renamed.doc';"
     );
-    test(delCheck.length === 0, 'Scenario 9a: Deleted nested file purged from jarvis_recursive_file_index');
+    test(delCheck.length === 0, 'Scenario 10a: Deleted nested file purged from jarvis_recursive_file_index');
 
     const countCheck = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countCheck[0].c === 2, 'Scenario 9b: Exactly 2 remaining files in jarvis_recursive_file_index');
+    test(countCheck[0].c === 5, 'Scenario 10b: Exactly 5 remaining files in jarvis_recursive_file_index');
 
-    // -------------------------------------------------------------
-    // Scenario 10: Empty Root Reconciliation
-    // -------------------------------------------------------------
-    // Remove all remaining files in rootADir
+    // Clean remaining files in rootADir for empty root test
     fs.unlinkSync(path.join(rootADir, 'level1_file.pdf'));
+    fs.unlinkSync(path.join(rootADir, 'keyboard_shortcut.js'));
+    fs.unlinkSync(path.join(rootADir, 'secret_recipe.doc'));
+    fs.unlinkSync(path.join(rootADir, 'credential_info_guide.pdf'));
     fs.unlinkSync(path.join(sub1Dir, 'level2_file.txt'));
 
+    // -------------------------------------------------------------
+    // Scenario 11: Empty Root Reconciliation
+    // -------------------------------------------------------------
     await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
 
     const emptyCheck = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(emptyCheck[0].c === 0, 'Scenario 10: Empty root scan removes all rows from jarvis_recursive_file_index');
+    test(emptyCheck[0].c === 0, 'Scenario 11: Empty root scan removes all rows from jarvis_recursive_file_index');
 
     // -------------------------------------------------------------
-    // Scenario 11: Cross-Root Isolation
+    // Scenario 12: Cross-Root Isolation
     // -------------------------------------------------------------
     // Add & approve root B
     await localInventory.addLocalFolder('test_p4c_root_b', mockAdminMessage);
@@ -391,7 +462,7 @@ async function runSuite() {
     const countB = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_b';"
     );
-    test(countB[0].c === 1, 'Scenario 11a: Root B scanned and has 1 row in jarvis_recursive_file_index');
+    test(countB[0].c === 1, 'Scenario 12a: Root B scanned and has 1 row in jarvis_recursive_file_index');
 
     // Rescan empty Root A
     await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
@@ -399,10 +470,10 @@ async function runSuite() {
     const countBPostA = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_b';"
     );
-    test(countBPostA[0].c === 1, 'Scenario 11b: Rescanning empty Root A leaves Root B raw rows completely untouched');
+    test(countBPostA[0].c === 1, 'Scenario 12b: Rescanning empty Root A leaves Root B raw rows completely untouched');
 
     // -------------------------------------------------------------
-    // Scenario 12: Failed-Scan Rollback
+    // Scenario 13: Failed-Scan Rollback
     // -------------------------------------------------------------
     // Repopulate Root A with a file
     fs.writeFileSync(path.join(rootADir, 'rollback_test.txt'), 'Rollback test content');
@@ -411,7 +482,7 @@ async function runSuite() {
     const countPreFail = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countPreFail[0].c === 1, 'Scenario 12a: Root A has 1 row pre-failure');
+    test(countPreFail[0].c === 1, 'Scenario 13a: Root A has 1 row pre-failure');
 
     // Force error during next scan by corrupting targetPath temporarily
     const origReaddir = fs.readdirSync;
@@ -431,22 +502,32 @@ async function runSuite() {
       fs.readdirSync = origReaddir;
     }
 
-    test(scanFailed === true, 'Scenario 12b: Scanner fails closed on IO error');
+    test(scanFailed === true, 'Scenario 13b: Scanner fails closed on IO error');
 
     const countPostFail = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countPostFail[0].c === 1, 'Scenario 12c: Failed scan transaction rollback preserves prior snapshot');
+    test(countPostFail[0].c === 1, 'Scenario 13c: Failed scan transaction rollback preserves prior snapshot');
 
     // -------------------------------------------------------------
-    // Scenario 13: Revocation & Reapproval Purge
+    // Scenario 14: Scan-versus-Revocation Interleaving Safety
     // -------------------------------------------------------------
+    // Revoke root A
     await localInventory.revokeLocalFolder('test_p4c_root_a', mockAdminMessage);
 
     const countRevoked = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countRevoked[0].c === 0, 'Scenario 13a: Revocation transactionally purges jarvis_recursive_file_index rows');
+    test(countRevoked[0].c === 0, 'Scenario 14a: Revocation transactionally purges jarvis_recursive_file_index rows');
+
+    // Attempting scan on revoked root fails closed under lock status recheck
+    let revokedScanBlocked = false;
+    try {
+      await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
+    } catch (err) {
+      revokedScanBlocked = err.message.includes('not approved');
+    }
+    test(revokedScanBlocked === true, 'Scenario 14b: Scan on revoked root blocked by locked transaction status check');
 
     // Reapprove Root A without scanning
     await queryDb("UPDATE jarvis_local_folders SET status = 'approved' WHERE safe_alias = 'test_p4c_root_a';");
@@ -454,10 +535,10 @@ async function runSuite() {
     const countReapprovedNoScan = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countReapprovedNoScan[0].c === 0, 'Scenario 13b: Reapproved root exposes zero raw rows before fresh rescan');
+    test(countReapprovedNoScan[0].c === 0, 'Scenario 14c: Reapproved root exposes zero raw rows before fresh rescan');
 
     const findReapproved = await localInventory.findIndexedFiles('test_p4c_root_a', 'rollback');
-    test(findReapproved.length === 0, 'Scenario 13c: Search on reapproved root before rescan returns 0 results');
+    test(findReapproved.length === 0, 'Scenario 14d: Search on reapproved root before rescan returns 0 results');
 
     // Rescan reapproved root
     await localInventory.scanApprovedFoldersRecursive('test_p4c_root_a', mockAdminMessage);
@@ -465,10 +546,10 @@ async function runSuite() {
     const countFreshScan = await queryDb(
       "SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';"
     );
-    test(countFreshScan[0].c === 1, 'Scenario 13d: Rescanning reapproved root populates fresh snapshot');
+    test(countFreshScan[0].c === 1, 'Scenario 14e: Rescanning reapproved root populates fresh snapshot');
 
     // -------------------------------------------------------------
-    // Scenario 14: Search & Status Never Scan
+    // Scenario 15: Search & Status Never Scan
     // -------------------------------------------------------------
     const origReaddirSyncSpy = fs.readdirSync;
     let fsReaddirCallCount = 0;
@@ -478,30 +559,30 @@ async function runSuite() {
     };
 
     await localInventory.findIndexedFiles('test_p4c_root_a', 'rollback');
-    test(fsReaddirCallCount === 0, 'Scenario 14a: findIndexedFiles performs ZERO filesystem directory reads');
+    test(fsReaddirCallCount === 0, 'Scenario 15a: findIndexedFiles performs ZERO filesystem directory reads');
 
     await localInventory.getRecursiveScanStatus('test_p4c_root_a');
-    test(fsReaddirCallCount === 0, 'Scenario 14b: getRecursiveScanStatus performs ZERO filesystem directory reads');
+    test(fsReaddirCallCount === 0, 'Scenario 15b: getRecursiveScanStatus performs ZERO filesystem directory reads');
 
     fs.readdirSync = origReaddirSyncSpy;
 
     // -------------------------------------------------------------
-    // Scenario 15: Level-1 Command Compatibility
+    // Scenario 16: Level-1 Command Compatibility
     // -------------------------------------------------------------
     // Populate Level-1 files & folders
     fs.mkdirSync(path.join(rootADir, 'l1_child_dir'), { recursive: true });
     await localInventory.scanApprovedFolders('test_p4c_root_a', mockAdminMessage);
 
     const l1FoldersRes = await handleCommand('/jarvis_inventory test_p4c_root_a', mockAdminMessage);
-    test(getText(l1FoldersRes).includes('l1_child_dir'), 'Scenario 15a: Level-1 /jarvis_inventory returns child directory');
+    test(getText(l1FoldersRes).includes('l1_child_dir'), 'Scenario 16a: Level-1 /jarvis_inventory returns child directory');
 
     const l1FilesRes = await handleCommand('/jarvis_files recent', mockAdminMessage);
-    test(getText(l1FilesRes).includes('rollback_test.txt'), 'Scenario 15b: Level-1 /jarvis_files returns Level-1 files');
+    test(getText(l1FilesRes).includes('rollback_test.txt'), 'Scenario 16b: Level-1 /jarvis_files returns Level-1 files');
 
     // -------------------------------------------------------------
-    // Scenario 16: Zero File-Content Reading Enforcement
+    // Scenario 17: Zero File-Content Reading Enforcement
     // -------------------------------------------------------------
-    test(contentReadCallCount === 0, 'Scenario 16: ZERO content-reading function calls (readFile, readFileSync, createReadStream, openSync) across entire test execution');
+    test(contentReadCallCount === 0, 'Scenario 17: ZERO content-reading function calls (readFile, readFileSync, createReadStream, openSync) across entire test execution');
 
     console.log('\n=============================================================');
     console.log(`🎉 ALL ${assertionCount} OF ${assertionCount} PHASE 4C.0 ASSERTIONS PASSED PERFECTLY!`);

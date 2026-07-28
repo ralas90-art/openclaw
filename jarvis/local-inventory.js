@@ -677,6 +677,39 @@ const MAX_SEARCH_QUERY_LENGTH = 100;
 const MAX_SEARCH_RESULTS = 20;
 
 /**
+ * Checks if a filename or extension matches sensitive credential patterns
+ */
+function isSensitiveCredentialFile(fileName) {
+  if (!fileName || typeof fileName !== 'string') return false;
+  const name = fileName.toLowerCase();
+
+  const exactNames = [
+    'credential.json',
+    'credentials.json',
+    'secret.json',
+    'secrets.json',
+    'secrets.yml',
+    'secrets.yaml',
+    'service-account.json',
+    'service_account.json',
+    'id_rsa',
+    'id_dsa',
+    'id_ecdsa',
+    'id_ed25519'
+  ];
+  if (exactNames.includes(name)) return true;
+
+  // Wildcard name patterns (service-account-*.json, service_account_*.json)
+  if (/^service[-_]account[-_].*\.json$/.test(name)) return true;
+
+  // Sensitive extensions (*.pem, *.key, *.p12, *.pfx, *.keystore)
+  const sensitiveExts = ['.pem', '.key', '.p12', '.pfx', '.keystore'];
+  if (sensitiveExts.some(ext => name.endsWith(ext))) return true;
+
+  return false;
+}
+
+/**
  * Executes a bounded recursive file-metadata scan on an approved root alias
  */
 async function scanApprovedFoldersRecursive(alias, reqMessage = null) {
@@ -726,7 +759,7 @@ async function scanApprovedFoldersRecursive(alias, reqMessage = null) {
     // Helper recursive function
     function traverse(currentDir, currentDepth) {
       if (currentDepth > MAX_RECURSIVE_DEPTH) {
-        return; // Bounded depth limit
+        throw new Error(`Scan aborted: Maximum recursion depth of ${MAX_RECURSIVE_DEPTH} exceeded for root alias '${alias}'.`);
       }
 
       let dirents;
@@ -750,7 +783,10 @@ async function scanApprovedFoldersRecursive(alias, reqMessage = null) {
         // 2. Skip hidden files and directories (starting with '.')
         if (entryName.startsWith('.')) continue;
 
-        // 3. Skip ignored directories
+        // 3. Skip sensitive credential files and private key extensions
+        if (isSensitiveCredentialFile(entryName)) continue;
+
+        // 4. Skip ignored directories
         if (dirent.isDirectory() && IGNORE_RECURSIVE_DIRECTORIES.includes(entryName.toLowerCase())) {
           continue;
         }
@@ -782,8 +818,12 @@ async function scanApprovedFoldersRecursive(alias, reqMessage = null) {
         const relFromRoot = path.relative(canonicalPath, realPath).replace(/\\/g, '/');
 
         // Path validation: no traversal, no NUL bytes, no control chars, max length
-        if (relFromRoot.includes('\0') || relFromRoot.includes('..') || relFromRoot.length > MAX_RELATIVE_PATH_LENGTH || /[\x00-\x1F\x7F]/.test(relFromRoot)) {
+        if (relFromRoot.includes('\0') || relFromRoot.includes('..') || /[\x00-\x1F\x7F]/.test(relFromRoot)) {
           continue;
+        }
+
+        if (relFromRoot.length > MAX_RELATIVE_PATH_LENGTH) {
+          throw new Error(`Scan aborted: Relative path length exceeds maximum limit of ${MAX_RELATIVE_PATH_LENGTH} characters for root alias '${alias}'.`);
         }
 
         if (dirent.isDirectory()) {
