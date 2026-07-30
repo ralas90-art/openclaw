@@ -5,6 +5,8 @@
 
 const { withTransaction } = require('./db');
 
+let inFlightMigrationPromise = null;
+
 async function runMigrations() {
   const dbUrl = (process.env.NODE_ENV !== 'production' && process.env.TEST_DATABASE_URL) ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;
   if (!dbUrl) {
@@ -15,12 +17,30 @@ async function runMigrations() {
     return false;
   }
 
+  if (inFlightMigrationPromise) {
+    return inFlightMigrationPromise;
+  }
+
+  inFlightMigrationPromise = (async () => {
+    try {
+      return await executeMigrationTransaction();
+    } finally {
+      inFlightMigrationPromise = null;
+    }
+  })();
+
+  return inFlightMigrationPromise;
+}
+
+async function executeMigrationTransaction() {
   console.log('[JarvisMigrations] Running database schema setup and migrations with advisory lock protection...');
 
-  try {
-    return await withTransaction(async (client) => {
-      // 0. Acquire PostgreSQL transaction-level advisory lock to block multi-instance Railway deployment races
-      await client.query('SELECT pg_advisory_xact_lock(847291);');
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await withTransaction(async (client) => {
+        // 0. Acquire PostgreSQL transaction-level advisory lock to block multi-instance Railway deployment races
+        await client.query('SELECT pg_advisory_xact_lock(847291);');
 
       // 1. jarvis_work_sessions table
       await client.query(`
@@ -325,12 +345,13 @@ async function runMigrations() {
       await client.query(`
         CREATE TABLE IF NOT EXISTS jarvis_local_folders (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          safe_alias TEXT UNIQUE NOT NULL,
-          root_fingerprint VARCHAR(64) NOT NULL,
+          safe_alias TEXT UNIQUE,
+          root_fingerprint VARCHAR(64),
           status TEXT NOT NULL DEFAULT 'pending',
           approved_by TEXT,
           approved_at TIMESTAMPTZ,
           last_scanned_at TIMESTAMPTZ,
+          last_recursive_scanned_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
@@ -342,6 +363,7 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_by TEXT;");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS last_recursive_scanned_at TIMESTAMPTZ;");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();");
       await client.query("ALTER TABLE jarvis_local_folders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();");
       const colCheck = await client.query(`
@@ -365,6 +387,12 @@ async function runMigrations() {
           CONSTRAINT ux_level1_folder_alias_path UNIQUE (root_alias, relative_path)
         );
       `);
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS root_alias TEXT;");
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS folder_name TEXT;");
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS relative_path TEXT;");
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';");
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ DEFAULT NOW();");
+      await client.query("ALTER TABLE jarvis_level1_folder_inventory ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW();");
 
       // Legacy file index table preserved for backward compatibility (do not drop in Phase 4A)
       await client.query(`
@@ -449,15 +477,91 @@ async function runMigrations() {
       await client.query("ALTER TABLE jarvis_priority_feedback ADD COLUMN IF NOT EXISTS project_slug VARCHAR(100);");
       await client.query("CREATE UNIQUE INDEX IF NOT EXISTS ux_priority_feedback ON jarvis_priority_feedback (priority_id, feedback_type);");
 
+      // Phase 4C.4 Local Workstation Execution Bridge tables & indexes
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_local_executors (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          worker_id TEXT UNIQUE NOT NULL,
+          auth_token_hash TEXT NOT NULL,
+          status TEXT DEFAULT 'active',
+          last_heartbeat_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_local_scan_jobs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          executor_id UUID REFERENCES jarvis_local_executors(id) ON DELETE CASCADE,
+          root_alias TEXT NOT NULL,
+          scan_type TEXT NOT NULL,
+          status TEXT DEFAULT 'queued',
+          requested_by TEXT NOT NULL,
+          attempt_count INTEGER DEFAULT 0,
+          max_attempts INTEGER DEFAULT 3,
+          next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+          claimed_at TIMESTAMPTZ,
+          lease_expires_at TIMESTAMPTZ,
+          lease_version INTEGER DEFAULT 0,
+          lease_token_hash TEXT,
+          started_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
+          failed_at TIMESTAMPTZ,
+          cancelled_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          result_summary JSONB,
+          sanitized_error TEXT
+        );
+      `);
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS executor_id UUID REFERENCES jarvis_local_executors(id) ON DELETE CASCADE;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER DEFAULT 0;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS max_attempts INTEGER DEFAULT 3;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ DEFAULT NOW();");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS lease_version INTEGER DEFAULT 0;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS lease_token_hash TEXT;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();");
+      await client.query("ALTER TABLE jarvis_local_scan_jobs ADD COLUMN IF NOT EXISTS sanitized_error TEXT;");
+
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_scan_jobs_status ON jarvis_local_scan_jobs (status);");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_scan_jobs_alias ON jarvis_local_scan_jobs (root_alias);");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_scan_jobs_lease ON jarvis_local_scan_jobs (status, lease_expires_at);");
+      await client.query("CREATE UNIQUE INDEX IF NOT EXISTS ux_active_root_scan ON jarvis_local_scan_jobs (root_alias) WHERE status IN ('queued', 'running');");
+
+      // Phase 4C.4R2 Chunk Staging Table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS jarvis_local_scan_chunks (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          job_id UUID REFERENCES jarvis_local_scan_jobs(id) ON DELETE CASCADE,
+          executor_id UUID REFERENCES jarvis_local_executors(id) ON DELETE CASCADE,
+          lease_version INTEGER NOT NULL,
+          chunk_sequence INTEGER NOT NULL,
+          chunk_payload JSONB NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT ux_job_chunk_seq UNIQUE (job_id, lease_version, chunk_sequence)
+        );
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_jarvis_scan_chunks_job ON jarvis_local_scan_chunks (job_id, lease_version);");
+
       console.log('[JarvisMigrations] All database migrations completed successfully.');
       return true;
     });
   } catch (err) {
+    if (err && err.code === '40P01' && attempt < maxAttempts) {
+      console.warn(`[JarvisMigrations] Transient PostgreSQL advisory lock collision (40P01) on attempt ${attempt}/${maxAttempts}. Retrying after delay...`);
+      await new Promise(r => setTimeout(r, 100 * attempt));
+      continue;
+    }
     console.error('[JarvisMigrations] Migration failed:', err.message);
     if (process.env.NODE_ENV === 'production') {
       throw new Error(`[JarvisMigrations] Production migration failed: ${err.message}`);
     }
     throw err;
+  }
   }
 }
 

@@ -12,7 +12,7 @@ process.env.OPENCLAW_ROLE_SUPER_ADMIN_CHAT_IDS = 'admin_chat_id';
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
-const { Client } = require('pg');
+const { queryDb, closePool } = require('../jarvis/db');
 
 if (fs.existsSync('.env.local')) {
   require('dotenv').config({ path: '.env.local' });
@@ -39,10 +39,19 @@ if (process.env.DATABASE_URL && process.env.TEST_DATABASE_URL && getDbIdentity(p
   process.env.DATABASE_URL = 'postgresql://production_owner:secret_pass@production-db-host.internal:5432/production_openclaw_db';
 }
 
+const crypto = require('crypto');
+const pid = process.pid;
+const randomSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+const runNamespace = `p4b_${pid}_${randomSuffix}`;
+
+const approvedAlias = `test_p4b_approved_${runNamespace}`;
+const pendingAlias = `test_p4b_pending_${runNamespace}`;
+const testRootAlias = `test_p4b_root_${runNamespace}`;
+
 process.env.NODE_ENV = 'test';
 process.env.JARVIS_LOCAL_INVENTORY_ENABLED = 'true';
 process.env.JARVIS_LOCAL_INVENTORY_ROOTS_JSON = JSON.stringify({
-  test_p4b_root: 'openclaw/inbox/temp_test_inventory_4b'
+  [testRootAlias]: `openclaw/inbox/temp_test_inventory_${runNamespace}`
 });
 
 const localInventory = require('../jarvis/local-inventory');
@@ -60,48 +69,54 @@ const mockUserMessage = {
 };
 
 const workspaceRoot = localInventory.getWorkspaceRoot();
-const testSubdir = path.join(workspaceRoot, 'openclaw', 'inbox', 'temp_test_inventory_4b');
+const testSubdir = path.join(workspaceRoot, 'openclaw', 'inbox', `temp_test_inventory_${runNamespace}`);
 
-let pgClient;
 let seededApprovedFolderId;
 let seededPendingFolderId;
 
 async function setupFixtures() {
   await runMigrations();
 
-  pgClient = new Client({ connectionString: testDbUrl });
-  await pgClient.connect();
-
   if (fs.existsSync(testSubdir)) {
     fs.rmSync(testSubdir, { recursive: true, force: true });
   }
   fs.mkdirSync(testSubdir, { recursive: true });
 
-  // Clean DB
-  await pgClient.query("DELETE FROM jarvis_local_file_index;");
-  await pgClient.query("DELETE FROM jarvis_local_folders WHERE safe_alias LIKE 'test_p4b_%';");
+  // Seed physical fixture files
+  const fixtureFiles = [
+    'septivolt_plan.txt',
+    'g-g-cleaning-receipt.pdf',
+    'cresca-os-architecture.md',
+    'unmatched_script.js',
+    'another_unmatched.txt'
+  ];
+  for (const fName of fixtureFiles) {
+    fs.writeFileSync(path.join(testSubdir, fName), `fixture content for ${fName}`);
+  }
+
+  // Clean process-scoped DB records
+  const escapedNamespace = runNamespace.replace(/_/g, '\\_');
+  await queryDb("DELETE FROM jarvis_local_file_index WHERE file_path LIKE $1 ESCAPE '\\';", [`%temp_test_inventory_${escapedNamespace}%`]);
+  await queryDb("DELETE FROM jarvis_local_folders WHERE safe_alias IN ($1, $2, $3) OR root_fingerprint IN ($4, $5);", [approvedAlias, pendingAlias, testRootAlias, `fingerprint_p4b_approved_${runNamespace}`, `fingerprint_p4b_pending_${runNamespace}`]);
 
   // Seed folders
-  const appFolderRes = await pgClient.query(
+  const appFolderRes = await queryDb(
     `INSERT INTO jarvis_local_folders (safe_alias, root_fingerprint, status, approved_by, approved_at)
-     VALUES ('test_p4b_approved', 'fingerprint_p4b_approved_123', 'approved', 'admin_chat_id', NOW())
-     RETURNING id;`
+     VALUES ($1, $2, 'approved', 'admin_chat_id', NOW())
+     RETURNING id;`,
+    [approvedAlias, `fingerprint_p4b_approved_${runNamespace}`]
   );
-  seededApprovedFolderId = appFolderRes.rows[0].id;
+  seededApprovedFolderId = appFolderRes[0].id;
 
-  const pendFolderRes = await pgClient.query(
+  const pendFolderRes = await queryDb(
     `INSERT INTO jarvis_local_folders (safe_alias, root_fingerprint, status)
-     VALUES ('test_p4b_pending', 'fingerprint_p4b_pending_456', 'pending')
-     RETURNING id;`
+     VALUES ($1, $2, 'pending')
+     RETURNING id;`,
+    [pendingAlias, `fingerprint_p4b_pending_${runNamespace}`]
   );
-  seededPendingFolderId = pendFolderRes.rows[0].id;
+  seededPendingFolderId = pendFolderRes[0].id;
 
   // Seed synthetic metadata in jarvis_local_file_index with controlled sizes & timestamps
-  // 1. septivolt_plan.txt (50 bytes, t-5 min) -> matches project septivolt
-  // 2. g-g-cleaning-receipt.pdf (500 bytes, t-4 min) -> matches project g-g-cleaning
-  // 3. cresca-os-architecture.md (1000 bytes, t-3 min) -> matches project cresca-os
-  // 4. unmatched_script.js (150 bytes, t-2 min) -> unmatched
-  // 5. another_unmatched.txt (250 bytes, t-1 min) -> unmatched
   const now = Date.now();
   const fileSeeds = [
     { name: 'septivolt_plan.txt', ext: 'txt', size: 50, mod: new Date(now - 300000).toISOString(), rel: 'septivolt_plan.txt' },
@@ -112,34 +127,61 @@ async function setupFixtures() {
   ];
 
   for (const f of fileSeeds) {
-    await pgClient.query(
+    await queryDb(
       `INSERT INTO jarvis_local_file_index (folder_id, file_path, relative_path, file_name, file_extension, file_size_bytes, modified_at, indexed_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW());`,
-      [seededApprovedFolderId, `openclaw/inbox/temp_test_inventory_4b/${f.name}`, f.rel, f.name, f.ext, f.size, f.mod]
+      [seededApprovedFolderId, `openclaw/inbox/temp_test_inventory_${runNamespace}/${f.name}`, f.rel, f.name, f.ext, f.size, f.mod]
     );
   }
 }
 
 async function cleanupFixtures() {
-  console.log('\nCleaning up Phase 4B test resources...');
-  if (pgClient) {
-    try {
-      await pgClient.query("DELETE FROM jarvis_local_file_index WHERE file_path LIKE '%temp_test_inventory_4b%' OR relative_path LIKE '%temp_test_inventory_4b%';");
-      await pgClient.query("DELETE FROM jarvis_local_folders WHERE safe_alias LIKE 'test_p4b_%';");
-      await pgClient.end();
-    } catch (e) {
-      console.error('[Cleanup DB Error]', e.message);
+  console.log(`\nCleaning up Phase 4B test resources for namespace [${runNamespace}]...`);
+  const escapedNamespace = runNamespace.replace(/_/g, '\\_');
+
+  try {
+    if (seededApprovedFolderId || seededPendingFolderId) {
+      await queryDb(
+        "DELETE FROM jarvis_local_file_index WHERE folder_id = $1 OR folder_id = $2 OR file_path LIKE $3 ESCAPE '\\';",
+        [
+          seededApprovedFolderId || '00000000-0000-0000-0000-000000000000',
+          seededPendingFolderId || '00000000-0000-0000-0000-000000000000',
+          `%temp_test_inventory_${escapedNamespace}%`
+        ]
+      );
+    } else {
+      await queryDb(
+        "DELETE FROM jarvis_local_file_index WHERE file_path LIKE $1 ESCAPE '\\';",
+        [`%temp_test_inventory_${escapedNamespace}%`]
+      );
     }
+    await queryDb(
+      "DELETE FROM jarvis_local_folders WHERE safe_alias IN ($1, $2, $3) OR root_fingerprint IN ($4, $5);",
+      [approvedAlias, pendingAlias, testRootAlias, `fingerprint_p4b_approved_${runNamespace}`, `fingerprint_p4b_pending_${runNamespace}`]
+    );
+  } catch (e) {
+    console.error('[Cleanup DB Error]', e.message);
+    throw e;
+  } finally {
+    await closePool();
   }
 
   try {
-    if (fs.existsSync(testSubdir)) {
-      fs.rmSync(testSubdir, { recursive: true, force: true });
+    const inboxDir = path.join(workspaceRoot, 'openclaw', 'inbox');
+    const resolvedTestDir = path.resolve(testSubdir);
+    const resolvedInboxDir = path.resolve(inboxDir);
+
+    const relPath = path.relative(resolvedInboxDir, resolvedTestDir);
+    const isTrueDescendant = relPath && !relPath.startsWith('..') && !path.isAbsolute(relPath);
+
+    if (isTrueDescendant && fs.existsSync(resolvedTestDir)) {
+      fs.rmSync(resolvedTestDir, { recursive: true, force: true });
     }
   } catch (e) {
     console.error('[Cleanup File Error]', e.message);
+    throw e;
   }
-  console.log('Cleanup completed cleanly.');
+  console.log(`Cleanup completed cleanly for namespace [${runNamespace}].`);
 }
 
 async function runSuite() {
@@ -196,11 +238,11 @@ async function runSuite() {
 
     // 5. Pending folder filtering
     const pendingRes = await handleCommand('/jarvis_folders pending', mockAdminMessage);
-    test(pendingRes.includes('test_p4b_pending') && !pendingRes.includes('test_p4b_approved'), '5. Pending folder filter returns only pending roots');
+    test(pendingRes.includes(pendingAlias) && !pendingRes.includes(approvedAlias), '5. Pending folder filter returns only pending roots');
 
     // 6. Approved folder filtering
     const approvedRes = await handleCommand('/jarvis_folders approved', mockAdminMessage);
-    test(approvedRes.includes('test_p4b_approved') && !approvedRes.includes('test_p4b_pending'), '6. Approved folder filter returns only approved roots');
+    test(approvedRes.includes(approvedAlias) && !approvedRes.includes(pendingAlias), '6. Approved folder filter returns only approved roots');
 
     // 7. Recent-file ordering
     const recentRes = await handleCommand('/jarvis_files recent', mockAdminMessage);
@@ -240,7 +282,7 @@ async function runSuite() {
 
     // 14. Stable 15-result limit
     for (let i = 1; i <= 20; i++) {
-      await pgClient.query(
+      await queryDb(
         `INSERT INTO jarvis_local_file_index (folder_id, file_path, relative_path, file_name, file_extension, file_size_bytes, modified_at, indexed_at)
          VALUES ($1, $2, $3, $4, 'txt', 10, NOW(), NOW());`,
         [seededApprovedFolderId, `openclaw/inbox/temp_test_inventory_4b/limit_test_${i}.txt`, `limit_test_${i}.txt`, `limit_test_${i}.txt`]
@@ -281,8 +323,8 @@ async function runSuite() {
     // 20. SQL-injection-shaped arguments rejected or safely parameterized
     const injRes = await handleCommand("/jarvis_files by_type pdf'; DROP TABLE jarvis_local_folders;--", mockAdminMessage);
     test(injRes.includes('Invalid extension format') || injRes.includes('No matching'), '20. SQL injection attempt in extension argument handled safely');
-    const dbCheck = await pgClient.query("SELECT 1 FROM information_schema.tables WHERE table_name = 'jarvis_local_folders';");
-    test(dbCheck.rows.length === 1, '20b. Table jarvis_local_folders intact after injection attempt');
+    const dbCheck = await queryDb("SELECT 1 FROM information_schema.tables WHERE table_name = 'jarvis_local_folders';");
+    test(dbCheck.length === 1, '20b. Table jarvis_local_folders intact after injection attempt');
 
     // 21. No absolute path appears in any Telegram or API response
     const allTgResponses = [
@@ -328,8 +370,8 @@ async function runSuite() {
     test(!inventoryCode.includes('fs.readFile') && !inventoryCode.includes('fs.readFileSync') && !inventoryCode.includes('createReadStream'), '26. Static: local-inventory.js contains zero file content reading functions');
 
     // 27. No file-content column exists in the inventory index
-    const colRes = await pgClient.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'jarvis_local_file_index';");
-    const colNames = colRes.rows.map(c => c.column_name);
+    const colRes = await queryDb("SELECT column_name FROM information_schema.columns WHERE table_name = 'jarvis_local_file_index';");
+    const colNames = colRes.map(c => c.column_name);
     test(!colNames.includes('file_content') && !colNames.includes('body') && !colNames.includes('content'), '27. Schema: No file-content column exists in jarvis_local_file_index');
 
     // 28. No file is opened, moved, renamed, modified, or deleted
@@ -364,8 +406,8 @@ async function runSuite() {
 
     // 30. End-to-End Scanner-to-Review Data Path Integration Proof (Section 3)
     // Clear any seeded file index rows to ensure 100% real scanner-driven data path proof
-    await pgClient.query("DELETE FROM jarvis_local_file_index;");
-    await pgClient.query("DELETE FROM jarvis_local_folders WHERE safe_alias = 'test_p4b_root';");
+    await queryDb("DELETE FROM jarvis_local_file_index;");
+    await queryDb("DELETE FROM jarvis_local_folders WHERE safe_alias = 'test_p4b_root';");
 
     // Write physical synthetic fixture files to testSubdir
     const fixtureFiles = [
@@ -380,18 +422,18 @@ async function runSuite() {
     }
 
     // 1. Register temporary allowlisted root via addLocalFolder
-    const regRes = await localInventory.addLocalFolder('test_p4b_root', mockAdminMessage);
+    const regRes = await localInventory.addLocalFolder(testRootAlias, mockAdminMessage);
     test(regRes.status === 'pending' && regRes.approval_id, '30a. E2E: Folder registered via addLocalFolder creates pending record');
 
     // 2. Approve root via central approval queue boundary
-    await pgClient.query("UPDATE jarvis_approval_requests SET status = 'approved' WHERE id = $1;", [regRes.approval_id]);
+    await queryDb("UPDATE jarvis_approval_requests SET status = 'approved' WHERE id = $1;", [regRes.approval_id]);
     const actions = require('../jarvis/actions');
     await actions.executeApprovedAction(regRes.approval_id);
 
     // 3. Run real Phase 4A Level-1 scanner ONCE (WITHOUT manual file-review metadata seeding)
     let scanRes;
     try {
-      scanRes = await localInventory.scanApprovedFolders('test_p4b_root', mockAdminMessage);
+      scanRes = await localInventory.scanApprovedFolders(testRootAlias, mockAdminMessage);
     } catch (e) {
       console.error('[E2E Scan Error]', e);
       throw e;

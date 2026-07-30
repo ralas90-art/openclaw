@@ -4946,16 +4946,24 @@ async function handleJarvisScan(alias, message) {
   }
 
   const localInventory = require('../../jarvis/local-inventory');
+  if (!localInventory.isInventoryEnabled()) {
+    return `Local inventory is disabled.`;
+  }
+
   try {
-    const res = await localInventory.scanApprovedFolders(alias, message);
+    const enqueueRes = await localInventory.enqueueScanJob(alias, 'level1', message);
+    if (enqueueRes.already_active) {
+      return `⚠️ Scan job for root alias \`${alias}\` is already queued or in progress.`;
+    }
+    const job = enqueueRes.job;
     return [
-      `🔍 *Level-1 Inventory Scan Complete*`,
+      `🔍 *Level-1 Scan Job Queued*`,
       ``,
-      `• *Root Alias:* \`${res.alias}\``,
-      `• *Immediate Child Folders Indexed:* ${res.foldersIndexed}`,
-      `• *Status:* \`Completed\``,
+      `• *Root Alias:* \`${job.root_alias}\``,
+      `• *Job ID:* \`${job.id}\``,
+      `• *Status:* \`Queued for Workstation Execution\``,
       ``,
-      `Use \`/jarvis_inventory ${res.alias}\` to list level-1 child directories.`
+      `Workstation executor will process this job. Use \`/jarvis_scan_status ${job.root_alias}\` to check progress.`
     ].join('\n');
   } catch (err) {
     return `❌ Error: ${err.message}`;
@@ -5116,16 +5124,19 @@ async function handleJarvisScanRecursive(argsStr, message) {
   }
 
   try {
-    const res = await localInventory.scanApprovedFoldersRecursive(alias, message);
+    const enqueueRes = await localInventory.enqueueScanJob(alias, 'recursive', message);
+    if (enqueueRes.already_active) {
+      return `⚠️ Scan job for root alias \`${alias}\` is already queued or in progress.`;
+    }
+    const job = enqueueRes.job;
     return [
-      `🔍 *Recursive Metadata Scan Complete*`,
+      `🔍 *Recursive Scan Job Queued*`,
       ``,
-      `• *Root Alias:* \`${res.alias}\``,
-      `• *Files Indexed:* ${res.filesIndexed}`,
-      `• *Total Entries Examined:* ${res.totalExamined}`,
-      `• *Status:* \`Completed\``,
+      `• *Root Alias:* \`${job.root_alias}\``,
+      `• *Job ID:* \`${job.id}\``,
+      `• *Status:* \`Queued for Workstation Execution\``,
       ``,
-      `Use \`/jarvis_find_files ${res.alias} <query>\` to search indexed files.`
+      `Workstation executor will process this job. Use \`/jarvis_scan_status ${job.root_alias}\` to check progress.`
     ].join('\n');
   } catch (err) {
     return `❌ Error: ${err.message}`;

@@ -711,4 +711,187 @@ router.post('/handoff/ingest', authenticateAdminSession, async (req, res) => {
   }
 });
 
+// =============================================================
+// PHASE 4C.4R2 LOCAL EXECUTOR BRIDGE API ROUTES
+// =============================================================
+
+async function authenticateExecutorWorkerMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const { authenticateWorker } = require('./executor-api');
+    const worker = await authenticateWorker(authHeader);
+    req.executorWorker = worker;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+}
+
+// POST /api/jarvis/executor/claim
+router.post('/executor/claim', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { claimNextJob } = require('./executor-api');
+    const leaseSeconds = parseInt(req.body.lease_seconds || '60', 10);
+    const claimRes = await claimNextJob(req.executorWorker, leaseSeconds);
+    return res.status(200).json(claimRes || { job: null });
+  } catch (err) {
+    console.error('[Executor Claim Error]', sanitizeError(err));
+    return res.status(500).json({ error: 'Internal server error claiming job' });
+  }
+});
+
+// POST /api/jarvis/executor/lease-renew
+router.post('/executor/lease-renew', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { renewLease } = require('./executor-api');
+    const { job_id, lease_token, lease_seconds } = req.body || {};
+    const result = await renewLease(req.executorWorker, job_id, lease_token, lease_seconds || 60);
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[Executor Renew Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/executor/results/chunk
+router.post('/executor/results/chunk', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { uploadChunk } = require('./executor-api');
+    const { job_id, lease_token, chunk_sequence, result } = req.body || {};
+    const resPayload = await uploadChunk(req.executorWorker, job_id, lease_token, chunk_sequence || 1, result || {});
+    return res.status(200).json(resPayload);
+  } catch (err) {
+    console.error('[Executor Chunk Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/executor/complete
+router.post('/executor/complete', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { job_id, lease_token, result } = req.body || {};
+    if (!job_id || !lease_token) {
+      return res.status(400).json({ error: 'job_id and lease_token required.' });
+    }
+
+    if (result && typeof result === 'object') {
+      const { uploadChunk } = require('./executor-api');
+      await uploadChunk(req.executorWorker, job_id, lease_token, 1, result);
+    }
+
+    const { finalizeJobSnapshot } = require('./local-inventory');
+    const finalJob = await finalizeJobSnapshot(job_id, req.executorWorker.id, lease_token, result || {});
+    return res.status(200).json({ success: true, job: finalJob });
+  } catch (err) {
+    console.error('[Executor Complete Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/executor/fail
+router.post('/executor/fail', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { failJobApi } = require('./executor-api');
+    const { job_id, lease_token, error } = req.body || {};
+    const resPayload = await failJobApi(req.executorWorker, job_id, lease_token, error);
+    return res.status(200).json(resPayload);
+  } catch (err) {
+    console.error('[Executor Fail Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/executor/heartbeat
+router.post('/executor/heartbeat', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { sendHeartbeat } = require('./executor-api');
+    const resPayload = await sendHeartbeat(req.executorWorker);
+    return res.status(200).json(resPayload);
+  } catch (err) {
+    console.error('[Executor Heartbeat Error]', sanitizeError(err));
+    return res.status(500).json({ error: 'Heartbeat update failed' });
+  }
+});
+
+// GET /api/jarvis/executor/status
+router.get('/executor/status', authenticateExecutorWorkerMiddleware, async (req, res) => {
+  try {
+    const { getExecutorStatusApi } = require('./executor-api');
+    const statusPayload = await getExecutorStatusApi(req.executorWorker);
+    return res.status(200).json(statusPayload);
+  } catch (err) {
+    console.error('[Executor Status Error]', sanitizeError(err));
+    return res.status(500).json({ error: 'Failed to retrieve executor status' });
+  }
+});
+
+// ADMIN EXECUTOR MANAGEMENT ROUTES
+
+// POST /api/jarvis/admin/executors/register
+router.post('/admin/executors/register', authenticateAdminSession, async (req, res) => {
+  try {
+    const { worker_id } = req.body || {};
+    const { registerExecutor } = require('./executor-api');
+    const registered = await registerExecutor(worker_id);
+    return res.status(201).json(registered);
+  } catch (err) {
+    console.error('[Admin Register Executor Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/admin/executors/:worker_id/rotate
+router.post('/admin/executors/:worker_id/rotate', authenticateAdminSession, async (req, res) => {
+  try {
+    const { worker_id } = req.params;
+    const { rotateExecutorToken } = require('./executor-api');
+    const rotated = await rotateExecutorToken(worker_id);
+    return res.status(200).json(rotated);
+  } catch (err) {
+    console.error('[Admin Rotate Executor Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/admin/executors/:worker_id/disable
+router.post('/admin/executors/:worker_id/disable', authenticateAdminSession, async (req, res) => {
+  try {
+    const { worker_id } = req.params;
+    const { disableExecutor } = require('./executor-api');
+    const disabled = await disableExecutor(worker_id);
+    return res.status(200).json({ success: true, worker: disabled });
+  } catch (err) {
+    console.error('[Admin Disable Executor Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// POST /api/jarvis/admin/executors/:worker_id/revoke
+router.post('/admin/executors/:worker_id/revoke', authenticateAdminSession, async (req, res) => {
+  try {
+    const { worker_id } = req.params;
+    const { revokeExecutor } = require('./executor-api');
+    const revoked = await revokeExecutor(worker_id);
+    return res.status(200).json({ success: true, worker: revoked });
+  } catch (err) {
+    console.error('[Admin Revoke Executor Error]', sanitizeError(err));
+    return res.status(400).json({ error: sanitizeError(err) });
+  }
+});
+
+// GET /api/jarvis/admin/executors
+router.get('/admin/executors', authenticateAdminSession, async (req, res) => {
+  try {
+    const { listExecutors } = require('./executor-api');
+    const executors = await listExecutors();
+    return res.status(200).json(executors);
+  } catch (err) {
+    console.error('[Admin List Executors Error]', sanitizeError(err));
+    return res.status(500).json({ error: 'Failed to list executors' });
+  }
+});
+
 module.exports = router;

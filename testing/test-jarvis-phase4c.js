@@ -233,6 +233,9 @@ async function runSuite() {
     //         └── nested_sub_folder/
     //               └── level3_file.doc
 
+    if (!fs.existsSync(rootADir)) fs.mkdirSync(rootADir, { recursive: true });
+    if (!fs.existsSync(rootBDir)) fs.mkdirSync(rootBDir, { recursive: true });
+
     fs.writeFileSync(path.join(rootADir, 'level1_file.pdf'), 'PDF Content Demo 100 bytes');
     fs.writeFileSync(path.join(rootADir, '.hidden_file.txt'), 'Hidden File Content');
 
@@ -374,7 +377,7 @@ async function runSuite() {
     const findSqlInj = await localInventory.findIndexedFiles('test_p4c_root_a', "' OR '1'='1");
     test(findSqlInj.length === 0, 'Scenario 7g: SQL injection string handled safely with 0 matches');
 
-    const dbCheckIntact = await queryDb("SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index;");
+    const dbCheckIntact = await queryDb("SELECT COUNT(*)::integer as c FROM jarvis_recursive_file_index WHERE root_alias = 'test_p4c_root_a';");
     test(dbCheckIntact[0].c === 6, 'Scenario 7h: Database table intact after injection attempt');
 
     // Telegram command search

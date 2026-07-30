@@ -44,7 +44,7 @@ if (prodDbUrl && getDbIdentity(testDbUrl) && getDbIdentity(prodDbUrl) && getDbId
 
 const { runMigrations } = require('../jarvis/migrations');
 const { startWorkSession, doneWorkSession } = require('../jarvis/work-sessions');
-const { queryDb, closePool } = require('../jarvis/db');
+const { queryDb, withTransaction, closePool } = require('../jarvis/db');
 
 const memoryFiles = [
   'jarvis/memory/BLOCKERS.md',
@@ -87,8 +87,11 @@ async function runTests() {
 
   try {
     // Test 1: Idempotent Migrations on Fresh Database
-    await queryDb("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
-    await queryDb("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+    await withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(847291);');
+      await client.query("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
+      await client.query("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+    });
     await runMigrations();
     console.log('✅ Test 1: First migration run passed.');
 
@@ -116,17 +119,20 @@ async function runTests() {
 
     // Test 2B: Legacy Schema Migration Verification
     console.log('- Testing legacy schema migration with folder_path NOT NULL...');
-    // Create temporary legacy table structure
-    await queryDb("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
-    await queryDb("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
-    await queryDb(`
-      CREATE TABLE jarvis_local_folders (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        folder_path TEXT NOT NULL UNIQUE,
-        approved BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
+    // Create temporary legacy table structure under advisory lock
+    await withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(847291);');
+      await client.query("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
+      await client.query("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+      await client.query(`
+        CREATE TABLE jarvis_local_folders (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          folder_path TEXT NOT NULL UNIQUE,
+          approved BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+    });
     // Insert synthetic legacy record
     const legacyRes = await queryDb(
       "INSERT INTO jarvis_local_folders (folder_path, approved) VALUES ('/legacy/prod/secret/path', true) RETURNING id;"
@@ -157,15 +163,18 @@ async function runTests() {
 
     // Test 2C: Partially Migrated Schema Verification
     console.log('- Testing partially migrated schema without folder_path...');
-    await queryDb("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
-    await queryDb("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
-    await queryDb(`
-      CREATE TABLE jarvis_local_folders (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        safe_alias TEXT UNIQUE,
-        status TEXT NOT NULL DEFAULT 'pending'
-      );
-    `);
+    await withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(847291);');
+      await client.query("DROP TABLE IF EXISTS jarvis_level1_folder_inventory CASCADE;");
+      await client.query("DROP TABLE IF EXISTS jarvis_local_folders CASCADE;");
+      await client.query(`
+        CREATE TABLE jarvis_local_folders (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          safe_alias TEXT UNIQUE,
+          status TEXT NOT NULL DEFAULT 'pending'
+        );
+      `);
+    });
     await runMigrations();
     console.log('✅ Test 2C: Partially migrated schema migration passed.');
 
@@ -192,7 +201,24 @@ async function runTests() {
       'Rejected session error must indicate active session constraint'
     );
     console.log('✅ Test 3: Real concurrent session constraint (`ux_ws_one_active`) passed with exact semantic assertions.');
+
+    // Test 5: Concurrent runMigrations() Callers Under Lock Protection
+    console.log('- Testing concurrent runMigrations() execution (5 parallel callers)...');
+    const migResults = await Promise.allSettled([
+      runMigrations(),
+      runMigrations(),
+      runMigrations(),
+      runMigrations(),
+      runMigrations()
+    ]);
+    const migFailures = migResults.filter(r => r.status === 'rejected');
+    assert(migFailures.length === 0, `All concurrent migration calls MUST succeed without deadlock. Failures: ${migFailures.length}`);
+    console.log('✅ Test 5: Concurrent runMigrations() callers executed cleanly with 0 deadlocks.');
+
   } finally {
+    try {
+      await runMigrations();
+    } catch (_) {}
     try {
       await doneWorkSession(testSlug, 'Concurrent test cleanup', 'testing');
     } catch (_) {}
@@ -200,6 +226,7 @@ async function runTests() {
       await queryDb("DELETE FROM jarvis_work_sessions WHERE project_slug = $1;", [testSlug]);
       await queryDb("DELETE FROM jarvis_projects WHERE slug = $1;", [testSlug]);
       await queryDb("DELETE FROM jarvis_local_folders WHERE safe_alias = 'legacy_test_alias';");
+      await runMigrations();
     } catch (_) {}
     await closePool();
     console.log('✅ Test 4: Isolated test project & session data cleaned up cleanly in finally block.');

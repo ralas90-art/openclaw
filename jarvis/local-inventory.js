@@ -25,7 +25,7 @@ const activeScans = new Set();
  * Checks if local inventory feature flag is enabled
  */
 function isInventoryEnabled() {
-  return process.env.JARVIS_LOCAL_INVENTORY_ENABLED === 'true';
+  return process.env.JARVIS_LOCAL_BRIDGE_CONTROL_ENABLED === 'true' || process.env.JARVIS_LOCAL_INVENTORY_ENABLED === 'true';
 }
 
 /**
@@ -1044,6 +1044,222 @@ async function getRecursiveScanStatus(alias) {
   };
 }
 
+
+
+/**
+ * Phase 4C.4 Bridge: Enqueues a local scan job for workstation execution
+ */
+async function enqueueScanJob(alias, scanType = 'recursive', reqMessage = null) {
+  if (!isInventoryEnabled()) {
+    throw new Error('Local inventory feature is disabled.');
+  }
+
+  const actor = normalizeClientChatId(reqMessage);
+  const rows = await queryDb(
+    "SELECT * FROM jarvis_local_folders WHERE safe_alias = $1;",
+    [alias]
+  );
+  if (rows.length === 0) {
+    throw new Error(`Root alias '${alias}' is not registered. Run /jarvis_add_folder ${alias} first.`);
+  }
+
+  if (rows[0].status !== 'approved') {
+    throw new Error(`Root alias '${alias}' is not approved (Current status: '${rows[0].status}'). Must be approved via central queue.`);
+  }
+
+  // Check if active job already exists for this root
+  const activeJobs = await queryDb(
+    "SELECT * FROM jarvis_local_scan_jobs WHERE root_alias = $1 AND status IN ('queued', 'running');",
+    [alias]
+  );
+  if (activeJobs.length > 0) {
+    return {
+      already_active: true,
+      job: activeJobs[0]
+    };
+  }
+
+  const jobRows = await queryDb(
+    `INSERT INTO jarvis_local_scan_jobs (root_alias, scan_type, status, requested_by, created_at, updated_at)
+     VALUES ($1, $2, 'queued', $3, NOW(), NOW())
+     RETURNING *;`,
+    [alias, scanType, actor]
+  );
+
+  return {
+    already_active: false,
+    job: jobRows[0]
+  };
+}
+
+/**
+ * Phase 4C.4 Bridge: Finalizes job result metadata snapshot transactionally
+ */
+async function finalizeJobSnapshot(jobId, workerId, rawLeaseToken, scanPayload) {
+  const { validateLeaseToken } = require('./executor-api');
+
+  return await withTransaction(async (client) => {
+    // 1. Fetch job with lock
+    const jobRes = await client.query(
+      "SELECT * FROM jarvis_local_scan_jobs WHERE id = $1 FOR UPDATE;",
+      [jobId]
+    );
+    if (jobRes.rows.length === 0) {
+      throw new Error(`Job '${jobId}' not found.`);
+    }
+    const job = jobRes.rows[0];
+
+    if (job.status !== 'running') {
+      throw new Error(`Job '${jobId}' is not in running state (Current status: '${job.status}').`);
+    }
+
+    if (!job.lease_expires_at || new Date(job.lease_expires_at) < new Date()) {
+      throw new Error(`Job '${jobId}' lease has expired.`);
+    }
+
+    if (!validateLeaseToken(rawLeaseToken, job.lease_token_hash)) {
+      throw new Error(`Invalid lease credential for job '${jobId}'.`);
+    }
+
+    // Verify root is still approved
+    const folderRes = await client.query(
+      "SELECT * FROM jarvis_local_folders WHERE safe_alias = $1 FOR UPDATE;",
+      [job.root_alias]
+    );
+    if (folderRes.rows.length === 0 || folderRes.rows[0].status !== 'approved') {
+      throw new Error(`Root alias '${job.root_alias}' is no longer approved.`);
+    }
+    const folderRecord = folderRes.rows[0];
+
+    // Fetch staged chunks if any
+    const chunksRes = await client.query(
+      "SELECT chunk_payload FROM jarvis_local_scan_chunks WHERE job_id = $1 AND lease_version = $2 ORDER BY chunk_sequence ASC;",
+      [jobId, job.lease_version]
+    );
+
+    let allFiles = [];
+    if (scanPayload && Array.isArray(scanPayload.files)) {
+      allFiles = allFiles.concat(scanPayload.files);
+    }
+    for (const chunkRow of chunksRes.rows) {
+      const payload = chunkRow.chunk_payload;
+      if (payload && Array.isArray(payload.files)) {
+        allFiles = allFiles.concat(payload.files);
+      }
+    }
+
+    // Validate payload records strictly
+    for (const f of allFiles) {
+      const rel = f.relativePath || f.relative_path || '';
+      if (!rel || typeof rel !== 'string') {
+        throw new Error('Invalid relative path in payload.');
+      }
+      if (rel.includes('\0') || rel.includes('..') || path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel) || rel.startsWith('\\\\') || rel.startsWith('//') || /[\x00-\x1F\x7F]/.test(rel)) {
+        throw new Error(`Invalid relative path format in payload: '${rel}'.`);
+      }
+    }
+
+    // Persist snapshot according to scan_type
+    if (job.scan_type === 'recursive') {
+      for (const file of allFiles) {
+        const safeFilePath = `${job.root_alias}/${file.relativePath}`;
+        await client.query(
+          `INSERT INTO jarvis_recursive_file_index (
+             folder_id, root_alias, file_path, relative_path, file_name, file_extension, file_size_bytes, depth, modified_at, indexed_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+           ON CONFLICT (file_path) DO UPDATE SET
+             folder_id = EXCLUDED.folder_id,
+             relative_path = EXCLUDED.relative_path,
+             file_name = EXCLUDED.file_name,
+             file_extension = EXCLUDED.file_extension,
+             file_size_bytes = EXCLUDED.file_size_bytes,
+             depth = EXCLUDED.depth,
+             modified_at = EXCLUDED.modified_at,
+             indexed_at = NOW();`,
+          [folderRecord.id, job.root_alias, safeFilePath, file.relativePath, file.name, file.extension, file.size || 0, file.depth || 1, file.mtime || new Date()]
+        );
+      }
+
+      if (allFiles.length > 0) {
+        const currentFilePaths = allFiles.map(f => `${job.root_alias}/${f.relativePath}`);
+        await client.query(
+          `DELETE FROM jarvis_recursive_file_index
+           WHERE root_alias = $1 AND file_path NOT IN (SELECT unnest($2::text[]));`,
+          [job.root_alias, currentFilePaths]
+        );
+      } else {
+        await client.query(
+          "DELETE FROM jarvis_recursive_file_index WHERE root_alias = $1;",
+          [job.root_alias]
+        );
+      }
+
+      await client.query(
+        "UPDATE jarvis_local_folders SET last_recursive_scanned_at = NOW(), updated_at = NOW() WHERE id = $1;",
+        [folderRecord.id]
+      );
+    }
+
+    // Purge staged chunks after successful finalization
+    await client.query("DELETE FROM jarvis_local_scan_chunks WHERE job_id = $1;", [jobId]);
+
+
+    const summary = {
+      alias: job.root_alias,
+      filesIndexed: allFiles.length,
+      status: 'succeeded'
+    };
+
+    const finalRes = await client.query(
+      `UPDATE jarvis_local_scan_jobs
+       SET status = 'succeeded',
+           completed_at = NOW(),
+           updated_at = NOW(),
+           lease_token_hash = NULL,
+           result_summary = $1
+       WHERE id = $2
+       RETURNING *;`,
+      [JSON.stringify(summary), jobId]
+    );
+
+    return finalRes.rows[0];
+  });
+}
+
+/**
+ * Phase 4C.4 Bridge: Revokes folder root and cancels active queued/running jobs
+ */
+async function revokeLocalFolder(alias, reqMessage = null) {
+  const actor = normalizeClientChatId(reqMessage);
+  return await withTransaction(async (client) => {
+    const rows = await client.query(
+      `UPDATE jarvis_local_folders
+       SET status = 'revoked', updated_at = NOW()
+       WHERE safe_alias = $1
+       RETURNING *;`,
+      [alias]
+    );
+    if (rows.rows.length === 0) {
+      throw new Error(`Root alias '${alias}' is not registered.`);
+    }
+
+    // Cancel queued and running scan jobs for this root
+    await client.query(
+      `UPDATE jarvis_local_scan_jobs
+       SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+       WHERE root_alias = $1 AND status IN ('queued', 'running');`,
+      [alias]
+    );
+
+    // Purge derived file indexes for this root
+    await client.query("DELETE FROM jarvis_level1_folder_inventory WHERE root_alias = $1;", [alias]);
+    await client.query("DELETE FROM jarvis_local_file_index WHERE folder_id = $1;", [rows.rows[0].id]);
+    await client.query("DELETE FROM jarvis_recursive_file_index WHERE root_alias = $1;", [alias]);
+
+    return rows.rows[0];
+  });
+}
+
 module.exports = {
   isInventoryEnabled,
   getWorkspaceRoot,
@@ -1061,5 +1277,7 @@ module.exports = {
   findIndexedFiles,
   getRecursiveScanStatus,
   sanitizePathForDisplay,
-  matchProjectSlug
+  matchProjectSlug,
+  enqueueScanJob,
+  finalizeJobSnapshot
 };
