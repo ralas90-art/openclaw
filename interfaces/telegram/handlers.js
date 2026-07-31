@@ -1725,7 +1725,7 @@ async function handleRunJob(jobId, message) {
   }
 
   if (!jobId) {
-    return `❌ Usage: /run_job <job_id>\nExample: /run_job rt_20260604_143022_a7f3c9`;
+    return `❌ Usage: /run_job <job_id>\nExample: /run_job r_20260731_005418_8ade43`;
   }
 
   const { buildJobSummary } = require('../../openclaw/runtime/runtime-job-inspector');
